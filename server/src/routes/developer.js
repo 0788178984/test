@@ -1,0 +1,180 @@
+const express = require('express');
+const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
+const { authenticate, authorize } = require('../middleware/auth');
+const db = require('../db/connection');
+const { createNotification } = require('./notifications');
+
+const router = express.Router();
+
+router.use(authenticate, authorize('developer'));
+
+// List all businesses / tenants
+router.get('/businesses', (req, res) => {
+  try {
+    const rows = db
+      .prepare(
+        `
+      SELECT b.*,
+        (SELECT COUNT(*) FROM users u WHERE u.business_id = b.id AND u.deleted_at IS NULL) as user_count
+      FROM businesses b
+      ORDER BY b.name
+    `
+      )
+      .all();
+    res.json({ businesses: rows });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Failed to list businesses.' });
+  }
+});
+
+// Create a new licensed business
+router.post('/businesses', async (req, res) => {
+  try {
+    const { name, business_code, subscription_status = 'trial', subscription_expires_at, notes } = req.body;
+    if (!name || !business_code) {
+      return res.status(400).json({ error: 'Name and business_code are required.' });
+    }
+    const code = String(business_code).trim().toUpperCase();
+    const id = `biz-${crypto.randomBytes(8).toString('hex')}`;
+    db.prepare(
+      `
+      INSERT INTO businesses (id, name, business_code, subscription_status, subscription_expires_at, notes, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    `
+    ).run(id, String(name).trim(), code, subscription_status, subscription_expires_at || null, notes || null);
+    res.status(201).json({ id, business_code: code, message: 'Business created.' });
+  } catch (e) {
+    if (e.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      return res.status(400).json({ error: 'Business code already in use.' });
+    }
+    console.error(e);
+    res.status(500).json({ error: 'Failed to create business.' });
+  }
+});
+
+// Update license / subscription
+router.patch('/businesses/:id', (req, res) => {
+  try {
+    const { name, subscription_status, subscription_expires_at, notes } = req.body;
+    const existing = db.prepare(`SELECT id FROM businesses WHERE id = ?`).get(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Business not found.' });
+
+    const fields = [];
+    const vals = [];
+    if (name !== undefined) {
+      fields.push('name = ?');
+      vals.push(String(name).trim());
+    }
+    if (subscription_status !== undefined) {
+      fields.push('subscription_status = ?');
+      vals.push(subscription_status);
+    }
+    if (subscription_expires_at !== undefined) {
+      fields.push('subscription_expires_at = ?');
+      vals.push(subscription_expires_at);
+    }
+    if (notes !== undefined) {
+      fields.push('notes = ?');
+      vals.push(notes);
+    }
+    if (!fields.length) {
+      return res.status(400).json({ error: 'No updates provided.' });
+    }
+    fields.push("updated_at = datetime('now')");
+    vals.push(req.params.id);
+    db.prepare(`UPDATE businesses SET ${fields.join(', ')} WHERE id = ?`).run(...vals);
+    res.json({ message: 'Business updated.' });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Failed to update business.' });
+  }
+});
+
+// Notify store admins/managers (in-app)
+router.post('/businesses/:id/notify-staff', (req, res) => {
+  try {
+    const { title, message, target_role } = req.body;
+    if (!title || !message) {
+      return res.status(400).json({ error: 'Title and message are required.' });
+    }
+    const biz = db.prepare(`SELECT id, name FROM businesses WHERE id = ?`).get(req.params.id);
+    if (!biz) return res.status(404).json({ error: 'Business not found.' });
+
+    if (target_role && ['admin', 'manager'].includes(target_role)) {
+      createNotification({
+        type: 'developer_announcement',
+        title,
+        message,
+        severity: 'info',
+        target_role,
+        business_id: biz.id,
+        channels: ['in_app'],
+        meta: { from: 'developer' },
+      });
+    } else {
+      createNotification({
+        type: 'developer_announcement',
+        title,
+        message,
+        severity: 'info',
+        target_role: 'admin',
+        business_id: biz.id,
+        channels: ['in_app'],
+        meta: { from: 'developer' },
+      });
+      createNotification({
+        type: 'developer_announcement',
+        title,
+        message,
+        severity: 'info',
+        target_role: 'manager',
+        business_id: biz.id,
+        channels: ['in_app'],
+        meta: { from: 'developer' },
+      });
+    }
+
+    res.json({ message: 'Notifications queued for store staff.' });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Failed to notify staff.' });
+  }
+});
+
+// Create initial admin user for a business (developer onboarding)
+router.post('/businesses/:id/bootstrap-admin', async (req, res) => {
+  try {
+    const { name, email, password, pin } = req.body;
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'Name, email, and password are required.' });
+    }
+    const biz = db.prepare(`SELECT id FROM businesses WHERE id = ?`).get(req.params.id);
+    if (!biz) return res.status(404).json({ error: 'Business not found.' });
+
+    const hashedPassword = await bcrypt.hash(String(password), 12);
+    const pinToStore =
+      pin && /^\d{4}$/.test(String(pin)) ? String(pin) : '1234';
+    const hashedPin = await bcrypt.hash(pinToStore, 12);
+
+    const userId = `usr-${crypto.randomBytes(12).toString('hex')}`;
+
+    db.prepare(
+      `
+      INSERT INTO users (id, name, email, phone, pin, password_hash, role, business_id, is_active, created_at, updated_at, sync_status)
+      VALUES (?, ?, ?, NULL, ?, ?, 'admin', ?, 1, datetime('now'), datetime('now'), 'pending')
+    `
+    ).run(userId, name, String(email).trim().toLowerCase(), hashedPin, hashedPassword, biz.id);
+
+    res.status(201).json({ message: 'Admin user created for this business.', id: userId });
+  } catch (e) {
+    if (e.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      return res.status(400).json({ error: 'Email already exists for this store.' });
+    }
+    console.error(e);
+    res.status(500).json({ error: 'Failed to create admin.' });
+  }
+});
+
+module.exports = router;

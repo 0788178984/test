@@ -1,0 +1,776 @@
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const { authenticate } = require('../middleware/auth');
+const { restrictToBusinessStaff } = require('../middleware/tenantContext');
+const { checkPermission } = require('../middleware/roleCheck');
+const db = require('../db/connection');
+const pdfService = require('../services/pdfService');
+const excelService = require('../services/excelService');
+const router = express.Router();
+
+router.use(authenticate, restrictToBusinessStaff);
+
+const EXPORT_REPORT_TYPES = new Set([
+  'daily',
+  'monthly',
+  'profit',
+  'best-sellers',
+  'cashier',
+  'sales',
+  'products',
+]);
+
+function sendGeneratedExportFile(res, result) {
+  if (!result.success) return false;
+  const buf = fs.readFileSync(result.filepath);
+  try {
+    fs.unlinkSync(result.filepath);
+  } catch (_) {
+    /* ignore */
+  }
+  const ext = path.extname(result.filename).replace('.', '').toLowerCase();
+  const mime =
+    ext === 'pdf'
+      ? 'application/pdf'
+      : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  res.setHeader('Content-Type', mime);
+  res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+  res.send(buf);
+  return true;
+}
+
+// Daily report
+router.get('/daily', checkPermission('view_reports'), (req, res) => {
+  try {
+    const { date = new Date().toISOString().split('T')[0] } = req.query;
+
+    let query = `
+      SELECT 
+        COUNT(*) as sales_count,
+        SUM(total_amount) as revenue,
+        SUM(subtotal) as gross_sales,
+        SUM(discount_amount) as total_discount,
+        SUM(tax_amount) as total_tax,
+        SUM(total_amount - (SELECT SUM(si.quantity * si.buying_price) 
+                           FROM sale_items si WHERE si.sale_id = s.id)) as profit
+      FROM sales s
+      WHERE date(s.created_at) = ? AND s.status = 'completed' AND s.deleted_at IS NULL
+      AND s.business_id = ?
+    `;
+
+    const params = [date, req.user.business_id];
+
+    // Cashiers can only see their own reports
+    if (req.user.role === 'cashier') {
+      query += ` AND s.cashier_id = ?`;
+      params.push(req.user.id);
+    }
+
+    const summary = db.prepare(query).get(...params);
+
+    // Get sales by payment method
+    let paymentQuery = `
+      SELECT payment_method, COUNT(*) as count, SUM(total_amount) as amount
+      FROM sales s
+      WHERE date(s.created_at) = ? AND s.status = 'completed' AND s.deleted_at IS NULL
+      AND s.business_id = ?
+    `;
+
+    const paymentParams = [date, req.user.business_id];
+
+    if (req.user.role === 'cashier') {
+      paymentQuery += ` AND s.cashier_id = ?`;
+      paymentParams.push(req.user.id);
+    }
+
+    paymentQuery += ` GROUP BY payment_method`;
+
+    const paymentMethods = db.prepare(paymentQuery).all(...paymentParams);
+
+    // Get hourly sales
+    let hourlyQuery = `
+      SELECT
+        strftime('%H', created_at) as hour,
+        COUNT(*) as sales_count,
+        SUM(total_amount) as revenue
+      FROM sales s
+      WHERE date(s.created_at) = ? AND s.status = 'completed' AND s.deleted_at IS NULL
+      AND s.business_id = ?
+    `;
+
+    const hourlyParams = [date, req.user.business_id];
+
+    if (req.user.role === 'cashier') {
+      hourlyQuery += ` AND s.cashier_id = ?`;
+      hourlyParams.push(req.user.id);
+    }
+
+    hourlyQuery += ` GROUP BY strftime('%H', created_at) ORDER BY hour`;
+
+    const hourlySales = db.prepare(hourlyQuery).all(...hourlyParams);
+
+    res.json({
+      date,
+      summary: {
+        sales_count: summary.sales_count || 0,
+        revenue: summary.revenue || 0,
+        gross_sales: summary.gross_sales || 0,
+        total_discount: summary.total_discount || 0,
+        total_tax: summary.total_tax || 0,
+        profit: summary.profit || 0
+      },
+      paymentMethods,
+      hourlySales
+    });
+  } catch (error) {
+    console.error('Get daily report error:', error);
+    res.status(500).json({ error: 'Failed to fetch daily report.' });
+  }
+});
+
+// Monthly report
+router.get('/monthly', checkPermission('view_reports'), (req, res) => {
+  try {
+    const { year = new Date().getFullYear(), month = new Date().getMonth() + 1 } = req.query;
+
+    let query = `
+      SELECT 
+        COUNT(*) as sales_count,
+        SUM(total_amount) as revenue,
+        SUM(subtotal) as gross_sales,
+        SUM(discount_amount) as total_discount,
+        SUM(tax_amount) as total_tax,
+        SUM(total_amount - (SELECT SUM(si.quantity * si.buying_price) 
+                           FROM sale_items si WHERE si.sale_id = s.id)) as profit
+      FROM sales s
+      WHERE strftime('%Y', s.created_at) = ? 
+      AND strftime('%m', s.created_at) = ? 
+      AND s.status = 'completed'
+      AND s.deleted_at IS NULL
+      AND s.business_id = ?
+    `;
+
+    const params = [year.toString(), month.toString().padStart(2, '0'), req.user.business_id];
+
+    // Cashiers can only see their own reports
+    if (req.user.role === 'cashier') {
+      query += ` AND s.cashier_id = ?`;
+      params.push(req.user.id);
+    }
+
+    const summary = db.prepare(query).get(...params);
+
+    // Get daily breakdown
+    let dailyQuery = `
+      SELECT
+        date(created_at) as day,
+        COUNT(*) as sales_count,
+        SUM(total_amount) as revenue,
+        SUM(total_amount - (SELECT SUM(si.quantity * si.buying_price)
+                           FROM sale_items si WHERE si.sale_id = s.id)) as profit
+      FROM sales s
+      WHERE strftime('%Y', s.created_at) = ?
+      AND strftime('%m', s.created_at) = ?
+      AND s.status = 'completed'
+      AND s.deleted_at IS NULL
+      AND s.business_id = ?
+    `;
+
+    const dailyParams = [year.toString(), month.toString().padStart(2, '0'), req.user.business_id];
+
+    if (req.user.role === 'cashier') {
+      dailyQuery += ` AND s.cashier_id = ?`;
+      dailyParams.push(req.user.id);
+    }
+
+    dailyQuery += ` GROUP BY date(created_at) ORDER BY day`;
+
+    const dailyBreakdown = db.prepare(dailyQuery).all(...dailyParams);
+
+    res.json({
+      year: parseInt(year),
+      month: parseInt(month),
+      summary: {
+        sales_count: summary.sales_count || 0,
+        revenue: summary.revenue || 0,
+        gross_sales: summary.gross_sales || 0,
+        total_discount: summary.total_discount || 0,
+        total_tax: summary.total_tax || 0,
+        profit: summary.profit || 0
+      },
+      dailyBreakdown
+    });
+  } catch (error) {
+    console.error('Get monthly report error:', error);
+    res.status(500).json({ error: 'Failed to fetch monthly report.' });
+  }
+});
+
+// Profit report
+router.get('/profit', checkPermission('view_reports'), (req, res) => {
+  try {
+    const { from, to } = req.query;
+
+    if (!from || !to) {
+      return res.status(400).json({ error: 'From and to dates are required.' });
+    }
+
+    let query = `
+      SELECT 
+        s.id,
+        s.sale_number,
+        s.created_at,
+        s.total_amount as revenue,
+        SUM(si.quantity * si.buying_price) as cost,
+        (s.total_amount - SUM(si.quantity * si.buying_price)) as profit,
+        u.name as cashier_name,
+        c.name as customer_name
+      FROM sales s
+      JOIN sale_items si ON s.id = si.sale_id
+      LEFT JOIN users u ON s.cashier_id = u.id
+      LEFT JOIN customers c ON s.customer_id = c.id
+      WHERE date(s.created_at) >= date(?) 
+      AND date(s.created_at) <= date(?)
+      AND s.status = 'completed'
+      AND s.deleted_at IS NULL
+      AND s.business_id = ?
+    `;
+
+    const params = [from, to, req.user.business_id];
+
+    // Cashiers can only see their own reports
+    if (req.user.role === 'cashier') {
+      query += ` AND s.cashier_id = ?`;
+      params.push(req.user.id);
+    }
+
+    query += ` GROUP BY s.id ORDER BY s.created_at DESC`;
+
+    const sales = db.prepare(query).all(...params);
+
+    // Calculate totals
+    const totals = sales.reduce((acc, sale) => ({
+      total_revenue: acc.total_revenue + sale.revenue,
+      total_cost: acc.total_cost + sale.cost,
+      total_profit: acc.total_profit + sale.profit
+    }), { total_revenue: 0, total_cost: 0, total_profit: 0 });
+
+    res.json({
+      from,
+      to,
+      sales,
+      totals
+    });
+  } catch (error) {
+    console.error('Get profit report error:', error);
+    res.status(500).json({ error: 'Failed to fetch profit report.' });
+  }
+});
+
+// Best sellers report
+router.get('/best-sellers', checkPermission('view_reports'), (req, res) => {
+  try {
+    const { from, to, limit = 10 } = req.query;
+
+    let query = `
+      SELECT 
+        p.id,
+        p.name,
+        p.category,
+        SUM(si.quantity) as total_quantity,
+        SUM(si.line_total) as total_revenue,
+        COUNT(DISTINCT si.sale_id) as sales_count,
+        AVG(si.unit_price) as avg_price
+      FROM sale_items si
+      JOIN products p ON si.product_id = p.id
+      JOIN sales s ON si.sale_id = s.id
+      WHERE s.status = 'completed' AND s.deleted_at IS NULL AND s.business_id = ?
+    `;
+
+    const params = [req.user.business_id];
+
+    if (from) {
+      query += ` AND date(s.created_at) >= date(?)`;
+      params.push(from);
+    }
+
+    if (to) {
+      query += ` AND date(s.created_at) <= date(?)`;
+      params.push(to);
+    }
+
+    // Cashiers can only see their own reports
+    if (req.user.role === 'cashier') {
+      query += ` AND s.cashier_id = ?`;
+      params.push(req.user.id);
+    }
+
+    query += `
+      GROUP BY si.product_id 
+      ORDER BY total_quantity DESC 
+      LIMIT ?
+    `;
+
+    params.push(parseInt(limit));
+
+    const bestSellers = db.prepare(query).all(...params);
+
+    res.json({
+      from,
+      to,
+      bestSellers
+    });
+  } catch (error) {
+    console.error('Get best sellers error:', error);
+    res.status(500).json({ error: 'Failed to fetch best sellers report.' });
+  }
+});
+
+// Cashier performance report
+router.get('/cashier', checkPermission('view_reports'), (req, res) => {
+  try {
+    const { user_id, from, to } = req.query;
+
+    // Only admins and managers can view other cashiers' reports
+    if (req.user.role === 'cashier' && user_id && user_id !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied.' });
+    }
+
+    let query = `
+      SELECT
+        u.id,
+        u.name,
+        u.role,
+        COUNT(s.id) as sales_count,
+        SUM(s.total_amount) as total_revenue,
+        SUM(s.total_amount - (SELECT SUM(si.quantity * si.buying_price)
+                           FROM sale_items si WHERE si.sale_id = s.id)) as total_profit,
+        AVG(s.total_amount) as avg_sale_value,
+        MAX(s.total_amount) as max_sale_value
+      FROM users u
+      LEFT JOIN sales s ON u.id = s.cashier_id
+        AND s.status = 'completed'
+        AND s.deleted_at IS NULL
+        AND s.business_id = ?
+      WHERE u.business_id = ?
+    `;
+
+    const params = [req.user.business_id, req.user.business_id];
+
+    if (user_id) {
+      query += ` AND u.id = ?`;
+      params.push(user_id);
+    }
+
+    if (from) {
+      query += ` AND date(s.created_at) >= date(?)`;
+      params.push(from);
+    }
+
+    if (to) {
+      query += ` AND date(s.created_at) <= date(?)`;
+      params.push(to);
+    }
+
+    if (req.user.role === 'cashier') {
+      query += ` AND u.id = ?`;
+      params.push(req.user.id);
+    }
+
+    query += ` GROUP BY u.id ORDER BY total_revenue DESC`;
+
+    const cashierStats = db.prepare(query).all(...params);
+
+    res.json({
+      from,
+      to,
+      cashierStats
+    });
+  } catch (error) {
+    console.error('Get cashier report error:', error);
+    res.status(500).json({ error: 'Failed to fetch cashier report.' });
+  }
+});
+
+// Get report data for export (JSON) or generated file (PDF / XLSX)
+router.get('/export-data', checkPermission('export_reports'), async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    let reportType = String(req.query.type || req.query.report_type || '')
+      .trim()
+      .toLowerCase()
+      .replace(/_/g, '-');
+
+    if (!from || !to) {
+      return res.status(400).json({ error: 'From and to dates are required.' });
+    }
+    if (!EXPORT_REPORT_TYPES.has(reportType)) {
+      return res.status(400).json({
+        error: `Invalid report type. Use one of: ${[...EXPORT_REPORT_TYPES].join(', ')}.`,
+      });
+    }
+
+    const format = String(req.query.format || 'json').toLowerCase();
+    const exportOptions = {
+      business_id: req.user.business_id,
+      ...(req.user.role === 'cashier' ? { cashier_id: req.user.id } : {}),
+    };
+
+    if (format === 'pdf' || format === 'xlsx' || format === 'excel') {
+      const isExcel = format === 'xlsx' || format === 'excel';
+      let result;
+
+      if (isExcel) {
+        switch (reportType) {
+          case 'daily':
+            result =
+              from === to
+                ? await excelService.generateDailyReport(from, exportOptions)
+                : await excelService.generateSalesReport(from, to, exportOptions);
+            break;
+          case 'monthly':
+          case 'cashier':
+          case 'sales':
+          case 'products':
+            result = await excelService.generateSalesReport(from, to, exportOptions);
+            break;
+          case 'profit':
+            result = await excelService.generateProfitReport(from, to, exportOptions);
+            break;
+          case 'best-sellers':
+            result = await excelService.generateBestSellersReport(from, to, exportOptions);
+            break;
+          default:
+            result = await excelService.generateSalesReport(from, to, exportOptions);
+        }
+      } else {
+        switch (reportType) {
+          case 'daily':
+            result =
+              from === to
+                ? await pdfService.generateDailyReport(from, exportOptions)
+                : await pdfService.generateSalesReport(from, to, exportOptions);
+            break;
+          case 'monthly':
+          case 'cashier':
+          case 'sales':
+          case 'products':
+          case 'best-sellers':
+            result = await pdfService.generateSalesReport(from, to, exportOptions);
+            break;
+          case 'profit':
+            result = await pdfService.generateProfitReport(from, to, exportOptions);
+            break;
+          default:
+            result = await pdfService.generateSalesReport(from, to, exportOptions);
+        }
+      }
+
+      if (!result.success) {
+        return res.status(500).json({ error: result.error || 'Export generation failed.' });
+      }
+      sendGeneratedExportFile(res, result);
+      return;
+    }
+
+    let data = {};
+
+    switch (reportType) {
+      case 'daily': {
+        let dailyQuery = `
+          SELECT 
+            date(s.created_at) as date,
+            COUNT(*) as sales_count,
+            SUM(s.total_amount) as revenue,
+            SUM(s.total_amount - (SELECT COALESCE(SUM(si.quantity * si.buying_price), 0)
+                               FROM sale_items si WHERE si.sale_id = s.id)) as profit
+          FROM sales s
+          WHERE date(s.created_at) >= date(?) 
+          AND date(s.created_at) <= date(?)
+          AND s.status = 'completed' 
+          AND s.deleted_at IS NULL
+          AND s.business_id = ?
+        `;
+
+        const dailyParams = [from, to, req.user.business_id];
+
+        if (req.user.role === 'cashier') {
+          dailyQuery += ` AND s.cashier_id = ?`;
+          dailyParams.push(req.user.id);
+        }
+
+        dailyQuery += ` GROUP BY date(s.created_at) ORDER BY date`;
+
+        data.dailySales = db.prepare(dailyQuery).all(...dailyParams);
+        break;
+      }
+
+      case 'monthly': {
+        let monthlyQuery = `
+          SELECT 
+            strftime('%Y-%m', s.created_at) as month,
+            COUNT(*) as sales_count,
+            SUM(s.total_amount) as revenue,
+            SUM(s.total_amount - (SELECT COALESCE(SUM(si.quantity * si.buying_price), 0)
+                               FROM sale_items si WHERE si.sale_id = s.id)) as profit
+          FROM sales s
+          WHERE date(s.created_at) >= date(?) 
+          AND date(s.created_at) <= date(?)
+          AND s.status = 'completed' 
+          AND s.deleted_at IS NULL
+          AND s.business_id = ?
+        `;
+        const monthlyParams = [from, to, req.user.business_id];
+        if (req.user.role === 'cashier') {
+          monthlyQuery += ` AND s.cashier_id = ?`;
+          monthlyParams.push(req.user.id);
+        }
+        monthlyQuery += ` GROUP BY strftime('%Y-%m', s.created_at) ORDER BY month`;
+        const rows = db.prepare(monthlyQuery).all(...monthlyParams);
+        data.monthlySales = rows.map((r) => {
+          const revenue = Number(r.revenue) || 0;
+          const profit = Number(r.profit) || 0;
+          return {
+            month: r.month,
+            salesCount: r.sales_count,
+            revenue,
+            profit,
+            profitMargin: revenue > 0 ? ((profit / revenue) * 100).toFixed(1) : '0.0',
+          };
+        });
+        break;
+      }
+
+      case 'profit': {
+        let profitQuery = `
+          SELECT 
+            s.id,
+            s.sale_number,
+            s.created_at,
+            s.total_amount as revenue,
+            SUM(si.quantity * si.buying_price) as cost,
+            (s.total_amount - SUM(si.quantity * si.buying_price)) as profit,
+            u.name as cashier_name,
+            c.name as customer_name
+          FROM sales s
+          JOIN sale_items si ON s.id = si.sale_id
+          LEFT JOIN users u ON s.cashier_id = u.id
+          LEFT JOIN customers c ON s.customer_id = c.id
+          WHERE date(s.created_at) >= date(?) 
+          AND date(s.created_at) <= date(?)
+          AND s.status = 'completed' 
+          AND s.deleted_at IS NULL
+          AND s.business_id = ?
+        `;
+        const profitParams = [from, to, req.user.business_id];
+        if (req.user.role === 'cashier') {
+          profitQuery += ` AND s.cashier_id = ?`;
+          profitParams.push(req.user.id);
+        }
+        profitQuery += ` GROUP BY s.id ORDER BY s.created_at DESC`;
+        const sales = db.prepare(profitQuery).all(...profitParams);
+        const totals = sales.reduce(
+          (acc, sale) => ({
+            totalRevenue: acc.totalRevenue + (Number(sale.revenue) || 0),
+            totalCost: acc.totalCost + (Number(sale.cost) || 0),
+            totalProfit: acc.totalProfit + (Number(sale.profit) || 0),
+          }),
+          { totalRevenue: 0, totalCost: 0, totalProfit: 0 }
+        );
+        const grossProfit = totals.totalProfit;
+        const profitMargin =
+          totals.totalRevenue > 0 ? ((grossProfit / totals.totalRevenue) * 100).toFixed(1) : '0.0';
+        data.profitLoss = {
+          totalRevenue: totals.totalRevenue,
+          totalCost: totals.totalCost,
+          grossProfit,
+          profitMargin,
+          sales,
+        };
+        break;
+      }
+
+      case 'best-sellers': {
+        let bestQuery = `
+          SELECT 
+            p.id,
+            p.name,
+            p.category,
+            SUM(si.quantity) as total_quantity,
+            SUM(si.line_total) as total_revenue,
+            COUNT(DISTINCT si.sale_id) as sales_count,
+            AVG(si.unit_price) as avg_price,
+            SUM(si.quantity * si.buying_price) as total_cost
+          FROM sale_items si
+          JOIN products p ON si.product_id = p.id
+          JOIN sales s ON si.sale_id = s.id
+          WHERE s.status = 'completed' AND s.deleted_at IS NULL AND p.deleted_at IS NULL
+          AND s.business_id = ?
+          AND date(s.created_at) >= date(?)
+          AND date(s.created_at) <= date(?)
+        `;
+        const bestParams = [req.user.business_id, from, to];
+        if (req.user.role === 'cashier') {
+          bestQuery += ` AND s.cashier_id = ?`;
+          bestParams.push(req.user.id);
+        }
+        bestQuery += `
+          GROUP BY si.product_id 
+          ORDER BY total_quantity DESC 
+          LIMIT 100
+        `;
+        const bestSellers = db.prepare(bestQuery).all(...bestParams);
+        data.bestSellers = bestSellers.map((p) => {
+          const rev = Number(p.total_revenue) || 0;
+          const cost = Number(p.total_cost) || 0;
+          const margin = rev > 0 && cost > 0 ? (((rev - cost) / rev) * 100).toFixed(1) : '0.0';
+          return {
+            name: p.name,
+            category: p.category,
+            totalQuantity: p.total_quantity,
+            totalRevenue: rev,
+            profitMargin: margin,
+          };
+        });
+        break;
+      }
+
+      case 'cashier': {
+        let cashQuery = `
+          SELECT 
+            u.id,
+            u.name,
+            u.role,
+            COUNT(s.id) as sales_count,
+            SUM(s.total_amount) as total_revenue,
+            SUM(s.total_amount - (SELECT COALESCE(SUM(si.quantity * si.buying_price), 0)
+                           FROM sale_items si WHERE si.sale_id = s.id)) as total_profit,
+            AVG(s.total_amount) as avg_sale_value,
+            MAX(s.total_amount) as max_sale_value
+          FROM users u
+          LEFT JOIN sales s ON u.id = s.cashier_id
+            AND s.status = 'completed'
+            AND s.deleted_at IS NULL
+            AND s.business_id = ?
+            AND date(s.created_at) >= date(?)
+            AND date(s.created_at) <= date(?)
+          WHERE u.role = 'cashier' AND u.deleted_at IS NULL AND u.business_id = ?
+        `;
+        const cashParams = [req.user.business_id, from, to, req.user.business_id];
+        if (req.user.role === 'cashier') {
+          cashQuery += ` AND u.id = ?`;
+          cashParams.push(req.user.id);
+        }
+        cashQuery += ` GROUP BY u.id ORDER BY total_revenue DESC`;
+        const cashierStats = db.prepare(cashQuery).all(...cashParams);
+        data.cashierPerformance = cashierStats.map((c) => {
+          const rev = Number(c.total_revenue) || 0;
+          const cnt = Number(c.sales_count) || 0;
+          const avg = cnt > 0 ? rev / cnt : 0;
+          let performance = 'average';
+          if (cnt >= 20 && rev > 500000) performance = 'excellent';
+          else if (cnt >= 10 && rev > 200000) performance = 'good';
+          return {
+            name: c.name,
+            salesCount: c.sales_count,
+            totalRevenue: rev,
+            averageSale: avg,
+            performance,
+          };
+        });
+        break;
+      }
+
+      case 'sales': {
+        let salesQuery = `
+          SELECT 
+            s.sale_number,
+            s.created_at,
+            u.name as cashier_name,
+            c.name as customer_name,
+            s.total_amount,
+            s.payment_method,
+            s.discount_amount
+          FROM sales s
+          LEFT JOIN users u ON s.cashier_id = u.id
+          LEFT JOIN customers c ON s.customer_id = c.id
+          WHERE date(s.created_at) >= date(?) 
+          AND date(s.created_at) <= date(?)
+          AND s.status = 'completed' 
+          AND s.deleted_at IS NULL
+          AND s.business_id = ?
+        `;
+
+        const salesParams = [from, to, req.user.business_id];
+
+        if (req.user.role === 'cashier') {
+          salesQuery += ` AND s.cashier_id = ?`;
+          salesParams.push(req.user.id);
+        }
+
+        salesQuery += ` ORDER BY s.created_at`;
+
+        data.sales = db.prepare(salesQuery).all(...salesParams);
+
+        for (const sale of data.sales) {
+          sale.items = db.prepare(`
+            SELECT product_name, quantity, unit_price, line_total
+            FROM sale_items
+            WHERE sale_id = (SELECT id FROM sales WHERE sale_number = ? AND business_id = ?)
+          `).all(sale.sale_number, req.user.business_id);
+        }
+        break;
+      }
+
+      case 'products': {
+        let productQuery = `
+          SELECT 
+            p.name,
+            p.category,
+            p.current_stock,
+            p.buying_price,
+            p.selling_price,
+            COALESCE(SUM(si.quantity), 0) as sold_quantity,
+            COALESCE(SUM(si.line_total), 0) as total_revenue
+          FROM products p
+          LEFT JOIN sale_items si ON p.id = si.product_id
+          LEFT JOIN sales s ON si.sale_id = s.id
+            AND s.status = 'completed'
+            AND s.deleted_at IS NULL
+            AND s.business_id = ?
+            AND date(s.created_at) >= date(?)
+            AND date(s.created_at) <= date(?)
+          WHERE p.deleted_at IS NULL AND p.business_id = ?
+        `;
+
+        const productParams = [req.user.business_id, from, to, req.user.business_id];
+
+        if (req.user.role === 'cashier') {
+          productQuery += ` AND (s.id IS NULL OR s.cashier_id = ?)`;
+          productParams.push(req.user.id);
+        }
+
+        productQuery += ` GROUP BY p.id ORDER BY total_revenue DESC`;
+
+        data.products = db.prepare(productQuery).all(...productParams);
+        break;
+      }
+
+      default:
+        return res.status(400).json({ error: 'Invalid report type.' });
+    }
+
+    res.json({
+      type: reportType,
+      from,
+      to,
+      data,
+    });
+  } catch (error) {
+    console.error('Get export data error:', error);
+    res.status(500).json({ error: 'Failed to fetch export data.' });
+  }
+});
+
+module.exports = router;

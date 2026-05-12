@@ -1,0 +1,294 @@
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@layer base {
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+  
+  body {
+    @apply bg-gray-50 text-gray-900;
+  }
+}
+
+@layer components {
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-gray-100;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-400;
+  }
+
+  /* Button styles */
+  .btn {
+    @apply px-4 py-2 rounded-lg font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2;
+  }
+  
+  .btn-primary {
+    @apply bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500;
+  }
+  
+  .btn-secondary {
+    @apply bg-gray-200 text-gray-900 hover:bg-gray-300 focus:ring-gray-500;
+  }
+  
+  .btn-danger {
+    @apply bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
+  }
+  
+  .btn-success {
+    @apply bg-green-600 text-white hover:bg-green-700 focus:ring-green-500;
+  }
+  
+  .btn-sm {
+    @apply px-3 py-1.5 text-sm;
+  }
+  
+  .btn-lg {
+    @apply px-6 py-3 text-lg;
+  }
+
+  /* Card styles */
+  .card {
+    @apply bg-white rounded-xl shadow-sm border border-gray-200;
+  }
+  
+  .card-header {
+    @apply px-6 py-4 border-b border-gray-200;
+  }
+  
+  .card-body {
+    @apply px-6 py-4;
+  }
+  
+  .card-footer {
+    @apply px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl;
+  }
+
+  /* Form styles */
+  .form-input {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 transition-colors duration-200;
+  }
+  
+  .form-label {
+    @apply block text-sm font-medium text-gray-700 mb-1;
+  }
+  
+  .form-error {
+    @apply text-red-600 text-sm mt-1;
+  }
+
+  /* Table styles */
+  .table {
+    @apply w-full bg-white border border-gray-200 rounded-lg overflow-hidden;
+  }
+  
+  .table th {
+    @apply px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50;
+  }
+  
+  .table td {
+    @apply px-6 py-4 whitespace-nowrap text-sm text-gray-900 border-t border-gray-200;
+  }
+
+  /* Badge styles */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+  
+  .badge-success {
+    @apply bg-green-100 text-green-800;
+  }
+  
+  .badge-warning {
+    @apply bg-yellow-100 text-yellow-800;
+  }
+  
+  .badge-danger {
+    @apply bg-red-100 text-red-800;
+  }
+  
+  .badge-info {
+    @apply bg-blue-100 text-blue-800;
+  }
+
+  /* Loading spinner */
+  .spinner {
+    @apply animate-spin rounded-full border-2 border-gray-300 border-t-primary-600;
+  }
+
+  /* Modal styles */
+  .modal-overlay {
+    @apply fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center;
+  }
+  
+  .modal-content {
+    @apply bg-white rounded-xl shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto;
+  }
+
+  /* POS specific styles */
+  .pos-grid {
+    @apply grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-8rem)];
+  }
+  
+  .product-grid {
+    @apply grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 overflow-y-auto;
+  }
+
+  /* POS catalogue: minimum card width so prices & names are readable */
+  .product-grid-pos {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+    gap: 0.75rem;
+  }
+
+  @media (min-width: 640px) {
+    .product-grid-pos {
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    }
+  }
+
+  .product-card-pos {
+    @apply flex min-w-0 flex-col rounded-xl border border-gray-200 bg-white p-3 shadow-sm transition-shadow;
+  }
+
+  .product-card-pos:hover {
+    @apply border-primary-300 shadow-md;
+  }
+  
+  .product-card {
+    @apply bg-white rounded-lg p-4 border border-gray-200 hover:border-primary-300 hover:shadow-md transition-all duration-200 cursor-pointer;
+  }
+  
+  .cart-item {
+    @apply bg-white rounded-lg p-4 mb-3 border border-gray-200;
+  }
+
+  /* Uganda theme colors */
+  .uganda-gradient {
+    background: linear-gradient(135deg, #000000 0%, #e11d48 33%, #fbbf24 66%, #000000 100%);
+  }
+  
+  .uganda-border {
+    border-color: #e11d48;
+    border-width: 2px;
+  }
+
+  /* Print styles */
+  @media print {
+    .no-print {
+      display: none !important;
+    }
+    
+    .print-only {
+      display: block !important;
+    }
+    
+    body {
+      @apply text-black bg-white;
+    }
+    
+    .card {
+      @apply border border-gray-300 shadow-none;
+    }
+  }
+
+  /* Responsive utilities */
+  .mobile-only {
+    @apply block md:hidden;
+  }
+  
+  .desktop-only {
+    @apply hidden md:block;
+  }
+
+  /* Animation utilities */
+  .fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+  }
+  
+  .slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+
+  /* Offline indicator */
+  .offline-indicator {
+    @apply fixed top-4 right-4 bg-red-600 text-white px-3 py-2 rounded-lg shadow-lg z-50 flex items-center gap-2;
+  }
+
+  /* Sync status */
+  .sync-status {
+    @apply fixed bottom-4 right-4 bg-gray-800 text-white px-3 py-2 rounded-lg shadow-lg z-50 text-sm;
+  }
+  
+  .sync-status.syncing {
+    @apply bg-yellow-600;
+  }
+  
+  .sync-status.success {
+    @apply bg-green-600;
+  }
+  
+  .sync-status.error {
+    @apply bg-red-600;
+  }
+
+  /* Notification styles */
+  .notification-item {
+    @apply bg-white border border-gray-200 rounded-lg p-4 mb-3 hover:shadow-md transition-shadow duration-200;
+  }
+  
+  .notification-item.unread {
+    @apply border-l-4 border-l-primary-500 bg-primary-50;
+  }
+
+  /* Currency display */
+  .currency {
+    @apply font-mono font-semibold;
+  }
+
+  /* Barcode scanner input */
+  .barcode-input {
+    @apply text-center text-2xl font-mono bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4 focus:ring-yellow-500 focus:border-yellow-500;
+  }
+
+  /* Payment method buttons */
+  .payment-method {
+    @apply flex flex-col items-center justify-center p-6 border-2 border-gray-300 rounded-xl cursor-pointer transition-all duration-200 hover:border-primary-400 hover:bg-primary-50;
+  }
+  
+  .payment-method.active {
+    @apply border-primary-600 bg-primary-100;
+  }
+
+  /* Receipt styles */
+  .receipt {
+    @apply bg-white p-6 font-mono text-sm max-w-md mx-auto;
+  }
+  
+  .receipt-header {
+    @apply text-center border-b-2 border-black pb-4 mb-4;
+  }
+  
+  .receipt-item {
+    @apply flex justify-between py-1;
+  }
+  
+  .receipt-total {
+    @apply border-t-2 border-black pt-2 mt-4 font-bold;
+  }
+}

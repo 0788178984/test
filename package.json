@@ -1,0 +1,48 @@
+{
+  "name": "uganda-supermarket",
+  "version": "1.0.0",
+  "description": "Uganda Supermarket Management System - Offline-first with cloud sync",
+  "main": "index.js",
+  "scripts": {
+    "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
+    "server:dev": "cd server && npm run dev",
+    "client:dev": "cd client && npm run dev",
+    "desktop:dev": "cd desktop && npm run dev",
+    "build": "npm run client:build && npm run desktop:build",
+    "client:build": "cd client && npm run build",
+    "desktop:build": "cd desktop && npm run build",
+    "start": "cd server && npm start",
+    "install:all": "npm install && cd server && npm install && cd ../client && npm install && cd ../desktop && npm install && cd ../cloud && npm install",
+    "setup": "npm run install:all && cd server && node src/db/seed.js",
+    "validate:auth": "node scripts/validate-auth.cjs",
+    "validate:auth:http": "node scripts/validate-auth.cjs --http",
+    "reinstall:sqlite": "node scripts/reinstall-better-sqlite3.cjs",
+    "postinstall": "node scripts/ensure-better-sqlite3.cjs"
+  },
+  "keywords": [
+    "supermarket",
+    "pos",
+    "uganda",
+    "offline-first",
+    "electron",
+    "react",
+    "nodejs"
+  ],
+  "author": "Uganda Supermarket Solutions",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "overrides": {
+    "better-sqlite3": "^12.9.0"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "workspaces": [
+    "server",
+    "client",
+    "desktop",
+    "cloud"
+  ]
+}
