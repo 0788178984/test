@@ -133,10 +133,11 @@ uganda-supermarket/
 
 ## 🎯 Usage
 
-### Default Login Credentials
-- **Admin**: PIN `1234`
-- **Manager**: PIN `5678`
-- **Cashier**: PIN `9012`
+### Default login (local demo seed only)
+
+After `npm run db:seed` (or first-run `SEED_IF_EMPTY`), the **demo** store uses fixed PINs for quick local testing: Admin `1234`, Manager `5678`, Cashier `9012`, store code `DEFAULT`. Staff web passwords for seeded users are documented in `server/src/db/seed.js` and `docs/DEPLOYMENT_AND_USAGE.md`.
+
+**Production / real stores:** the public login page does **not** show any credentials. You (the developer) provision the first **admin** (Developer Console or seed), share their **store code** and sign-in with them privately, then the **admin** creates managers and cashiers under **Users** in the app.
 
 ### POS Workflow
 1. **Login** with 4-digit PIN

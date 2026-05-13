@@ -14,11 +14,13 @@ import Inventory from './pages/Inventory';
 import Customers from './pages/Customers';
 import Suppliers from './pages/Suppliers';
 import Reports from './pages/Reports';
+import DataAnalysis from './pages/DataAnalysis';
 import Users from './pages/Users';
 import Settings from './pages/Settings';
 import DeveloperConsole from './pages/DeveloperConsole';
 import NotificationsPage from './pages/NotificationsPage';
 import TeamMessages from './pages/TeamMessages';
+import Subscription from './pages/Subscription';
 
 function App() {
   const checkAuth = useAuthStore((state) => state.checkAuth);
@@ -45,11 +47,13 @@ function App() {
                 <Route path="inventory" element={<Inventory />} />
                 <Route path="customers" element={<Customers />} />
                 <Route path="notifications" element={<NotificationsPage />} />
+                <Route path="subscription" element={<Subscription />} />
 
                 <Route element={<RoleRoute allow={['admin', 'manager']} />}>
                   <Route path="products" element={<Products />} />
                   <Route path="suppliers" element={<Suppliers />} />
                   <Route path="reports" element={<Reports />} />
+                  <Route path="data-analysis" element={<DataAnalysis />} />
                   <Route path="team-messages" element={<TeamMessages />} />
                 </Route>
 

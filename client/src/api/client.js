@@ -65,6 +65,11 @@ export const authAPI = {
   changePassword: (currentPassword, newPassword) => api.post('/api/auth/change-password', { currentPassword, newPassword }),
 };
 
+export const paymentsAPI = {
+  getMethods: () => api.get('/api/payments/methods'),
+  requestCollection: (data) => api.post('/api/payments/request-collection', data),
+};
+
 export const productsAPI = {
   getAll: (params = {}) => api.get('/api/products', { params }),
   getById: (id) => api.get(`/api/products/${id}`),
@@ -174,6 +179,8 @@ export const developerAPI = {
   updateBusiness: (id, data) => api.patch(`/api/developer/businesses/${id}`, data),
   notifyStaff: (id, data) => api.post(`/api/developer/businesses/${id}/notify-staff`, data),
   bootstrapAdmin: (id, data) => api.post(`/api/developer/businesses/${id}/bootstrap-admin`, data),
+  getPaymentConfig: (id) => api.get(`/api/developer/businesses/${id}/payment-config`),
+  patchPaymentConfig: (id, data) => api.patch(`/api/developer/businesses/${id}/payment-config`, data),
   listSupportAll: () => api.get('/api/support-requests/developer/all'),
   updateSupport: (id, data) => api.patch(`/api/support-requests/developer/${id}`, data),
 };

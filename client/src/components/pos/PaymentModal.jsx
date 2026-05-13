@@ -1,13 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { X, CreditCard, Smartphone, DollarSign } from 'lucide-react';
-import { customersAPI } from '../../api/client';
-import { formatCurrency, formatPhoneNumber } from '../../api/client';
+import { customersAPI, paymentsAPI, formatCurrency, formatPhoneNumber, handleApiError } from '../../api/client';
+import { toast } from 'react-hot-toast';
 import Button from '../ui/Button';
+
+const ALL_METHODS = [
+  { id: 'cash', name: 'Cash', icon: DollarSign, color: 'green', desc: 'Count cash & change' },
+  { id: 'mtn_momo', name: 'MTN MoMo', icon: Smartphone, color: 'yellow', desc: 'Collection to this store’s MTN keys' },
+  { id: 'airtel_money', name: 'Airtel Money', icon: CreditCard, color: 'blue', desc: 'Collection to this store’s Airtel keys' },
+];
 
 /**
  * Payment UI — render inside parent <Modal>; do not nest another Modal here.
+ * @param {object} [paymentMethods] — from auth: { cash, mtn_momo, airtel_money }
  */
-const PaymentModal = ({ totalAmount, customer, onPayment, onCancel }) => {
+const PaymentModal = ({ totalAmount, customer, paymentMethods, onPayment, onCancel }) => {
+  const methods = useMemo(
+    () =>
+      ALL_METHODS.filter(
+        (m) => m.id === 'cash' || (paymentMethods && paymentMethods[m.id] === true)
+      ),
+    [paymentMethods]
+  );
+
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [cashTendered, setCashTendered] = useState(totalAmount);
@@ -15,6 +30,13 @@ const PaymentModal = ({ totalAmount, customer, onPayment, onCancel }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+
+  useEffect(() => {
+    const first = methods[0]?.id || 'cash';
+    if (!methods.find((m) => m.id === paymentMethod)) {
+      setPaymentMethod(first);
+    }
+  }, [methods, paymentMethod]);
 
   useEffect(() => {
     if (paymentMethod === 'cash') {
@@ -27,15 +49,6 @@ const PaymentModal = ({ totalAmount, customer, onPayment, onCancel }) => {
       setPhoneNumber(formatPhoneNumber(customer.phone));
     }
   }, [customer]);
-
-  const paymentMethods = [
-    { id: 'cash', name: 'Cash', icon: DollarSign, color: 'green' },
-    { id: 'mtn_momo', name: 'MTN MoMo', icon: Smartphone, color: 'yellow' },
-    { id: 'airtel_money', name: 'Airtel Money', icon: CreditCard, color: 'blue' },
-  ];
-
-  const changeDue =
-    paymentMethod === 'cash' ? Math.max(0, (Number(cashTendered) || 0) - (Number(totalAmount) || 0)) : 0;
 
   const handleCustomerSearch = async (query) => {
     if (query.length < 2) {
@@ -78,31 +91,39 @@ const PaymentModal = ({ totalAmount, customer, onPayment, onCancel }) => {
     }
 
     if (!phoneNumber || phoneNumber.replace(/\D/g, '').length < 9) {
-      window.alert('Please enter a valid phone number for mobile money payment.');
+      toast.error('Enter a valid payer phone number for mobile money.');
       return;
     }
 
     setIsProcessing(true);
+    setReference('');
     try {
-      const mockReference = `MOCK${Date.now()}`;
+      const amount = Math.round(Number(totalAmount) || 0);
+      const { data } = await paymentsAPI.requestCollection({
+        method: paymentMethod,
+        phone: phoneNumber,
+        amount,
+        reference: `POS-${Date.now()}`,
+      });
+      const ref = data.payment_reference || data.transactionId || '';
+      setReference(ref);
       onPayment({
         method: paymentMethod,
-        amountPaid: Math.round(Number(totalAmount) || 0),
+        amountPaid: amount,
         changeGiven: 0,
-        reference: mockReference,
+        reference: ref,
         phone: phoneNumber,
       });
-      setReference(mockReference);
     } catch (error) {
-      console.error('Payment processing error:', error);
-      window.alert('Payment failed. Please try again.');
+      const { message } = handleApiError(error);
+      toast.error(message);
     } finally {
       setIsProcessing(false);
     }
   };
 
   const getPaymentMethodName = (method) => {
-    const payment = paymentMethods.find((p) => p.id === method);
+    const payment = methods.find((p) => p.id === method);
     return payment ? payment.name : 'Cash';
   };
 
@@ -149,7 +170,7 @@ const PaymentModal = ({ totalAmount, customer, onPayment, onCancel }) => {
       <div>
         <h3 className="mb-3 text-lg font-semibold text-gray-900">Payment method</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {paymentMethods.map((method) => {
+          {methods.map((method) => {
             const Icon = method.icon;
             const active = paymentMethod === method.id;
             return (
@@ -165,9 +186,7 @@ const PaymentModal = ({ totalAmount, customer, onPayment, onCancel }) => {
               >
                 <Icon className={`mb-2 h-8 w-8 ${active ? 'text-primary-600' : 'text-gray-500'}`} />
                 <p className="font-medium text-gray-900">{method.name}</p>
-                <p className="text-xs text-gray-500">
-                  {method.id === 'cash' ? 'Count cash & change' : 'MoMo (demo reference)'}
-                </p>
+                <p className="text-xs text-gray-500">{method.desc}</p>
               </button>
             );
           })}
@@ -190,7 +209,10 @@ const PaymentModal = ({ totalAmount, customer, onPayment, onCancel }) => {
               className="form-input text-lg font-semibold"
             />
             <p className="mt-2 text-sm text-gray-600">
-              Change to give: <span className="font-bold text-primary-700">{formatCurrency(changeDue)}</span>
+              Change to give:{' '}
+              <span className="font-bold text-primary-700">
+                {formatCurrency(Math.max(0, (Number(cashTendered) || 0) - (Number(totalAmount) || 0)))}
+              </span>
             </p>
             {!tenderOk && (
               <p className="mt-1 text-sm text-red-600">Amount received must cover the total.</p>
@@ -276,7 +298,7 @@ const PaymentModal = ({ totalAmount, customer, onPayment, onCancel }) => {
 
       {reference && paymentMethod !== 'cash' && (
         <div className="rounded-lg border border-green-200 bg-green-50 p-4">
-          <p className="font-medium text-green-800">Reference</p>
+          <p className="font-medium text-green-800">Provider reference</p>
           <p className="text-sm text-green-700">{reference}</p>
         </div>
       )}
@@ -284,7 +306,7 @@ const PaymentModal = ({ totalAmount, customer, onPayment, onCancel }) => {
       {isProcessing && paymentMethod !== 'cash' && (
         <div className="flex items-center gap-3 rounded-lg border border-yellow-200 bg-yellow-50 p-4">
           <div className="h-6 w-6 animate-spin rounded-full border-2 border-yellow-600 border-t-transparent" />
-          <p className="text-sm text-yellow-800">Processing {getPaymentMethodName(paymentMethod)}…</p>
+          <p className="text-sm text-yellow-800">Requesting {getPaymentMethodName(paymentMethod)}…</p>
         </div>
       )}
 

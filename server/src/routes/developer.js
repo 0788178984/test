@@ -4,6 +4,10 @@ const bcrypt = require('bcryptjs');
 const { authenticate, authorize } = require('../middleware/auth');
 const db = require('../db/connection');
 const { createNotification } = require('./notifications');
+const {
+  paymentConfigForDeveloperGet,
+  mergePaymentConfig,
+} = require('../services/paymentConfigService');
 
 const router = express.Router();
 
@@ -15,7 +19,8 @@ router.get('/businesses', (req, res) => {
     const rows = db
       .prepare(
         `
-      SELECT b.*,
+      SELECT b.id, b.name, b.business_code, b.subscription_status, b.subscription_expires_at,
+             b.notes, b.created_at, b.updated_at,
         (SELECT COUNT(*) FROM users u WHERE u.business_id = b.id AND u.deleted_at IS NULL) as user_count
       FROM businesses b
       ORDER BY b.name
@@ -174,6 +179,43 @@ router.post('/businesses/:id/bootstrap-admin', async (req, res) => {
     }
     console.error(e);
     res.status(500).json({ error: 'Failed to create admin.' });
+  }
+});
+
+// Per-business MTN / Airtel API credentials (developer only; stored on businesses.payment_config)
+router.get('/businesses/:id/payment-config', (req, res) => {
+  try {
+    const biz = db.prepare(`SELECT id, name, business_code, payment_config FROM businesses WHERE id = ?`).get(req.params.id);
+    if (!biz) return res.status(404).json({ error: 'Business not found.' });
+    res.json({
+      business_id: biz.id,
+      business_code: biz.business_code,
+      name: biz.name,
+      config: paymentConfigForDeveloperGet(biz.payment_config),
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Failed to load payment configuration.' });
+  }
+});
+
+router.patch('/businesses/:id/payment-config', (req, res) => {
+  try {
+    const biz = db.prepare(`SELECT id, payment_config FROM businesses WHERE id = ?`).get(req.params.id);
+    if (!biz) return res.status(404).json({ error: 'Business not found.' });
+    const merged = mergePaymentConfig(biz.payment_config, req.body || {});
+    db.prepare(`UPDATE businesses SET payment_config = ?, updated_at = datetime('now') WHERE id = ?`).run(
+      merged,
+      req.params.id
+    );
+    const updated = db.prepare(`SELECT payment_config FROM businesses WHERE id = ?`).get(req.params.id);
+    res.json({
+      message: 'Payment configuration saved for this store.',
+      config: paymentConfigForDeveloperGet(updated.payment_config),
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Failed to save payment configuration.' });
   }
 });
 

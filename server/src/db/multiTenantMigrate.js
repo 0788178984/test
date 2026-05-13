@@ -32,6 +32,35 @@ function migrate(db) {
       VALUES (?, 'Default Store', 'DEFAULT', 'active', NULL)
     `).run(DEFAULT_BUSINESS_ID);
 
+    const businessCols = tableExists(db, 'businesses') ? columnNames(db, 'businesses') : [];
+    if (tableExists(db, 'businesses') && !businessCols.includes('payment_config')) {
+      db.exec(`ALTER TABLE businesses ADD COLUMN payment_config TEXT`);
+    }
+
+    if (!tableExists(db, 'mobile_money_transactions')) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS mobile_money_transactions (
+          id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+          external_id TEXT NOT NULL UNIQUE,
+          business_id TEXT REFERENCES businesses(id),
+          reference TEXT,
+          method TEXT NOT NULL,
+          phone TEXT,
+          amount REAL,
+          status TEXT,
+          provider_response TEXT,
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT,
+          sync_status TEXT DEFAULT 'pending'
+        );
+      `);
+    } else {
+      const mmCols = columnNames(db, 'mobile_money_transactions');
+      if (!mmCols.includes('business_id')) {
+        db.exec(`ALTER TABLE mobile_money_transactions ADD COLUMN business_id TEXT REFERENCES businesses(id)`);
+      }
+    }
+
     const tenantTables = [
       'suppliers',
       'products',

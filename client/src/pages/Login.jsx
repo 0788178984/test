@@ -8,7 +8,7 @@ import Input from '../components/ui/Input';
 
 const Login = () => {
   const [loginType, setLoginType] = useState('pin'); // 'pin' or 'web'
-  const [businessCode, setBusinessCode] = useState('DEFAULT');
+  const [businessCode, setBusinessCode] = useState('');
   const [pin, setPin] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -149,7 +149,7 @@ const Login = () => {
               name="business_code"
               autoComplete="off"
               label="Store code"
-              placeholder="e.g. DEFAULT or KAGADI"
+              placeholder="Store code from your administrator"
               value={businessCode}
               onChange={(e) => setBusinessCode(e.target.value.toUpperCase())}
               required
@@ -200,7 +200,7 @@ const Login = () => {
               name="business_code"
               autoComplete="off"
               label="Store code (if your email is used at more than one store)"
-              placeholder="Leave blank if unsure — DEFAULT for demo"
+              placeholder="Only if your email is used at more than one store"
               value={businessCode}
               onChange={(e) => setBusinessCode(e.target.value.toUpperCase())}
             />
@@ -251,15 +251,13 @@ const Login = () => {
           </form>
         )}
 
-        {/* Help Section */}
-        <div className="mt-8 text-center space-y-2">
-          <p className="text-sm text-gray-600">
-            PIN login: store code <strong>DEFAULT</strong> · Admin <strong>1234</strong> · Manager{' '}
-            <strong>5678</strong> · Cashier <strong>9012</strong>
+        <div className="mt-8 rounded-lg border border-gray-200 bg-white/80 px-4 py-3 text-center text-sm text-gray-600">
+          <p>
+            Use the <strong>store code</strong>, <strong>PIN</strong>, or <strong>email and password</strong> your store
+            administrator gave you.
           </p>
-          <p className="text-xs text-gray-500">
-            Web (staff): same emails with <strong>SuperMkt2024!</strong> · Developer:{' '}
-            <strong>developer@supermarket.ug</strong> / <strong>Developer2026!</strong> (no store code)
+          <p className="mt-2 text-xs text-gray-500">
+            Platform developer accounts are issued separately and are not shown on this page.
           </p>
         </div>
       </div>

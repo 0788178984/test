@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const db = require('../db/connection');
+const { paymentMethodsAvailability } = require('../services/paymentConfigService');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
@@ -63,7 +64,8 @@ const authenticate = (req, res, next) => {
              b.name as business_name,
              b.business_code,
              b.subscription_status,
-             b.subscription_expires_at
+             b.subscription_expires_at,
+             b.payment_config as payment_config
       FROM users u
       LEFT JOIN businesses b ON u.business_id = b.id
       WHERE u.id = ? AND u.deleted_at IS NULL
@@ -74,6 +76,12 @@ const authenticate = (req, res, next) => {
     if (!user || !user.is_active) {
       return res.status(401).json({ error: 'Invalid token or user inactive.' });
     }
+
+    const pc = user.payment_config;
+    delete user.payment_config;
+    user.payment_methods = user.business_id
+      ? paymentMethodsAvailability(pc)
+      : { cash: true, mtn_momo: false, airtel_money: false };
 
     const path = req.originalUrl.split('?')[0];
     if (subscriptionBlocks(user) && !isSuspendedExemptPath(path)) {

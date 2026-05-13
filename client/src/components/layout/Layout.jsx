@@ -17,6 +17,8 @@ import {
   LifeBuoy,
   Bell,
   Megaphone,
+  PieChart,
+  Award,
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../../store/authStore';
@@ -134,9 +136,21 @@ const Layout = () => {
       roles: ['admin', 'manager'],
     },
     {
+      title: 'Data analysis',
+      icon: PieChart,
+      path: '/data-analysis',
+      roles: ['admin', 'manager'],
+    },
+    {
       title: 'Notifications',
       icon: Bell,
       path: '/notifications',
+      roles: ['admin', 'manager', 'cashier'],
+    },
+    {
+      title: 'Subscription',
+      icon: Award,
+      path: '/subscription',
       roles: ['admin', 'manager', 'cashier'],
     },
     {
@@ -215,18 +229,6 @@ const Layout = () => {
   };
 
   const showSupportTicketList = user?.role === 'admin' || user?.role === 'manager';
-
-  const subStatus = user?.subscription_status;
-  const subExpires = user?.subscription_expires_at;
-  const expiryPast =
-    subExpires && !Number.isNaN(Date.parse(subExpires)) && new Date(subExpires) < new Date();
-  const showSubBanner =
-    user?.role &&
-    user.role !== 'developer' &&
-    (subStatus === 'suspended' ||
-      subStatus === 'expired' ||
-      subStatus === 'trial' ||
-      expiryPast);
 
   const isActivePath = (path) => location.pathname.startsWith(path);
 
@@ -489,21 +491,6 @@ const Layout = () => {
         </header>
 
         <main className="min-h-0 flex-1 overflow-y-auto bg-gray-50">
-          {showSubBanner && (
-            <div
-              className={`border-b px-4 py-2 text-sm ${
-                subStatus === 'suspended' || subStatus === 'expired' || expiryPast
-                  ? 'border-red-200 bg-red-50 text-red-900'
-                  : 'border-amber-200 bg-amber-50 text-amber-900'
-              }`}
-            >
-              <strong>Subscription:</strong> {subStatus || 'unknown'}
-              {subExpires ? ` · expires ${subExpires}` : ''}
-              {subStatus === 'suspended' || subStatus === 'expired' || expiryPast
-                ? ' — many features are blocked until your provider reactivates the licence. Use Help & support below.'
-                : ' — contact your system provider if this should be active.'}
-            </div>
-          )}
           <div className="p-4 sm:p-6">
             <Outlet />
           </div>

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Bell, LifeBuoy, RefreshCw, PlusCircle, UserPlus, AlertTriangle } from 'lucide-react';
+import { Building2, Bell, LifeBuoy, RefreshCw, PlusCircle, UserPlus, AlertTriangle, CreditCard } from 'lucide-react';
 import { developerAPI } from '../api/client';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
@@ -45,6 +45,24 @@ export default function DeveloperConsole() {
     pin: '',
   });
   const [bootstrapSaving, setBootstrapSaving] = useState(false);
+
+  const [payBizId, setPayBizId] = useState('');
+  const [payReload, setPayReload] = useState(0);
+  const [payLoading, setPayLoading] = useState(false);
+  const [paySaving, setPaySaving] = useState(false);
+  const [payForm, setPayForm] = useState({
+    mtn_enabled: false,
+    mtn_baseUrl: '',
+    mtn_targetEnvironment: 'sandbox',
+    mtn_primaryKey: '',
+    mtn_secondaryKey: '',
+    mtn_apiUser: '',
+    mtn_apiSecret: '',
+    airtel_enabled: false,
+    airtel_baseUrl: '',
+    airtel_clientId: '',
+    airtel_clientSecret: '',
+  });
 
   const [licenseAlerts, setLicenseAlerts] = useState({
     out_of_licence: [],
@@ -115,6 +133,39 @@ export default function DeveloperConsole() {
       setTicketNotes('');
     }
   }, [selectedTicketId, supportRequests]);
+
+  useEffect(() => {
+    if (!payBizId) return;
+    let cancelled = false;
+    (async () => {
+      setPayLoading(true);
+      try {
+        const { data } = await developerAPI.getPaymentConfig(payBizId);
+        if (cancelled) return;
+        const c = data.config || {};
+        setPayForm({
+          mtn_enabled: !!c.mtn?.enabled,
+          mtn_baseUrl: c.mtn?.baseUrl || '',
+          mtn_targetEnvironment: c.mtn?.targetEnvironment || 'sandbox',
+          mtn_primaryKey: '',
+          mtn_secondaryKey: '',
+          mtn_apiUser: c.mtn?.apiUser || '',
+          mtn_apiSecret: '',
+          airtel_enabled: !!c.airtel?.enabled,
+          airtel_baseUrl: c.airtel?.baseUrl || '',
+          airtel_clientId: c.airtel?.clientId || '',
+          airtel_clientSecret: '',
+        });
+      } catch {
+        if (!cancelled) toast.error('Could not load payment settings');
+      } finally {
+        if (!cancelled) setPayLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [payBizId, payReload]);
 
   const sendNotify = async (e) => {
     e.preventDefault();
@@ -236,6 +287,39 @@ export default function DeveloperConsole() {
       toast.error(err.response?.data?.error || 'Could not create admin');
     } finally {
       setBootstrapSaving(false);
+    }
+  };
+
+  const savePayConfig = async (e) => {
+    e.preventDefault();
+    if (!payBizId) return;
+    setPaySaving(true);
+    try {
+      const body = {
+        mtn: {
+          enabled: payForm.mtn_enabled,
+          baseUrl: payForm.mtn_baseUrl.trim() || undefined,
+          targetEnvironment: payForm.mtn_targetEnvironment,
+          apiUser: payForm.mtn_apiUser.trim() || undefined,
+        },
+        airtel: {
+          enabled: payForm.airtel_enabled,
+          baseUrl: payForm.airtel_baseUrl.trim() || undefined,
+          clientId: payForm.airtel_clientId.trim() || undefined,
+        },
+      };
+      if (payForm.mtn_primaryKey.trim()) body.mtn.primaryKey = payForm.mtn_primaryKey.trim();
+      if (payForm.mtn_secondaryKey.trim()) body.mtn.secondaryKey = payForm.mtn_secondaryKey.trim();
+      if (payForm.mtn_apiSecret.trim()) body.mtn.apiSecret = payForm.mtn_apiSecret.trim();
+      if (payForm.airtel_clientSecret.trim()) body.airtel.clientSecret = payForm.airtel_clientSecret.trim();
+
+      await developerAPI.patchPaymentConfig(payBizId, body);
+      toast.success('Payment settings saved for this store.');
+      setPayReload((k) => k + 1);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Save failed');
+    } finally {
+      setPaySaving(false);
     }
   };
 
@@ -398,6 +482,130 @@ export default function DeveloperConsole() {
               </Button>
             </div>
           </form>
+        </section>
+
+        <section className="bg-white rounded-xl shadow p-6 space-y-4">
+          <h2 className="text-md font-semibold text-gray-800 flex items-center gap-2">
+            <CreditCard className="h-4 w-4 text-primary-600" /> Store payment integrations (MTN / Airtel)
+          </h2>
+          <p className="text-sm text-gray-600">
+            Each supermarket has its own mobile-money keys. Staff only see MTN or Airtel at checkout after you enable the
+            provider here and save valid credentials from MTN MoMo / Airtel Open API. Secret fields left blank keep the
+            previous saved value.
+          </p>
+          <div className="max-w-xl">
+            <label className="form-label">Select store</label>
+            <select
+              className="form-input"
+              value={payBizId}
+              onChange={(e) => setPayBizId(e.target.value)}
+            >
+              <option value="">Choose…</option>
+              {businesses.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.business_code} — {b.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          {payBizId && (
+            <form onSubmit={savePayConfig} className="space-y-6 border-t border-gray-100 pt-4">
+              {payLoading ? (
+                <p className="text-sm text-gray-500">Loading settings…</p>
+              ) : (
+                <>
+                  <div className="rounded-lg border border-yellow-200 bg-yellow-50/60 p-4 space-y-3">
+                    <label className="flex items-center gap-2 text-sm font-medium text-gray-900">
+                      <input
+                        type="checkbox"
+                        checked={payForm.mtn_enabled}
+                        onChange={(e) => setPayForm((f) => ({ ...f, mtn_enabled: e.target.checked }))}
+                      />
+                      Enable MTN MoMo (collection)
+                    </label>
+                    <Input
+                      label="MTN API base URL (optional)"
+                      placeholder="https://sandbox.momodeveloper.mtn.com"
+                      value={payForm.mtn_baseUrl}
+                      onChange={(e) => setPayForm((f) => ({ ...f, mtn_baseUrl: e.target.value }))}
+                    />
+                    <div>
+                      <label className="form-label">Target environment</label>
+                      <select
+                        className="form-input"
+                        value={payForm.mtn_targetEnvironment}
+                        onChange={(e) => setPayForm((f) => ({ ...f, mtn_targetEnvironment: e.target.value }))}
+                      >
+                        <option value="sandbox">sandbox</option>
+                        <option value="mtnuganda">mtnuganda (production)</option>
+                      </select>
+                    </div>
+                    <Input
+                      label="Subscription (primary) key"
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder="Leave blank to keep existing"
+                      value={payForm.mtn_primaryKey}
+                      onChange={(e) => setPayForm((f) => ({ ...f, mtn_primaryKey: e.target.value }))}
+                    />
+                    <Input
+                      label="Subscription secondary key (optional)"
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder="Leave blank to keep existing"
+                      value={payForm.mtn_secondaryKey}
+                      onChange={(e) => setPayForm((f) => ({ ...f, mtn_secondaryKey: e.target.value }))}
+                    />
+                    <Input
+                      label="API user / reference id (MoMo user id)"
+                      value={payForm.mtn_apiUser}
+                      onChange={(e) => setPayForm((f) => ({ ...f, mtn_apiUser: e.target.value }))}
+                    />
+                    <Input
+                      label="API key (secret)"
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder="Leave blank to keep existing"
+                      value={payForm.mtn_apiSecret}
+                      onChange={(e) => setPayForm((f) => ({ ...f, mtn_apiSecret: e.target.value }))}
+                    />
+                  </div>
+                  <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-4 space-y-3">
+                    <label className="flex items-center gap-2 text-sm font-medium text-gray-900">
+                      <input
+                        type="checkbox"
+                        checked={payForm.airtel_enabled}
+                        onChange={(e) => setPayForm((f) => ({ ...f, airtel_enabled: e.target.checked }))}
+                      />
+                      Enable Airtel Money
+                    </label>
+                    <Input
+                      label="Airtel Open API base URL (optional)"
+                      placeholder="https://openapi.airtel.africa"
+                      value={payForm.airtel_baseUrl}
+                      onChange={(e) => setPayForm((f) => ({ ...f, airtel_baseUrl: e.target.value }))}
+                    />
+                    <Input
+                      label="Client id"
+                      value={payForm.airtel_clientId}
+                      onChange={(e) => setPayForm((f) => ({ ...f, airtel_clientId: e.target.value }))}
+                    />
+                    <Input
+                      label="Client secret"
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder="Leave blank to keep existing"
+                      value={payForm.airtel_clientSecret}
+                      onChange={(e) => setPayForm((f) => ({ ...f, airtel_clientSecret: e.target.value }))}
+                    />
+                  </div>
+                  <Button type="submit" variant="primary" loading={paySaving}>
+                    Save payment settings
+                  </Button>
+                </>
+              )}
+            </form>
+          )}
         </section>
 
         <section className="bg-white rounded-xl shadow p-6 space-y-4">

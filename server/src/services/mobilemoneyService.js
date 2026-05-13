@@ -1,5 +1,9 @@
 const db = require('../db/connection');
 const { dispatch } = require('../routes/notifications');
+const {
+  resolveMtnRuntime,
+  resolveAirtelRuntime,
+} = require('./paymentConfigService');
 
 class MobileMoneyService {
   constructor() {
@@ -28,7 +32,14 @@ class MobileMoneyService {
     const userId = process.env.MTN_USER_ID || '';
     const apiSecret = process.env.MTN_API_SECRET || '';
 
-    return { url, primaryKey, secondaryKey, userId, apiSecret };
+    return {
+      url,
+      primaryKey,
+      secondaryKey,
+      userId,
+      apiSecret,
+      targetEnvironment: process.env.MTN_ENVIRONMENT || 'sandbox',
+    };
   }
 
   async getAirtelConfig() {
@@ -42,27 +53,28 @@ class MobileMoneyService {
     return { url, clientId, clientSecret };
   }
 
-  // MTN Mobile Money implementation
-  async requestMTNPayment(phoneNumber, amount, reference, externalId) {
+  // MTN Mobile Money implementation (optional mtnCfg + businessId for per-store credentials)
+  async requestMTNPayment(phoneNumber, amount, reference, externalId, mtnCfg = null, businessId = null) {
     try {
-      if (!this.mtnConfig.apiSecret) {
+      const cfg = mtnCfg || this.mtnConfig;
+      if (!cfg?.apiSecret) {
         throw new Error('MTN MoMo not configured');
       }
 
       const formattedPhone = this.formatPhoneNumber(phoneNumber, 'mtn');
       
       // First, get access token
-      const token = await this.getMTNAccessToken();
+      const token = await this.getMTNAccessToken(cfg);
       
       // Create the payment request
-      const response = await fetch(`${this.mtnConfig.url}/collection/v1_0/requesttopay`, {
+      const response = await fetch(`${cfg.url}/collection/v1_0/requesttopay`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
           'X-Reference-Id': externalId,
-          'X-Target-Environment': process.env.MTN_ENVIRONMENT || 'sandbox',
-          'Ocp-Apim-Subscription-Key': this.mtnConfig.primaryKey
+          'X-Target-Environment': cfg.targetEnvironment || process.env.MTN_ENVIRONMENT || 'sandbox',
+          'Ocp-Apim-Subscription-Key': cfg.primaryKey
         },
         body: JSON.stringify({
           amount: amount.toString(),
@@ -87,6 +99,7 @@ class MobileMoneyService {
       // Store the transaction
       await this.storeTransaction({
         external_id: externalId,
+        business_id: businessId,
         reference,
         method: 'mtn_momo',
         phone: formattedPhone,
@@ -109,13 +122,14 @@ class MobileMoneyService {
     }
   }
 
-  async getMTNAccessToken() {
+  async getMTNAccessToken(mtnCfg = null) {
+    const cfg = mtnCfg || this.mtnConfig;
     try {
-      const response = await fetch(`${this.mtnConfig.url}/collection/oauth2/token`, {
+      const response = await fetch(`${cfg.url}/collection/oauth2/token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Ocp-Apim-Subscription-Key': this.mtnConfig.primaryKey
+          'Ocp-Apim-Subscription-Key': cfg.primaryKey
         },
         body: JSON.stringify({
           grant_type: 'client_credentials'
@@ -134,16 +148,17 @@ class MobileMoneyService {
     }
   }
 
-  async checkMTNStatus(externalId) {
+  async checkMTNStatus(externalId, mtnCfg = null) {
+    const cfg = mtnCfg || this.mtnConfig;
     try {
-      const token = await this.getMTNAccessToken();
+      const token = await this.getMTNAccessToken(cfg);
       
-      const response = await fetch(`${this.mtnConfig.url}/collection/v1_0/requesttopay/${externalId}`, {
+      const response = await fetch(`${cfg.url}/collection/v1_0/requesttopay/${externalId}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'X-Target-Environment': process.env.MTN_ENVIRONMENT || 'sandbox',
-          'Ocp-Apim-Subscription-Key': this.mtnConfig.primaryKey
+          'X-Target-Environment': cfg.targetEnvironment || process.env.MTN_ENVIRONMENT || 'sandbox',
+          'Ocp-Apim-Subscription-Key': cfg.primaryKey
         }
       });
 
@@ -171,19 +186,20 @@ class MobileMoneyService {
   }
 
   // Airtel Money implementation
-  async requestAirtelPayment(phoneNumber, amount, reference, externalId) {
+  async requestAirtelPayment(phoneNumber, amount, reference, externalId, airtelCfg = null, businessId = null) {
     try {
-      if (!this.airtelConfig.clientSecret) {
+      const cfg = airtelCfg || this.airtelConfig;
+      if (!cfg?.clientSecret) {
         throw new Error('Airtel Money not configured');
       }
 
       const formattedPhone = this.formatPhoneNumber(phoneNumber, 'airtel');
       
       // First, get access token
-      const token = await this.getAirtelAccessToken();
+      const token = await this.getAirtelAccessToken(cfg);
       
       // Create the payment request
-      const response = await fetch(`${this.airtelConfig.url}/merchant/v1/payments/`, {
+      const response = await fetch(`${cfg.url}/merchant/v1/payments/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -218,6 +234,7 @@ class MobileMoneyService {
       // Store the transaction
       await this.storeTransaction({
         external_id: externalId,
+        business_id: businessId,
         reference,
         method: 'airtel_money',
         phone: formattedPhone,
@@ -240,16 +257,17 @@ class MobileMoneyService {
     }
   }
 
-  async getAirtelAccessToken() {
+  async getAirtelAccessToken(airtelCfg = null) {
+    const cfg = airtelCfg || this.airtelConfig;
     try {
-      const response = await fetch(`${this.airtelConfig.url}/auth/oauth2/token`, {
+      const response = await fetch(`${cfg.url}/auth/oauth2/token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          client_id: this.airtelConfig.clientId,
-          client_secret: this.airtelConfig.clientSecret,
+          client_id: cfg.clientId,
+          client_secret: cfg.clientSecret,
           grant_type: 'client_credentials'
         })
       });
@@ -266,11 +284,12 @@ class MobileMoneyService {
     }
   }
 
-  async checkAirtelStatus(externalId) {
+  async checkAirtelStatus(externalId, airtelCfg = null) {
+    const cfg = airtelCfg || this.airtelConfig;
     try {
-      const token = await this.getAirtelAccessToken();
+      const token = await this.getAirtelAccessToken(cfg);
       
-      const response = await fetch(`${this.airtelConfig.url}/standard/v1/payments/${externalId}`, {
+      const response = await fetch(`${cfg.url}/standard/v1/payments/${externalId}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -301,6 +320,37 @@ class MobileMoneyService {
     }
   }
 
+  /** Per-store MoMo (credentials from businesses.payment_config, set in Developer Console). */
+  async requestPaymentForBusiness(businessId, method, phoneNumber, amount, reference) {
+    if (!businessId) {
+      return { success: false, error: 'Business context is required.' };
+    }
+    const row = db.prepare(`SELECT payment_config FROM businesses WHERE id = ?`).get(businessId);
+    const externalId = this.generateTransactionId();
+
+    if (method === 'mtn_momo') {
+      const mtn = resolveMtnRuntime(row?.payment_config);
+      if (!mtn) {
+        return {
+          success: false,
+          error: 'MTN MoMo is not enabled or credentials are incomplete for this store. Ask your system developer to configure payments.',
+        };
+      }
+      return this.requestMTNPayment(phoneNumber, amount, reference, externalId, mtn, businessId);
+    }
+    if (method === 'airtel_money') {
+      const airtel = resolveAirtelRuntime(row?.payment_config);
+      if (!airtel) {
+        return {
+          success: false,
+          error: 'Airtel Money is not enabled or credentials are incomplete for this store. Ask your system developer to configure payments.',
+        };
+      }
+      return this.requestAirtelPayment(phoneNumber, amount, reference, externalId, airtel, businessId);
+    }
+    return { success: false, error: 'Unsupported payment method.' };
+  }
+
   // Generic payment methods
   async requestPayment(method, phoneNumber, amount, reference) {
     const externalId = this.generateTransactionId();
@@ -310,10 +360,10 @@ class MobileMoneyService {
       
       switch (method) {
         case 'mtn_momo':
-          result = await this.requestMTNPayment(phoneNumber, amount, reference, externalId);
+          result = await this.requestMTNPayment(phoneNumber, amount, reference, externalId, null, null);
           break;
         case 'airtel_money':
-          result = await this.requestAirtelPayment(phoneNumber, amount, reference, externalId);
+          result = await this.requestAirtelPayment(phoneNumber, amount, reference, externalId, null, null);
           break;
         default:
           throw new Error(`Unsupported payment method: ${method}`);
@@ -331,14 +381,23 @@ class MobileMoneyService {
 
   async checkPaymentStatus(method, transactionId) {
     try {
+      const txn = await this.getTransaction(transactionId);
+      let mtnCfg = null;
+      let airtelCfg = null;
+      if (txn?.business_id) {
+        const bizRow = db.prepare(`SELECT payment_config FROM businesses WHERE id = ?`).get(txn.business_id);
+        mtnCfg = resolveMtnRuntime(bizRow?.payment_config);
+        airtelCfg = resolveAirtelRuntime(bizRow?.payment_config);
+      }
+
       let result;
       
       switch (method) {
         case 'mtn_momo':
-          result = await this.checkMTNStatus(transactionId);
+          result = await this.checkMTNStatus(transactionId, mtnCfg);
           break;
         case 'airtel_money':
-          result = await this.checkAirtelStatus(transactionId);
+          result = await this.checkAirtelStatus(transactionId, airtelCfg);
           break;
         default:
           throw new Error(`Unsupported payment method: ${method}`);
@@ -385,11 +444,12 @@ class MobileMoneyService {
   async storeTransaction(transactionData) {
     db.prepare(`
       INSERT INTO mobile_money_transactions (
-        external_id, reference, method, phone, amount, status,
+        external_id, business_id, reference, method, phone, amount, status,
         provider_response, created_at, sync_status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), 'pending')
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), 'pending')
     `).run(
       transactionData.external_id,
+      transactionData.business_id || null,
       transactionData.reference,
       transactionData.method,
       transactionData.phone,

@@ -399,8 +399,7 @@ const POS = () => {
           </div>
 
           <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
-            <Smartphone className="mb-1 inline h-3 w-3" /> MoMo in payment step uses a demo reference unless APIs are
-            configured in <code className="text-gray-800">.env</code>.
+            <Smartphone className="mb-1 inline h-3 w-3" /> MTN / Airtel appear here only when your system developer enables them for this store in the Developer console with valid API keys.
           </div>
         </section>
       </div>
@@ -409,6 +408,9 @@ const POS = () => {
         <PaymentModal
           totalAmount={getTotal()}
           customer={customer}
+          paymentMethods={
+            user?.payment_methods || { cash: true, mtn_momo: false, airtel_money: false }
+          }
           onPayment={handlePayment}
           onCancel={() => setShowPaymentModal(false)}
         />
