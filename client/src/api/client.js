@@ -179,6 +179,9 @@ export const developerAPI = {
   updateBusiness: (id, data) => api.patch(`/api/developer/businesses/${id}`, data),
   notifyStaff: (id, data) => api.post(`/api/developer/businesses/${id}/notify-staff`, data),
   bootstrapAdmin: (id, data) => api.post(`/api/developer/businesses/${id}/bootstrap-admin`, data),
+  listStaff: (businessId) => api.get(`/api/developer/businesses/${businessId}/staff`),
+  resetStaffCredentials: (businessId, userId, data) =>
+    api.patch(`/api/developer/businesses/${businessId}/staff/${userId}`, data),
   getPaymentConfig: (id) => api.get(`/api/developer/businesses/${id}/payment-config`),
   patchPaymentConfig: (id, data) => api.patch(`/api/developer/businesses/${id}/payment-config`, data),
   listSupportAll: () => api.get('/api/support-requests/developer/all'),

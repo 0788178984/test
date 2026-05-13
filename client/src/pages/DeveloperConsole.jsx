@@ -1,6 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Bell, LifeBuoy, RefreshCw, PlusCircle, UserPlus, AlertTriangle, CreditCard } from 'lucide-react';
+import {
+  Building2,
+  Bell,
+  LifeBuoy,
+  RefreshCw,
+  PlusCircle,
+  UserPlus,
+  AlertTriangle,
+  CreditCard,
+  KeyRound,
+} from 'lucide-react';
 import { developerAPI } from '../api/client';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
@@ -45,6 +55,14 @@ export default function DeveloperConsole() {
     pin: '',
   });
   const [bootstrapSaving, setBootstrapSaving] = useState(false);
+
+  const [recoveryBizId, setRecoveryBizId] = useState('');
+  const [recoveryStaff, setRecoveryStaff] = useState([]);
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
+  const [recoveryUserId, setRecoveryUserId] = useState('');
+  const [recoveryPassword, setRecoveryPassword] = useState('');
+  const [recoveryPin, setRecoveryPin] = useState('');
+  const [recoverySaving, setRecoverySaving] = useState(false);
 
   const [payBizId, setPayBizId] = useState('');
   const [payReload, setPayReload] = useState(0);
@@ -287,6 +305,64 @@ export default function DeveloperConsole() {
       toast.error(err.response?.data?.error || 'Could not create admin');
     } finally {
       setBootstrapSaving(false);
+    }
+  };
+
+  const loadStaffForRecovery = async () => {
+    if (!recoveryBizId) {
+      toast.error('Select a store first.');
+      return;
+    }
+    setRecoveryLoading(true);
+    try {
+      const { data } = await developerAPI.listStaff(recoveryBizId);
+      setRecoveryStaff(data.staff || []);
+      setRecoveryUserId('');
+      const n = (data.staff || []).length;
+      if (n === 0) {
+        toast('No staff in this store yet — use “Create first admin” above.');
+      } else {
+        toast.success(`Loaded ${n} staff member(s).`);
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Could not load staff');
+      setRecoveryStaff([]);
+    } finally {
+      setRecoveryLoading(false);
+    }
+  };
+
+  const resetStaffCredentials = async (e) => {
+    e.preventDefault();
+    if (!recoveryBizId || !recoveryUserId) {
+      toast.error('Select a store and a staff member.');
+      return;
+    }
+    const pwd = recoveryPassword.trim();
+    const pinDigits = recoveryPin.replace(/\D/g, '').slice(0, 4);
+    if (!pwd && pinDigits.length !== 4) {
+      toast.error('Enter a new web password (8+ chars) and/or a 4-digit PIN.');
+      return;
+    }
+    if (pwd && pwd.length < 8) {
+      toast.error('Password must be at least 8 characters.');
+      return;
+    }
+    setRecoverySaving(true);
+    try {
+      await developerAPI.resetStaffCredentials(recoveryBizId, recoveryUserId, {
+        ...(pwd ? { password: pwd } : {}),
+        ...(pinDigits.length === 4 ? { pin: pinDigits } : {}),
+      });
+      toast.success('Credentials updated. Tell the store only over phone or another trusted channel.');
+      setRecoveryPassword('');
+      setRecoveryPin('');
+      await loadBusinesses();
+      await loadStaffForRecovery();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Could not update credentials');
+    } finally {
+      setRecoverySaving(false);
     }
   };
 
@@ -614,7 +690,7 @@ export default function DeveloperConsole() {
           </h2>
           <p className="text-sm text-gray-600">
             New stores have no users until you add at least one admin. They sign in with <strong>Web login</strong> using this email and password.{' '}
-            <strong>PIN login</strong> uses the 4-digit PIN you enter here, or <strong>1234</strong> if you leave PIN blank (change it from the store after first login).
+            <strong>PIN login</strong> uses the 4-digit PIN you enter here; if you leave PIN blank, a default is applied — the store should change it after first login.
           </p>
           <form onSubmit={bootstrapAdmin} className="grid gap-3 sm:grid-cols-2">
             <div className="sm:col-span-2">
@@ -666,6 +742,87 @@ export default function DeveloperConsole() {
               </Button>
             </div>
           </form>
+        </section>
+
+        <section className="bg-white rounded-xl shadow p-6 space-y-4">
+          <h2 className="text-md font-semibold text-gray-800 flex items-center gap-2">
+            <KeyRound className="h-4 w-4 text-primary-600" />
+            Recover store login (admin / manager / cashier)
+          </h2>
+          <p className="text-sm text-gray-600">
+            When someone forgets their <strong>web password</strong> or <strong>PIN</strong>, you can set new ones here.
+            This only updates that user&apos;s credentials — <strong>no products, sales, or other data are changed</strong>.
+            Confirm the person&apos;s identity out of band (phone, visit, ticket) before resetting.
+          </p>
+          <div className="flex flex-wrap gap-2 items-end">
+            <div className="min-w-[200px] flex-1">
+              <label className="form-label">Store</label>
+              <select
+                className="form-input"
+                value={recoveryBizId}
+                onChange={(e) => {
+                  setRecoveryBizId(e.target.value);
+                  setRecoveryStaff([]);
+                  setRecoveryUserId('');
+                }}
+              >
+                <option value="">Select…</option>
+                {businesses.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.business_code} — {b.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Button type="button" variant="secondary" loading={recoveryLoading} onClick={loadStaffForRecovery}>
+              Load staff
+            </Button>
+          </div>
+
+          {recoveryStaff.length > 0 && (
+            <form onSubmit={resetStaffCredentials} className="space-y-4 border-t border-gray-100 pt-4">
+              <div>
+                <label className="form-label">Staff member</label>
+                <select
+                  className="form-input"
+                  value={recoveryUserId}
+                  onChange={(e) => setRecoveryUserId(e.target.value)}
+                  required
+                >
+                  <option value="">Select…</option>
+                  {recoveryStaff.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.role}){u.email ? ` — ${u.email}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Input
+                  type="password"
+                  autoComplete="new-password"
+                  label="New web password (optional)"
+                  value={recoveryPassword}
+                  onChange={(e) => setRecoveryPassword(e.target.value)}
+                  placeholder="Min 8 characters if set"
+                />
+                <Input
+                  label="New 4-digit PIN (optional)"
+                  value={recoveryPin}
+                  onChange={(e) => setRecoveryPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                  placeholder="POS / PIN login"
+                  maxLength={4}
+                />
+              </div>
+              <p className="text-xs text-gray-500">
+                Provide at least one of password or PIN. Leave a field blank to keep the current value for that login
+                method.
+              </p>
+              <Button type="submit" variant="primary" loading={recoverySaving}>
+                Save new credentials
+              </Button>
+            </form>
+          )}
         </section>
 
         <section className="bg-white rounded-xl shadow p-6">

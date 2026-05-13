@@ -182,6 +182,86 @@ router.post('/businesses/:id/bootstrap-admin', async (req, res) => {
   }
 });
 
+// List staff for a store (no secrets) — for lockout recovery
+router.get('/businesses/:id/staff', (req, res) => {
+  try {
+    const biz = db.prepare(`SELECT id, name, business_code FROM businesses WHERE id = ?`).get(req.params.id);
+    if (!biz) return res.status(404).json({ error: 'Business not found.' });
+    const staff = db
+      .prepare(
+        `
+        SELECT id, name, email, phone, role, is_active, last_login, created_at
+        FROM users
+        WHERE business_id = ? AND deleted_at IS NULL AND role IN ('admin', 'manager', 'cashier')
+        ORDER BY CASE role WHEN 'admin' THEN 1 WHEN 'manager' THEN 2 ELSE 3 END, name COLLATE NOCASE
+      `
+      )
+      .all(req.params.id);
+    res.json({ business: biz, staff });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Failed to list staff.' });
+  }
+});
+
+// Reset web password and/or PIN for a staff member (lockout recovery — no DB wipe)
+router.patch('/businesses/:id/staff/:userId', async (req, res) => {
+  try {
+    const biz = db.prepare(`SELECT id FROM businesses WHERE id = ?`).get(req.params.id);
+    if (!biz) return res.status(404).json({ error: 'Business not found.' });
+
+    const { password, pin } = req.body || {};
+    const hasPassword = password !== undefined && password !== null && String(password).trim().length > 0;
+    const hasPin = pin !== undefined && pin !== null && String(pin).trim().length > 0;
+
+    if (!hasPassword && !hasPin) {
+      return res.status(400).json({ error: 'Provide a new web password and/or a 4-digit PIN.' });
+    }
+    if (hasPassword && String(password).length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+    }
+    if (hasPin && !/^\d{4}$/.test(String(pin).trim())) {
+      return res.status(400).json({ error: 'PIN must be exactly 4 digits.' });
+    }
+
+    const user = db
+      .prepare(
+        `
+        SELECT id, name, email, role FROM users
+        WHERE id = ? AND business_id = ? AND deleted_at IS NULL AND role IN ('admin', 'manager', 'cashier')
+      `
+      )
+      .get(req.params.userId, req.params.id);
+    if (!user) {
+      return res.status(404).json({ error: 'Staff user not found for this store.' });
+    }
+
+    const fields = [];
+    const vals = [];
+    if (hasPassword) {
+      fields.push('password_hash = ?');
+      vals.push(await bcrypt.hash(String(password).trim(), 12));
+    }
+    if (hasPin) {
+      fields.push('pin = ?');
+      vals.push(await bcrypt.hash(String(pin).trim(), 12));
+    }
+    fields.push("updated_at = datetime('now')");
+    fields.push("sync_status = 'pending'");
+    vals.push(req.params.userId);
+
+    db.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).run(...vals);
+
+    res.json({
+      message: 'Credentials updated. Share the new password/PIN with the store only over a secure channel.',
+      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Failed to reset credentials.' });
+  }
+});
+
 // Per-business MTN / Airtel API credentials (developer only; stored on businesses.payment_config)
 router.get('/businesses/:id/payment-config', (req, res) => {
   try {
