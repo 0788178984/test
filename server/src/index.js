@@ -319,14 +319,37 @@ cron.schedule('*/5 * * * *', async () => {
   }
 });
 
-// Start server
-app.listen(PORT, () => {
-  logger.warn(
-    `Uganda Supermarket Server listening on port ${PORT} (env=${process.env.NODE_ENV || 'development'}, log=${logger.level})`
-  );
-  logger.info(`Health check: http://localhost:${PORT}/health`);
-  logger.info(`Database: ${process.env.DB_PATH || './data/supermarket.db'}`);
-});
+// Start server (optional one-time seed for hosts without Shell, e.g. Render free tier)
+const seedIfEmpty =
+  process.env.SEED_IF_EMPTY === '1' ||
+  process.env.SEED_IF_EMPTY === 'true' ||
+  process.env.SEED_IF_EMPTY === 'yes';
+
+(async () => {
+  if (seedIfEmpty) {
+    try {
+      const row = db.prepare(`SELECT COUNT(*) as c FROM users WHERE deleted_at IS NULL`).get();
+      if (row.c === 0) {
+        logger.warn('SEED_IF_EMPTY: no users in database; running seed...');
+        const seedDatabase = require('./db/seed');
+        await seedDatabase();
+        logger.warn('SEED_IF_EMPTY: seed finished. Remove SEED_IF_EMPTY from env after first deploy if you want.');
+      } else {
+        logger.info('SEED_IF_EMPTY: users already exist; skipping seed.');
+      }
+    } catch (e) {
+      logger.error('SEED_IF_EMPTY bootstrap failed:', e);
+    }
+  }
+
+  app.listen(PORT, () => {
+    logger.warn(
+      `Uganda Supermarket Server listening on port ${PORT} (env=${process.env.NODE_ENV || 'development'}, log=${logger.level})`
+    );
+    logger.info(`Health check: http://localhost:${PORT}/health`);
+    logger.info(`Database: ${process.env.DB_PATH || './data/supermarket.db'}`);
+  });
+})();
 
 // Graceful shutdown
 process.on('SIGINT', () => {
