@@ -160,10 +160,18 @@ app.use('/api/support-requests', supportRequestRoutes);
 
 // Static files for client (in production)
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../../client/dist')));
+  const distDir = path.join(__dirname, '../../client/dist');
+  app.use(express.static(distDir));
 
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../../client/dist/index.html'));
+  // SPA fallback — Express 5 / path-to-regexp rejects app.get('*', ...); use middleware instead.
+  app.use((req, res, next) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      return next();
+    }
+    if (req.path.startsWith('/api')) {
+      return next();
+    }
+    res.sendFile(path.join(distDir, 'index.html'));
   });
 }
 
