@@ -12,7 +12,7 @@ export default defineConfig({
       devOptions: {
         enabled: false,
       },
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+      includeAssets: ['favicon.png', 'favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
         name: 'Uganda Supermarket Manager',
         short_name: 'SuperMkt',
