@@ -11,6 +11,7 @@
     "build": "npm run client:build && npm run desktop:build",
     "client:build": "cd client && npm run build",
     "desktop:build": "cd desktop && npm run build",
+    "render-build": "NPM_CONFIG_PRODUCTION=false npm install && npm run client:build",
     "start": "cd server && npm start",
     "install:all": "npm install && cd server && npm install && cd ../client && npm install && cd ../desktop && npm install && cd ../cloud && npm install",
     "setup": "npm run install:all && cd server && node src/db/seed.js",
