@@ -139,6 +139,8 @@ After `npm run db:seed` (or first-run `SEED_IF_EMPTY`), the **demo** store uses 
 
 **Production / real stores:** the public login page does **not** show any credentials. You (the developer) provision the first **admin** (Developer Console or seed), share their **store code** and sign-in with them privately, then the **admin** creates managers and cashiers under **Users** in the app.
 
+**Render + SQLite:** the default database path lives on an **ephemeral** disk unless you add a [Render Persistent Disk](https://render.com/docs/disks) and set **`DB_PATH`** to a file on that volume (for example `/var/data/supermarket.db`). Otherwise every redeploy starts with an empty file. On Render or when `NODE_ENV=production`, **`SEED_IF_EMPTY` no longer runs demo seed by itself** — set **`ALLOW_AUTO_DEMO_SEED=1`** only for a deliberate one-time demo bootstrap, then remove it together with `SEED_IF_EMPTY` once the disk holds your real data. Auto-seed also **skips** if the database already has users, extra businesses, or any products/sales/customers/suppliers, so existing data is not overwritten.
+
 ### POS Workflow
 1. **Login** with 4-digit PIN
 2. **Add Products** via barcode scanner or search

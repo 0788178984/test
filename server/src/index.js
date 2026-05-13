@@ -323,18 +323,53 @@ cron.schedule('*/5 * * * *', async () => {
 });
 
 // Start server (optional one-time seed for hosts without Shell, e.g. Render free tier)
-const seedIfEmpty =
+const wantsSeedIfEmpty =
   process.env.SEED_IF_EMPTY === '1' ||
   process.env.SEED_IF_EMPTY === 'true' ||
   process.env.SEED_IF_EMPTY === 'yes';
 
+/** On Render / NODE_ENV=production, demo seed is opt-in so redeploys do not wipe real tenants. */
+const allowAutoDemoSeedOnProd =
+  process.env.ALLOW_AUTO_DEMO_SEED === '1' ||
+  process.env.ALLOW_AUTO_DEMO_SEED === 'true' ||
+  process.env.ALLOW_AUTO_DEMO_SEED === 'yes';
+
+const isProdLikeHost =
+  process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
+
+const runSeedIfEmpty = wantsSeedIfEmpty && (!isProdLikeHost || allowAutoDemoSeedOnProd);
+
 (async () => {
-  if (seedIfEmpty) {
+  if (wantsSeedIfEmpty && !runSeedIfEmpty) {
+    logger.warn(
+      'SEED_IF_EMPTY is set but demo auto-seed is skipped on production/Render. Without a Persistent Disk + DB_PATH, SQLite is recreated empty each deploy — attach a disk, set DB_PATH to a file on it, then redeploy. For a one-time demo seed here only, set ALLOW_AUTO_DEMO_SEED=1 (then remove it).'
+    );
+  }
+
+  if (runSeedIfEmpty) {
     try {
       const userCount = db.prepare(`SELECT COUNT(*) as c FROM users WHERE deleted_at IS NULL`).get().c;
       const nonDefaultBiz = db
         .prepare(`SELECT COUNT(*) as c FROM businesses WHERE id != ?`)
         .get(DEFAULT_BUSINESS_ID).c;
+
+      const counts = db
+        .prepare(
+          `
+          SELECT
+            (SELECT COUNT(*) FROM products WHERE deleted_at IS NULL) AS products,
+            (SELECT COUNT(*) FROM sales WHERE deleted_at IS NULL) AS sales,
+            (SELECT COUNT(*) FROM customers WHERE deleted_at IS NULL) AS customers,
+            (SELECT COUNT(*) FROM suppliers WHERE deleted_at IS NULL) AS suppliers
+        `
+        )
+        .get();
+      const hasBusinessRows =
+        (counts.products || 0) +
+          (counts.sales || 0) +
+          (counts.customers || 0) +
+          (counts.suppliers || 0) >
+        0;
 
       if (userCount > 0) {
         logger.info('SEED_IF_EMPTY: users already exist; skipping seed.');
@@ -342,6 +377,10 @@ const seedIfEmpty =
         logger.warn(
           'SEED_IF_EMPTY: database has tenant business(es) but no users — skipping destructive demo seed. ' +
             'Use Developer Console → bootstrap admin for each store, or run `FORCE_SEED=1 node src/db/seed.js` only if you intend a full wipe.'
+        );
+      } else if (hasBusinessRows) {
+        logger.warn(
+          'SEED_IF_EMPTY: database already has products, sales, customers, or suppliers — skipping demo seed to avoid data loss.'
         );
       } else {
         logger.warn('SEED_IF_EMPTY: empty database; running one-time demo seed...');
@@ -360,6 +399,11 @@ const seedIfEmpty =
     );
     logger.info(`Health check: http://localhost:${PORT}/health`);
     logger.info(`Database file: ${db.name}`);
+    if (process.env.RENDER === 'true' && !(process.env.DB_PATH || '').trim()) {
+      logger.warn(
+        'RENDER: DB_PATH is unset — default SQLite is usually on an ephemeral disk and is lost on every deploy. Add a Render Persistent Disk, set DB_PATH to a path on that volume (e.g. /var/data/supermarket.db), redeploy, then create stores once.'
+      );
+    }
   });
 })();
 
