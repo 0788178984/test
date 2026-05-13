@@ -60,7 +60,7 @@ const Dashboard = () => {
 
   const statCards = [
     {
-      title: 'Today\'s Sales',
+      title: "Today's Sales",
       value: stats.todaySales,
       icon: ShoppingCart,
       color: 'blue',
@@ -68,7 +68,7 @@ const Dashboard = () => {
       changeType: 'increase'
     },
     {
-      title: 'Today\'s Revenue',
+      title: "Today's Revenue",
       value: formatCurrency(stats.todayRevenue),
       icon: DollarSign,
       color: 'green',
@@ -111,12 +111,11 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-        <h1 className="text-2xl font-bold text-gray-900 shrink-0">Dashboard</h1>
-        <p className="text-sm text-gray-600 sm:max-w-md sm:text-right sm:text-base">
-          Welcome back, {user?.name}!{" "}
-          {"Here's what's happening today."}
+      {/* Page header: stack on phones & tablets; side-by-side only on large screens */}
+      <div className="flex flex-col gap-2 border-b border-gray-100 pb-4 lg:flex-row lg:items-end lg:justify-between lg:gap-8 lg:border-b-0 lg:pb-0">
+        <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Dashboard</h1>
+        <p className="max-w-full text-sm leading-relaxed text-gray-600 lg:max-w-xl lg:text-right lg:text-base">
+          {`Welcome back, ${user?.name || 'there'}. Here's what's happening today.`}
         </p>
       </div>
 
