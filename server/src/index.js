@@ -118,15 +118,17 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Root — this process is the API only (no HTML). Browsers opening :4000 otherwise see a 404 JSON.
-app.get('/', (req, res) => {
-  res.json({
-    service: 'Uganda Supermarket API',
-    message:
-      'Use the web app in development at http://localhost:5173/ — this server exposes JSON under /api/...',
-    health: '/health',
+// Root JSON hint — dev only. In production, `/` is served by `client/dist` (SPA); this route would win over static if registered here.
+if (process.env.NODE_ENV !== 'production') {
+  app.get('/', (req, res) => {
+    res.json({
+      service: 'Uganda Supermarket API',
+      message:
+        'Use the web app at http://localhost:5173/ — this server exposes JSON under /api/...',
+      health: '/health',
+    });
   });
-});
+}
 
 // Developer licence dashboard (explicit mount so it is never shadowed by router internals)
 app.get('/api/developer/license-alerts', authenticate, authorize('developer'), (req, res) => {
