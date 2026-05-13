@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  ShoppingCart, 
-  Users, 
-  Package, 
-  TrendingUp, 
-  AlertTriangle, 
+import { useNavigate } from 'react-router-dom';
+import {
+  ShoppingCart,
+  Users,
+  Package,
+  TrendingUp,
+  AlertTriangle,
   DollarSign,
   BarChart3,
-  Eye
+  Eye,
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { salesAPI, productsAPI, inventoryAPI, customersAPI } from '../api/client';
@@ -15,6 +16,7 @@ import { formatCurrency, formatDate } from '../api/client';
 import Card from '../components/ui/Card';
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const { user, hasRole } = useAuthStore();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -197,33 +199,49 @@ const Dashboard = () => {
         <Card>
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <button className="flex items-center space-x-3 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-400 hover:bg-primary-50 transition-all">
-              <Package className="w-6 h-6 text-primary-600" />
-              <div className="text-left">
+            <button
+              type="button"
+              onClick={() => navigate('/products')}
+              className="flex items-center space-x-3 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-400 hover:bg-primary-50 transition-all text-left"
+            >
+              <Package className="w-6 h-6 shrink-0 text-primary-600" />
+              <div className="min-w-0">
                 <p className="font-medium text-gray-900">Add New Product</p>
                 <p className="text-sm text-gray-500">Manage inventory</p>
               </div>
             </button>
-            
-            <button className="flex items-center space-x-3 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-400 hover:bg-primary-50 transition-all">
-              <Users className="w-6 h-6 text-primary-600" />
-              <div className="text-left">
+
+            <button
+              type="button"
+              onClick={() => navigate('/customers')}
+              className="flex items-center space-x-3 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-400 hover:bg-primary-50 transition-all text-left"
+            >
+              <Users className="w-6 h-6 shrink-0 text-primary-600" />
+              <div className="min-w-0">
                 <p className="font-medium text-gray-900">Add Customer</p>
                 <p className="text-sm text-gray-500">Customer management</p>
               </div>
             </button>
-            
-            <button className="flex items-center space-x-3 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-400 hover:bg-primary-50 transition-all">
-              <Eye className="w-6 h-6 text-primary-600" />
-              <div className="text-left">
+
+            <button
+              type="button"
+              onClick={() => navigate('/reports')}
+              className="flex items-center space-x-3 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-400 hover:bg-primary-50 transition-all text-left"
+            >
+              <Eye className="w-6 h-6 shrink-0 text-primary-600" />
+              <div className="min-w-0">
                 <p className="font-medium text-gray-900">View Reports</p>
                 <p className="text-sm text-gray-500">Sales analytics</p>
               </div>
             </button>
-            
-            <button className="flex items-center space-x-3 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-400 hover:bg-primary-50 transition-all">
-              <BarChart3 className="w-6 h-6 text-primary-600" />
-              <div className="text-left">
+
+            <button
+              type="button"
+              onClick={() => navigate('/inventory')}
+              className="flex items-center space-x-3 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-400 hover:bg-primary-50 transition-all text-left"
+            >
+              <BarChart3 className="w-6 h-6 shrink-0 text-primary-600" />
+              <div className="min-w-0">
                 <p className="font-medium text-gray-900">Inventory Check</p>
                 <p className="text-sm text-gray-500">Stock status</p>
               </div>
