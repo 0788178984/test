@@ -110,10 +110,9 @@ const Cart = ({ onCheckout }) => {
                   </button>
                 </div>
 
-                {/* Item Details */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    {/* Quantity Controls */}
+                {/* Item Details — stack on narrow screens so prices are not cut off */}
+                <div className="mt-1 flex flex-col gap-3 border-t border-gray-100 pt-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+                  <div className="flex flex-wrap items-end gap-3">
                     <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-1">
                       <button
                         type="button"
@@ -145,18 +144,16 @@ const Cart = ({ onCheckout }) => {
                         <Plus className="h-4 w-4 text-gray-600" />
                       </button>
                     </div>
-
-                    {/* Unit Price */}
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-xs text-gray-500">Unit ({item.unit || 'piece'})</p>
-                      <p className="font-medium">{formatCurrency(item.unit_price)}</p>
+                      <p className="whitespace-nowrap font-medium tabular-nums">{formatCurrency(item.unit_price)}</p>
                     </div>
                   </div>
-
-                  {/* Line Total */}
-                  <div className="text-right">
-                    <p className="text-xs text-gray-500">Total</p>
-                    <p className="font-semibold text-lg">{formatCurrency(item.line_total)}</p>
+                  <div className="flex shrink-0 flex-col border-t border-gray-100 pt-2 text-left sm:border-t-0 sm:pt-0 sm:text-right">
+                    <p className="text-xs text-gray-500">Line total</p>
+                    <p className="whitespace-nowrap text-lg font-semibold tabular-nums text-gray-900">
+                      {formatCurrency(item.line_total)}
+                    </p>
                   </div>
                 </div>
               </div>

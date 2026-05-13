@@ -111,6 +111,21 @@ There is **no** `docker-compose.yml` or `npm run test` in this repo root as of n
 
 ---
 
+## POS checkout flow & keyboard shortcuts (reference)
+
+This text was removed from the in-app POS banner to keep the UI clean on phones; behaviour is unchanged.
+
+**Suggested flow:** scan or type barcode (or search) → add to cart → adjust quantities → optionally attach a customer → **Proceed to checkout** → choose payment / enter cash received → confirm → next sale.
+
+**Shortcuts (when payment/receipt modals are closed):**
+
+| Key | Action |
+|-----|--------|
+| **F2** | Focus the barcode / scan field |
+| **F9** | Open pay / checkout if the cart is valid |
+
+---
+
 ## 5. Production deployment (single Node server)
 
 The server serves the **built** React app when `NODE_ENV=production`.

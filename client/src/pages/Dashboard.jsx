@@ -112,10 +112,11 @@ const Dashboard = () => {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600">
-          Welcome back, {user?.name}! Here\'s what\'s happening today.
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+        <h1 className="text-2xl font-bold text-gray-900 shrink-0">Dashboard</h1>
+        <p className="text-sm text-gray-600 sm:max-w-md sm:text-right sm:text-base">
+          Welcome back, {user?.name}!{" "}
+          {"Here's what's happening today."}
         </p>
       </div>
 

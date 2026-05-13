@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, Smartphone, DollarSign, User, ShoppingCart, CreditCard } from 'lucide-react';
+import { Search, Smartphone, Tag, ClipboardList, RotateCcw, User, ShoppingCart, CreditCard } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
@@ -237,13 +237,6 @@ const POS = () => {
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-4 pb-8">
-      <div className="no-print rounded-xl border border-primary-100 bg-primary-50 px-4 py-3 text-sm text-primary-900">
-        <strong className="font-semibold">Checkout flow:</strong> scan or search → add to cart → adjust quantities →
-        (optional) attach customer → <strong>Proceed to checkout</strong> → enter cash received → confirm → next
-        sale. Shortcuts: <kbd className="rounded bg-white px-1">F2</kbd> focus scan, <kbd className="rounded bg-white px-1">F9</kbd>{' '}
-        pay.
-      </div>
-
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-6">
         {/* Step 1–2: Scan + catalogue */}
         <section className="order-1 space-y-4 lg:col-span-5">
@@ -360,41 +353,52 @@ const POS = () => {
               </div>
             </div>
             <div className="mt-4 space-y-2 border-t border-gray-100 pt-3">
-              <Button type="button" variant="secondary" size="sm" className="w-full justify-start" onClick={() => setDiscount(0)}>
-                <DollarSign className="mr-2 h-4 w-4" />
-                Clear discount
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="w-full justify-start"
-                onClick={() => {
-                  if (window.confirm('Clear all lines? Customer can stay attached.')) {
-                    resetForNextSale();
-                    toast.success('Cart cleared');
-                    focusScan();
-                  }
-                }}
-              >
-                Clear lines only
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="w-full justify-start text-red-700"
-                onClick={() => {
-                  if (window.confirm('Clear cart and customer?')) {
-                    clearCart();
-                    setCustomerPhoneInput('');
-                    toast.success('Cart reset');
-                    focusScan();
-                  }
-                }}
-              >
-                Full reset
-              </Button>
+              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500">Cart actions</p>
+              <div className="flex flex-col gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="flex w-full items-center justify-start gap-2 text-left"
+                  onClick={() => setDiscount(0)}
+                >
+                  <Tag className="h-4 w-4 shrink-0 text-primary-600" aria-hidden />
+                  <span className="min-w-0 leading-snug">Clear discount</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="flex w-full items-center justify-start gap-2 text-left"
+                  onClick={() => {
+                    if (window.confirm('Clear all lines? Customer can stay attached.')) {
+                      resetForNextSale();
+                      toast.success('Cart cleared');
+                      focusScan();
+                    }
+                  }}
+                >
+                  <ClipboardList className="h-4 w-4 shrink-0 text-gray-600" aria-hidden />
+                  <span className="min-w-0 leading-snug">Clear lines only</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="flex w-full items-center justify-start gap-2 text-left text-red-700"
+                  onClick={() => {
+                    if (window.confirm('Clear cart and customer?')) {
+                      clearCart();
+                      setCustomerPhoneInput('');
+                      toast.success('Cart reset');
+                      focusScan();
+                    }
+                  }}
+                >
+                  <RotateCcw className="h-4 w-4 shrink-0" aria-hidden />
+                  <span className="min-w-0 leading-snug">Full reset</span>
+                </Button>
+              </div>
             </div>
           </div>
 
