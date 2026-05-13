@@ -62,6 +62,14 @@ router.post('/login', async (req, res) => {
       .all(role, business.id);
 
     if (!candidates.length) {
+      const anyone = db.prepare(`SELECT COUNT(*) as c FROM users WHERE deleted_at IS NULL`).get().c;
+      if (anyone === 0) {
+        return res.status(401).json({
+          error:
+            'No staff accounts exist in this database yet. On Render, use Web login as developer after one-time seed (see server logs / README), or set SEED_IF_EMPTY=1 and ALLOW_AUTO_DEMO_SEED=1 once.',
+          code: 'NO_USERS_BOOTSTRAP',
+        });
+      }
       return res.status(401).json({ error: 'Invalid credentials.' });
     }
 
@@ -152,6 +160,7 @@ router.post('/login-web', async (req, res) => {
           },
         });
       }
+      return res.status(401).json({ error: 'Invalid credentials.' });
     }
 
     const code = resolveBusinessCode(business_code);
@@ -208,6 +217,16 @@ router.post('/login-web', async (req, res) => {
     }
 
     if (!user || !user.password_hash) {
+      const anyone = db.prepare(`SELECT COUNT(*) as c FROM users WHERE deleted_at IS NULL`).get().c;
+      if (anyone === 0) {
+        return res.status(401).json({
+          error:
+            'No accounts exist in this database yet (common after a fresh deploy on Render). ' +
+            'One-time fix: set environment variables SEED_IF_EMPTY=1 and ALLOW_AUTO_DEMO_SEED=1, redeploy, sign in as developer, then remove both variables. ' +
+            'For production data you need a persistent database path or hosted Postgres.',
+          code: 'NO_USERS_BOOTSTRAP',
+        });
+      }
       return res.status(401).json({ error: 'Invalid credentials.' });
     }
 

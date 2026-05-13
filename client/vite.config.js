@@ -12,7 +12,7 @@ export default defineConfig({
       devOptions: {
         enabled: false,
       },
-      includeAssets: ['favicon.png', 'favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+      includeAssets: ['favicon.png'],
       manifest: {
         name: 'Uganda Supermarket Manager',
         short_name: 'SuperMkt',
@@ -22,16 +22,18 @@ export default defineConfig({
         display: 'standalone',
         icons: [
           {
-            src: 'icons/icon-192.png',
+            src: 'favicon.png',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any',
           },
           {
-            src: 'icons/icon-512.png',
+            src: 'favicon.png',
             sizes: '512x512',
-            type: 'image/png'
-          }
-        ]
+            type: 'image/png',
+            purpose: 'any',
+          },
+        ],
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
