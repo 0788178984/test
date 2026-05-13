@@ -1,8 +1,28 @@
+require('dotenv').config();
 const db = require('./connection');
 const bcrypt = require('bcryptjs');
 const { DEFAULT_BUSINESS_ID } = require('./multiTenantMigrate');
 
-async function seedDatabase() {
+async function seedDatabase(options = {}) {
+  const forceEnv = ['1', 'true', 'yes'].includes(String(process.env.FORCE_SEED || '').toLowerCase());
+  const skipGuard = options.skipGuard === true;
+
+  if (!skipGuard && !forceEnv) {
+    const userCount = db.prepare(`SELECT COUNT(*) as c FROM users WHERE deleted_at IS NULL`).get().c;
+    const nonDefaultBiz = db
+      .prepare(`SELECT COUNT(*) as c FROM businesses WHERE id != ?`)
+      .get(DEFAULT_BUSINESS_ID).c;
+
+    if (userCount > 0 || nonDefaultBiz > 0) {
+      const msg =
+        'Refusing destructive seed: database already has staff users and/or more than one business. ' +
+        'Demo seed wipes all sales, products, and users. To wipe everything anyway, set FORCE_SEED=1 in the environment.';
+      const err = new Error(msg);
+      err.code = 'SEED_GUARD';
+      throw err;
+    }
+  }
+
   console.log('Seeding database...');
 
   db.exec(`
@@ -416,7 +436,12 @@ async function seedDatabase() {
 }
 
 if (require.main === module) {
-  seedDatabase().catch(console.error);
+  seedDatabase()
+    .then(() => process.exit(0))
+    .catch((e) => {
+      console.error(e.message || e);
+      process.exit(e.code === 'SEED_GUARD' ? 2 : 1);
+    });
 }
 
 module.exports = seedDatabase;

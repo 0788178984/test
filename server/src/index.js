@@ -39,6 +39,7 @@ const { runDailyLicenseReminders } = require('./services/licenseAlertService');
 
 // Import database
 const db = require('./db/connection');
+const { DEFAULT_BUSINESS_ID } = require('./db/multiTenantMigrate');
 const { authenticate, authorize } = require('./middleware/auth');
 const { classifyLicenseStates } = require('./services/licenseAlertService');
 
@@ -330,14 +331,23 @@ const seedIfEmpty =
 (async () => {
   if (seedIfEmpty) {
     try {
-      const row = db.prepare(`SELECT COUNT(*) as c FROM users WHERE deleted_at IS NULL`).get();
-      if (row.c === 0) {
-        logger.warn('SEED_IF_EMPTY: no users in database; running seed...');
-        const seedDatabase = require('./db/seed');
-        await seedDatabase();
-        logger.warn('SEED_IF_EMPTY: seed finished. Remove SEED_IF_EMPTY from env after first deploy if you want.');
-      } else {
+      const userCount = db.prepare(`SELECT COUNT(*) as c FROM users WHERE deleted_at IS NULL`).get().c;
+      const nonDefaultBiz = db
+        .prepare(`SELECT COUNT(*) as c FROM businesses WHERE id != ?`)
+        .get(DEFAULT_BUSINESS_ID).c;
+
+      if (userCount > 0) {
         logger.info('SEED_IF_EMPTY: users already exist; skipping seed.');
+      } else if (nonDefaultBiz > 0) {
+        logger.warn(
+          'SEED_IF_EMPTY: database has tenant business(es) but no users — skipping destructive demo seed. ' +
+            'Use Developer Console → bootstrap admin for each store, or run `FORCE_SEED=1 node src/db/seed.js` only if you intend a full wipe.'
+        );
+      } else {
+        logger.warn('SEED_IF_EMPTY: empty database; running one-time demo seed...');
+        const seedDatabase = require('./db/seed');
+        await seedDatabase({ skipGuard: true });
+        logger.warn('SEED_IF_EMPTY: seed finished. Remove SEED_IF_EMPTY from env after first deploy if you want.');
       }
     } catch (e) {
       logger.error('SEED_IF_EMPTY bootstrap failed:', e);
@@ -349,7 +359,7 @@ const seedIfEmpty =
       `Uganda Supermarket Server listening on port ${PORT} (env=${process.env.NODE_ENV || 'development'}, log=${logger.level})`
     );
     logger.info(`Health check: http://localhost:${PORT}/health`);
-    logger.info(`Database: ${process.env.DB_PATH || './data/supermarket.db'}`);
+    logger.info(`Database file: ${db.name}`);
   });
 })();
 
