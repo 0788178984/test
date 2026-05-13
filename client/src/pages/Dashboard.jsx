@@ -111,13 +111,15 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6">
-      {/* Page header: stack on phones & tablets; side-by-side only on large screens */}
-      <div className="flex flex-col gap-2 border-b border-gray-100 pb-4 lg:flex-row lg:items-end lg:justify-between lg:gap-8 lg:border-b-0 lg:pb-0">
-        <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Dashboard</h1>
-        <p className="max-w-full text-sm leading-relaxed text-gray-600 lg:max-w-xl lg:text-right lg:text-base">
-          {`Welcome back, ${user?.name || 'there'}. Here's what's happening today.`}
+      {/* Greeting above title so long names never collide with the heading */}
+      <header className="space-y-2 border-b border-gray-100 pb-4 sm:space-y-3">
+        <p className="text-sm leading-relaxed text-gray-600 sm:text-base">
+          Welcome back,{' '}
+          <span className="font-medium text-gray-900">{user?.name || 'there'}</span>
+          {". Here's what's happening today."}
         </p>
-      </div>
+        <h1 className="text-xl font-bold tracking-tight text-gray-900 sm:text-2xl">Dashboard</h1>
+      </header>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">

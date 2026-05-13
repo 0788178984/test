@@ -16,6 +16,9 @@ const TABLES_WITH_BUSINESS_ID = new Set([
   'loyalty_transactions',
 ]);
 
+/** business_id set by migration, but no deleted_at / updated_at in base schema — generic sync SQL must not reference those columns */
+const TABLES_BUSINESS_NO_SOFT_DELETE = new Set(['stock_adjustments', 'loyalty_transactions']);
+
 router.use(authenticate, restrictToBusinessStaff);
 
 // Tables that need to be synced
@@ -43,13 +46,33 @@ router.post('/push', authorize('admin'), (req, res) => {
     for (const record of records) {
       try {
         // Check if record exists locally
-        const existing = TABLES_WITH_BUSINESS_ID.has(table)
-          ? db
-              .prepare(
-                `SELECT id, updated_at, sync_status FROM ${table} WHERE id = ? AND business_id = ?`
-              )
-              .get(record.id, req.user.business_id)
-          : db.prepare(`SELECT id, updated_at, sync_status FROM ${table} WHERE id = ?`).get(record.id);
+        let existing;
+        if (table === 'sale_items') {
+          existing = db
+            .prepare(
+              `
+            SELECT si.id, si.created_at AS updated_at, si.sync_status
+            FROM sale_items si
+            JOIN sales s ON s.id = si.sale_id
+            WHERE si.id = ? AND s.business_id = ?
+          `
+            )
+            .get(record.id, req.user.business_id);
+        } else if (TABLES_BUSINESS_NO_SOFT_DELETE.has(table)) {
+          existing = db
+            .prepare(
+              `SELECT id, created_at AS updated_at, sync_status FROM ${table} WHERE id = ? AND business_id = ?`
+            )
+            .get(record.id, req.user.business_id);
+        } else if (TABLES_WITH_BUSINESS_ID.has(table)) {
+          existing = db
+            .prepare(`SELECT id, updated_at, sync_status FROM ${table} WHERE id = ? AND business_id = ?`)
+            .get(record.id, req.user.business_id);
+        } else {
+          existing = db
+            .prepare(`SELECT id, updated_at, sync_status FROM ${table} WHERE id = ?`)
+            .get(record.id);
+        }
 
         if (!existing) {
           // New record, insert it
@@ -134,10 +157,18 @@ router.post('/pull', authorize('admin'), (req, res) => {
       `;
       params.push(req.user.business_id);
       if (last_sync_at) {
-        query += ` AND si.updated_at > ?`;
+        query += ` AND si.created_at > ?`;
         params.push(last_sync_at);
       }
       query += ` AND si.sync_status IN ('pending', 'synced')`;
+    } else if (TABLES_BUSINESS_NO_SOFT_DELETE.has(table)) {
+      query = `SELECT * FROM ${table} WHERE business_id = ?`;
+      params.push(req.user.business_id);
+      if (last_sync_at) {
+        query += ` AND created_at > ?`;
+        params.push(last_sync_at);
+      }
+      query += ` AND sync_status IN ('pending', 'synced')`;
     } else {
       query = `SELECT * FROM ${table} WHERE deleted_at IS NULL`;
       if (TABLES_WITH_BUSINESS_ID.has(table)) {
@@ -197,9 +228,34 @@ router.get('/status', authorize('admin', 'manager'), (req, res) => {
         lastSync = db
           .prepare(
             `
-          SELECT MAX(si.updated_at) as last_sync FROM sale_items si
+          SELECT MAX(si.created_at) as last_sync FROM sale_items si
           JOIN sales s ON s.id = si.sale_id
           WHERE si.sync_status = 'synced' AND s.business_id = ?
+        `
+          )
+          .get(b).last_sync;
+      } else if (TABLES_BUSINESS_NO_SOFT_DELETE.has(table)) {
+        pending = db
+          .prepare(
+            `
+          SELECT COUNT(*) as count FROM ${table}
+          WHERE sync_status = 'pending' AND business_id = ?
+        `
+          )
+          .get(b).count;
+        synced = db
+          .prepare(
+            `
+          SELECT COUNT(*) as count FROM ${table}
+          WHERE sync_status = 'synced' AND business_id = ?
+        `
+          )
+          .get(b).count;
+        lastSync = db
+          .prepare(
+            `
+          SELECT MAX(created_at) as last_sync FROM ${table}
+          WHERE sync_status = 'synced' AND business_id = ?
         `
           )
           .get(b).last_sync;
@@ -300,8 +356,17 @@ router.post('/force', authorize('admin'), (req, res) => {
           result = db
             .prepare(
               `
-            UPDATE sale_items SET sync_status = 'pending', updated_at = datetime('now')
+            UPDATE sale_items SET sync_status = 'pending'
             WHERE sale_id IN (SELECT id FROM sales WHERE business_id = ?)
+          `
+            )
+            .run(b);
+        } else if (TABLES_BUSINESS_NO_SOFT_DELETE.has(table)) {
+          result = db
+            .prepare(
+              `
+            UPDATE ${table} SET sync_status = 'pending'
+            WHERE business_id = ?
           `
             )
             .run(b);
@@ -324,8 +389,17 @@ router.post('/force', authorize('admin'), (req, res) => {
           result = db
             .prepare(
               `
-            UPDATE sale_items SET sync_status = 'pending', updated_at = datetime('now')
+            UPDATE sale_items SET sync_status = 'pending'
             WHERE sale_id IN (SELECT id FROM sales WHERE business_id = ?)
+          `
+            )
+            .run(b);
+        } else if (TABLES_BUSINESS_NO_SOFT_DELETE.has(table)) {
+          result = db
+            .prepare(
+              `
+            UPDATE ${table} SET sync_status = 'pending'
+            WHERE business_id = ?
           `
             )
             .run(b);
@@ -422,29 +496,67 @@ router.post('/resolve-conflict', authorize('admin'), (req, res) => {
 router.get('/conflicts', authorize('admin'), (req, res) => {
   try {
     const conflicts = [];
+    const b = req.user.business_id;
 
     for (const table of SYNC_TABLES) {
-      // This is a simplified conflict detection
-      // In a real implementation, you'd have a dedicated conflicts table
-      const pendingRecords = db.prepare(`
-        SELECT id, updated_at, sync_status FROM ${table} 
-        WHERE sync_status = 'pending' AND deleted_at IS NULL
-        LIMIT 10
-      `).all();
+      let pendingRecords;
+      if (table === 'sale_items') {
+        pendingRecords = db
+          .prepare(
+            `
+          SELECT si.id, si.created_at AS updated_at, si.sync_status
+          FROM sale_items si
+          JOIN sales s ON s.id = si.sale_id
+          WHERE si.sync_status = 'pending' AND s.business_id = ?
+          LIMIT 10
+        `
+          )
+          .all(b);
+      } else if (TABLES_BUSINESS_NO_SOFT_DELETE.has(table)) {
+        pendingRecords = db
+          .prepare(
+            `
+          SELECT id, created_at AS updated_at, sync_status FROM ${table}
+          WHERE sync_status = 'pending' AND business_id = ?
+          LIMIT 10
+        `
+          )
+          .all(b);
+      } else if (TABLES_WITH_BUSINESS_ID.has(table)) {
+        pendingRecords = db
+          .prepare(
+            `
+          SELECT id, updated_at, sync_status FROM ${table}
+          WHERE sync_status = 'pending' AND deleted_at IS NULL AND business_id = ?
+          LIMIT 10
+        `
+          )
+          .all(b);
+      } else {
+        pendingRecords = db
+          .prepare(
+            `
+          SELECT id, updated_at, sync_status FROM ${table}
+          WHERE sync_status = 'pending' AND deleted_at IS NULL
+          LIMIT 10
+        `
+          )
+          .all();
+      }
 
-      pendingRecords.forEach(record => {
+      pendingRecords.forEach((record) => {
         conflicts.push({
           table,
           record_id: record.id,
           type: 'pending_sync',
-          last_updated: record.updated_at
+          last_updated: record.updated_at,
         });
       });
     }
 
     res.json({
       conflicts,
-      count: conflicts.length
+      count: conflicts.length,
     });
   } catch (error) {
     console.error('Get conflicts error:', error);

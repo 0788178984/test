@@ -384,6 +384,13 @@ const runSeedIfEmpty = wantsSeedIfEmpty && (!isProdLikeHost || allowAutoDemoSeed
         );
       } else {
         logger.warn('SEED_IF_EMPTY: empty database; running one-time demo seed...');
+        if (process.env.RENDER === 'true') {
+          logger.warn(
+            'RENDER: Each deploy starts with a fresh SQLite file unless DB_PATH points to a Render Persistent Disk. ' +
+              'With ALLOW_AUTO_DEMO_SEED enabled, an empty DB triggers this demo seed every time — that is why users and data disappear. ' +
+              'Mount a disk, set DB_PATH to a path on that volume (e.g. /var/data/supermarket.db), redeploy, then remove ALLOW_AUTO_DEMO_SEED (and SEED_IF_EMPTY when you are done bootstrapping).'
+          );
+        }
         const seedDatabase = require('./db/seed');
         await seedDatabase({ skipGuard: true });
         logger.warn('SEED_IF_EMPTY: seed finished. Remove SEED_IF_EMPTY from env after first deploy if you want.');
