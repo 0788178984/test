@@ -1,12 +1,13 @@
 import axios from 'axios';
 
-// API host: VITE_API_URL when set; same origin in production (Render); localhost in dev.
+// API host: same origin in production (Render serves API + UI together).
+// VITE_API_URL only for split hosting (UI on CDN, API elsewhere). Dev uses localhost:4000.
 function resolveApiBaseUrl() {
-  if (import.meta.env.VITE_API_URL) {
-    return String(import.meta.env.VITE_API_URL).replace(/\/$/, '');
-  }
   if (import.meta.env.PROD && typeof window !== 'undefined') {
     return window.location.origin;
+  }
+  if (import.meta.env.VITE_API_URL) {
+    return String(import.meta.env.VITE_API_URL).replace(/\/$/, '');
   }
   return 'http://localhost:4000';
 }
