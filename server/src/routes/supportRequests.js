@@ -51,7 +51,7 @@ router.post('/', authenticate, restrictToBusinessStaff, async (req, res) => {
 // Staff: list own business requests (admin/manager)
 router.get('/', authenticate, restrictToBusinessStaff, authorize('admin', 'manager'), async (req, res) => {
   try {
-    const rows = db
+    const rows = await db
       .prepare(
         `
       SELECT sr.*, u.name as from_name
@@ -73,7 +73,7 @@ router.get('/', authenticate, restrictToBusinessStaff, authorize('admin', 'manag
 // Developer: all tickets
 router.get('/developer/all', authenticate, authorize('developer'), async (req, res) => {
   try {
-    const rows = db
+    const rows = await db
       .prepare(
         `
       SELECT sr.*, u.name as from_name, b.name as business_name, b.business_code
@@ -113,7 +113,7 @@ router.patch('/developer/:id', authenticate, authorize('developer'), async (req,
     await db.prepare(`UPDATE support_requests SET ${fields.join(', ')} WHERE id = ?`).run(...vals);
 
     if (status && ['resolved', 'closed'].includes(status)) {
-      const admins = db
+      const admins = await db
         .prepare(
           `SELECT id FROM users WHERE business_id = ? AND role IN ('admin','manager') AND deleted_at IS NULL`
         )

@@ -16,7 +16,7 @@ router.use(authenticate, authorize('developer'));
 // List all businesses / tenants
 router.get('/businesses', async (req, res) => {
   try {
-    const rows = db
+    const rows = await db
       .prepare(
         `
       SELECT b.id, b.name, b.business_code, b.subscription_status, b.subscription_expires_at,
@@ -187,7 +187,7 @@ router.get('/businesses/:id/staff', async (req, res) => {
   try {
     const biz = await db.prepare(`SELECT id, name, business_code FROM businesses WHERE id = ?`).get(req.params.id);
     if (!biz) return res.status(404).json({ error: 'Business not found.' });
-    const staff = db
+    const staff = await db
       .prepare(
         `
         SELECT id, name, email, phone, role, is_active, last_login, created_at
@@ -224,7 +224,7 @@ router.patch('/businesses/:id/staff/:userId', async (req, res) => {
       return res.status(400).json({ error: 'PIN must be exactly 4 digits.' });
     }
 
-    const user = db
+    const user = await db
       .prepare(
         `
         SELECT id, name, email, role FROM users

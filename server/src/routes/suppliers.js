@@ -3,6 +3,7 @@ const { authenticate } = require('../middleware/auth');
 const { restrictToBusinessStaff } = require('../middleware/tenantContext');
 const { checkPermission } = require('../middleware/roleCheck');
 const db = require('../db/connection');
+const { newId } = require('../db/ids');
 const router = express.Router();
 
 router.use(authenticate, restrictToBusinessStaff);
@@ -14,7 +15,7 @@ router.get('/', async (req, res) => {
     const { page = 1, limit = 50 } = req.query;
     const offset = (page - 1) * limit;
 
-    const suppliers = db
+    const suppliers = await db
       .prepare(
         `
       SELECT * FROM suppliers
@@ -25,7 +26,7 @@ router.get('/', async (req, res) => {
       )
       .all(bid(req), parseInt(limit, 10), offset);
 
-    const { total } = db
+    const { total } = await db
       .prepare(`SELECT COUNT(*) as total FROM suppliers WHERE deleted_at IS NULL AND business_id = ?`)
       .get(bid(req));
 
@@ -46,7 +47,7 @@ router.get('/', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
   try {
-    const supplier = db
+    const supplier = await db
       .prepare(`SELECT * FROM suppliers WHERE id = ? AND deleted_at IS NULL AND business_id = ?`)
       .get(req.params.id, bid(req));
 
@@ -54,7 +55,7 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Supplier not found.' });
     }
 
-    const products = db
+    const products = await db
       .prepare(
         `
       SELECT id, name, sku, current_stock, buying_price, selling_price
@@ -80,14 +81,26 @@ router.post('/', checkPermission('manage_suppliers'), async (req, res) => {
       return res.status(400).json({ error: 'Supplier name is required.' });
     }
 
+    const supplierId = newId('sup');
     await db.prepare(
       `
       INSERT INTO suppliers (
-        name, contact_name, phone, email, address, tin_number,
+        id, name, contact_name, phone, email, address, tin_number,
         payment_terms, notes, business_id, created_at, updated_at, sync_status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 'pending')
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 'pending')
     `
-    ).run(name, contact_name, phone, email, address, tin_number, payment_terms, notes, bid(req));
+    ).run(
+      supplierId,
+      name,
+      contact_name,
+      phone,
+      email,
+      address,
+      tin_number,
+      payment_terms,
+      notes,
+      bid(req)
+    );
 
     res.status(201).json({
       message: 'Supplier created successfully.',
@@ -102,7 +115,7 @@ router.put('/:id', checkPermission('manage_suppliers'), async (req, res) => {
   try {
     const { name, contact_name, phone, email, address, tin_number, payment_terms, notes } = req.body;
 
-    const existingSupplier = db
+    const existingSupplier = await db
       .prepare(`SELECT id FROM suppliers WHERE id = ? AND deleted_at IS NULL AND business_id = ?`)
       .get(req.params.id, bid(req));
 
@@ -140,7 +153,7 @@ router.put('/:id', checkPermission('manage_suppliers'), async (req, res) => {
 
 router.delete('/:id', checkPermission('manage_suppliers'), async (req, res) => {
   try {
-    const existingSupplier = db
+    const existingSupplier = await db
       .prepare(`SELECT id FROM suppliers WHERE id = ? AND deleted_at IS NULL AND business_id = ?`)
       .get(req.params.id, bid(req));
 
@@ -148,7 +161,7 @@ router.delete('/:id', checkPermission('manage_suppliers'), async (req, res) => {
       return res.status(404).json({ error: 'Supplier not found.' });
     }
 
-    const productCount = db
+    const productCount = await db
       .prepare(
         `
       SELECT COUNT(*) as count FROM products

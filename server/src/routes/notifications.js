@@ -96,17 +96,17 @@ router.get('/stream', authenticate, async (req, res) => {
 
   let unreadCount;
   if (role === 'developer') {
-    unreadCount = db
+    unreadCount = (await db
       .prepare(
         `SELECT COUNT(*) as count FROM notifications WHERE target_user_id = ? AND is_read = 0`
       )
-      .get(userId).count;
+      .get(userId)).count;
   } else {
-    unreadCount = db
+    unreadCount = (await db
       .prepare(
         `SELECT COUNT(*) as count FROM notifications n WHERE ${staffNotificationWhereClause()} AND n.is_read = 0`
       )
-      .get(req.user.business_id, userId, role).count;
+      .get(req.user.business_id, userId, role)).count;
   }
 
   res.write(`data: ${JSON.stringify({ type: 'unread_count', count: unreadCount })}\n\n`);
@@ -139,7 +139,7 @@ router.post(
       }
 
       if (target_user_id) {
-        const target = db
+        const target = (await db
           .prepare(
             `SELECT id, role, business_id FROM users WHERE id = ? AND deleted_at IS NULL`
           )
@@ -256,13 +256,13 @@ router.post('/:id/read', authenticate, async (req, res) => {
   try {
     let notification;
     if (req.user.role === 'developer') {
-      notification = db
+      notification = await db
         .prepare(
           `SELECT id FROM notifications WHERE id = ? AND target_user_id = ?`
         )
         .get(req.params.id, req.user.id);
     } else {
-      notification = db
+      notification = await db
         .prepare(
           `SELECT id FROM notifications n WHERE n.id = ? AND ${staffNotificationWhereClause()}`
         )
@@ -279,17 +279,17 @@ router.post('/:id/read', authenticate, async (req, res) => {
 
     let unreadCount;
     if (req.user.role === 'developer') {
-      unreadCount = db
+      unreadCount = await db
         .prepare(
           `SELECT COUNT(*) as count FROM notifications WHERE target_user_id = ? AND is_read = 0`
         )
-        .get(req.user.id).count;
+        .get(req.user.id)).count;
     } else {
-      unreadCount = db
+      unreadCount = (await db
         .prepare(
           `SELECT COUNT(*) as count FROM notifications n WHERE ${staffNotificationWhereClause()} AND n.is_read = 0`
         )
-        .get(req.user.business_id, req.user.id, req.user.role).count;
+        .get(req.user.business_id, req.user.id, req.user.role)).count;
     }
 
     broadcastNotification({
@@ -308,7 +308,7 @@ router.post('/:id/read', authenticate, async (req, res) => {
 router.post('/read-all', authenticate, async (req, res) => {
   try {
     if (req.user.role === 'developer') {
-      await db.prepare(
+      (await db.prepare(
         `UPDATE notifications SET is_read = 1, sync_status = 'pending' WHERE target_user_id = ? AND is_read = 0`
       ).run(req.user.id);
     } else {
@@ -338,17 +338,17 @@ router.get('/count', authenticate, async (req, res) => {
   try {
     let count;
     if (req.user.role === 'developer') {
-      count = db
+      count = await db
         .prepare(
           `SELECT COUNT(*) as count FROM notifications WHERE target_user_id = ? AND is_read = 0`
         )
-        .get(req.user.id).count;
+        .get(req.user.id)).count;
     } else {
-      count = db
+      count = (await db
         .prepare(
           `SELECT COUNT(*) as count FROM notifications n WHERE ${staffNotificationWhereClause()} AND n.is_read = 0`
         )
-        .get(req.user.business_id, req.user.id, req.user.role).count;
+        .get(req.user.business_id, req.user.id, req.user.role)).count;
     }
 
     res.json({ count });

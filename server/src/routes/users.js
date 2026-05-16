@@ -61,7 +61,7 @@ router.get('/', authorize('admin'), async (req, res) => {
 
 router.get('/stats/overview', authorize('admin'), async (req, res) => {
   try {
-    const stats = db
+    const stats = await db
       .prepare(
         `
       SELECT
@@ -87,7 +87,7 @@ router.get('/stats/overview', authorize('admin'), async (req, res) => {
 // Minimal directory for in-app team messages (managers cannot access full /users list)
 router.get('/directory', authorize('admin', 'manager'), async (req, res) => {
   try {
-    const users = db
+    const users = await db
       .prepare(
         `
       SELECT id, name, email, role
@@ -107,7 +107,7 @@ router.get('/directory', authorize('admin', 'manager'), async (req, res) => {
 
 router.get('/:id', authorize('admin'), async (req, res) => {
   try {
-    const user = db
+    const user = await db
       .prepare(
         `
       SELECT id, name, email, phone, role, is_active, last_login, created_at, updated_at
@@ -188,7 +188,7 @@ router.put('/:id', authorize('admin'), async (req, res) => {
       return res.status(400).json({ error: 'Invalid role.' });
     }
 
-    const existingUser = db
+    const existingUser = await db
       .prepare(`SELECT id FROM users WHERE id = ? AND deleted_at IS NULL AND business_id = ?`)
       .get(req.params.id, bid(req));
 
@@ -246,7 +246,7 @@ router.put('/:id', authorize('admin'), async (req, res) => {
 
 router.delete('/:id', authorize('admin'), async (req, res) => {
   try {
-    const existingUser = db
+    const existingUser = await db
       .prepare(`SELECT id FROM users WHERE id = ? AND deleted_at IS NULL AND business_id = ?`)
       .get(req.params.id, bid(req));
 
@@ -277,7 +277,7 @@ router.post('/:id/reset-pin', authorize('admin'), async (req, res) => {
       return res.status(400).json({ error: 'New PIN must be exactly 4 digits.' });
     }
 
-    const existingUser = db
+    const existingUser = await db
       .prepare(`SELECT id FROM users WHERE id = ? AND deleted_at IS NULL AND business_id = ?`)
       .get(req.params.id, bid(req));
 

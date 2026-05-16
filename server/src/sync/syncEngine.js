@@ -19,7 +19,7 @@ class SyncEngine {
   async initialize() {
     try {
       // Get sync settings
-      const intervalSetting = await db.prepare(`
+      const intervalSetting = (await db.prepare(`
         SELECT value FROM settings WHERE key = 'sync_interval_seconds'
       `).get();
       
@@ -410,17 +410,17 @@ class SyncEngine {
         const pending = await db.prepare(`
           SELECT COUNT(*) as count FROM ${table} 
           WHERE sync_status = 'pending' AND deleted_at IS NULL
-        `).get().count;
+        `).get()).count;
 
-        const synced = await db.prepare(`
+        const synced = (await db.prepare(`
           SELECT COUNT(*) as count FROM ${table} 
           WHERE sync_status = 'synced' AND deleted_at IS NULL
-        `).get().count;
+        `).get()).count;
 
-        const lastSync = await db.prepare(`
+        const lastSync = (await db.prepare(`
           SELECT MAX(updated_at) as last_sync FROM ${table} 
           WHERE sync_status = 'synced' AND deleted_at IS NULL
-        `).get().last_sync;
+        `).get()).last_sync;
 
         status[table] = {
           pending,

@@ -11,7 +11,7 @@ const bid = (req) => req.user.business_id;
 
 router.get('/low-stock', checkPermission('view_inventory'), async (req, res) => {
   try {
-    const lowStockItems = db
+    const lowStockItems = await db
       .prepare(
         `
       SELECT p.*, s.name as supplier_name
@@ -37,7 +37,7 @@ router.get('/expiring', checkPermission('view_inventory'), async (req, res) => {
   try {
     const { days = 30 } = req.query;
 
-    const expiringProducts = db
+    const expiringProducts = await db
       .prepare(
         `
       SELECT p.*, s.name as supplier_name,
@@ -159,7 +159,7 @@ router.post('/restock', checkPermission('adjust_stock'), async (req, res) => {
       return res.status(400).json({ error: 'Product ID and positive quantity are required.' });
     }
 
-    const product = db
+    const product = await db
       .prepare(`SELECT current_stock FROM products WHERE id = ? AND deleted_at IS NULL AND business_id = ?`)
       .get(product_id, bid(req));
 
@@ -213,7 +213,7 @@ router.post('/restock', checkPermission('adjust_stock'), async (req, res) => {
 
 router.get('/summary', checkPermission('view_inventory'), async (req, res) => {
   try {
-    const summary = db
+    const summary = await db
       .prepare(
         `
       SELECT
@@ -229,7 +229,7 @@ router.get('/summary', checkPermission('view_inventory'), async (req, res) => {
       )
       .get(bid(req));
 
-    const categoryBreakdown = db
+    const categoryBreakdown = await db
       .prepare(
         `
       SELECT
@@ -261,7 +261,7 @@ router.get('/movements/:product_id', checkPermission('view_inventory'), async (r
     const { page = 1, limit = 50 } = req.query;
     const offset = (page - 1) * limit;
 
-    const product = db
+    const product = await db
       .prepare(`SELECT id, name FROM products WHERE id = ? AND deleted_at IS NULL AND business_id = ?`)
       .get(product_id, bid(req));
 
@@ -269,7 +269,7 @@ router.get('/movements/:product_id', checkPermission('view_inventory'), async (r
       return res.status(404).json({ error: 'Product not found.' });
     }
 
-    const adjustments = db
+    const adjustments = await db
       .prepare(
         `
       SELECT sa.*, u.name as user_name, s.name as supplier_name
@@ -283,7 +283,7 @@ router.get('/movements/:product_id', checkPermission('view_inventory'), async (r
       )
       .all(product_id, bid(req), parseInt(limit, 10), offset);
 
-    const sales = db
+    const sales = await db
       .prepare(
         `
       SELECT si.*, s.sale_number, s.created_at as sale_date, u.name as cashier_name
@@ -297,11 +297,11 @@ router.get('/movements/:product_id', checkPermission('view_inventory'), async (r
       )
       .all(product_id, bid(req), parseInt(limit, 10), offset);
 
-    const adjustmentCount = db
+    const adjustmentCount = await db
       .prepare(`SELECT COUNT(*) as total FROM stock_adjustments WHERE product_id = ? AND business_id = ?`)
       .get(product_id, bid(req)).total;
 
-    const salesCount = db
+    const salesCount = await db
       .prepare(
         `
       SELECT COUNT(*) as total

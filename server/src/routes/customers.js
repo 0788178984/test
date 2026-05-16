@@ -3,6 +3,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { restrictToBusinessStaff } = require('../middleware/tenantContext');
 const { checkPermission } = require('../middleware/roleCheck');
 const db = require('../db/connection');
+const { newId } = require('../db/ids');
 const router = express.Router();
 
 router.use(authenticate, restrictToBusinessStaff);
@@ -64,7 +65,7 @@ router.get('/:id/history', async (req, res) => {
     const { page = 1, limit = 20 } = req.query;
     const offset = (page - 1) * limit;
 
-    const customer = db
+    const customer = await db
       .prepare(
         `SELECT id, name FROM customers WHERE id = ? AND deleted_at IS NULL AND business_id = ?`
       )
@@ -74,7 +75,7 @@ router.get('/:id/history', async (req, res) => {
       return res.status(404).json({ error: 'Customer not found.' });
     }
 
-    const sales = db
+    const sales = await db
       .prepare(
         `
       SELECT s.*, u.name as cashier_name
@@ -87,7 +88,7 @@ router.get('/:id/history', async (req, res) => {
       )
       .all(req.params.id, bid(req), parseInt(limit, 10), offset);
 
-    const { total } = db
+    const { total } = await db
       .prepare(
         `
       SELECT COUNT(*) as total
@@ -97,7 +98,7 @@ router.get('/:id/history', async (req, res) => {
       )
       .get(req.params.id, bid(req));
 
-    const loyaltyTransactions = db
+    const loyaltyTransactions = await db
       .prepare(
         `
       SELECT * FROM loyalty_transactions
@@ -127,7 +128,7 @@ router.get('/:id/history', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
   try {
-    const customer = db
+    const customer = await db
       .prepare(
         `
       SELECT * FROM customers
@@ -155,20 +156,21 @@ router.post('/', checkPermission('manage_customers'), async (req, res) => {
       return res.status(400).json({ error: 'Customer name is required.' });
     }
 
+    const customerId = newId('cust');
     await db.prepare(
       `
       INSERT INTO customers (
-        name, phone, email, notes, business_id, created_at, updated_at, sync_status
-      ) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'), 'pending')
+        id, name, phone, email, notes, business_id, created_at, updated_at, sync_status
+      ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 'pending')
     `
-    ).run(name, phone, email, notes, bid(req));
+    ).run(customerId, name, phone, email, notes, bid(req));
 
     res.status(201).json({
       message: 'Customer created successfully.',
     });
   } catch (error) {
     console.error('Create customer error:', error);
-    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE' || error.code === '23505') {
       return res.status(400).json({ error: 'Phone number already exists.' });
     }
     res.status(500).json({ error: 'Failed to create customer.' });
@@ -179,7 +181,7 @@ router.put('/:id', checkPermission('manage_customers'), async (req, res) => {
   try {
     const { name, phone, email, notes } = req.body;
 
-    const existingCustomer = db
+    const existingCustomer = await db
       .prepare(`SELECT id FROM customers WHERE id = ? AND deleted_at IS NULL AND business_id = ?`)
       .get(req.params.id, bid(req));
 
@@ -199,7 +201,7 @@ router.put('/:id', checkPermission('manage_customers'), async (req, res) => {
     res.json({ message: 'Customer updated successfully.' });
   } catch (error) {
     console.error('Update customer error:', error);
-    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE' || error.code === '23505') {
       return res.status(400).json({ error: 'Phone number already exists.' });
     }
     res.status(500).json({ error: 'Failed to update customer.' });
@@ -208,7 +210,7 @@ router.put('/:id', checkPermission('manage_customers'), async (req, res) => {
 
 router.delete('/:id', authorize('admin'), async (req, res) => {
   try {
-    const existingCustomer = db
+    const existingCustomer = await db
       .prepare(`SELECT id FROM customers WHERE id = ? AND deleted_at IS NULL AND business_id = ?`)
       .get(req.params.id, bid(req));
 
@@ -235,7 +237,7 @@ router.post('/:id/redeem-points', checkPermission('manage_customers'), async (re
       return res.status(400).json({ error: 'Points to redeem must be positive.' });
     }
 
-    const customer = db
+    const customer = await db
       .prepare(
         `
       SELECT id, name, loyalty_points FROM customers

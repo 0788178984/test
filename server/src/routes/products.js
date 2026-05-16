@@ -3,6 +3,7 @@ const { authenticate } = require('../middleware/auth');
 const { restrictToBusinessStaff } = require('../middleware/tenantContext');
 const { checkPermission } = require('../middleware/roleCheck');
 const db = require('../db/connection');
+const { newId } = require('../db/ids');
 const router = express.Router();
 
 router.use(authenticate, restrictToBusinessStaff);
@@ -161,25 +162,26 @@ router.post('/', checkPermission('add_edit_products'), async (req, res) => {
       return res.status(400).json({ error: 'Name, buying price, and selling price are required.' });
     }
 
+    const productId = newId('prod');
     const result = await db.prepare(`
       INSERT INTO products (
-        name, barcode, sku, category, unit, buying_price, selling_price,
+        id, name, barcode, sku, category, unit, buying_price, selling_price,
         tax_rate, current_stock, minimum_stock, supplier_id, expiry_date, business_id,
         created_at, updated_at, sync_status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 'pending')
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 'pending')
     `).run(
-      name, barcode, sku, category, unit || 'piece', buying_price, selling_price,
+      productId, name, barcode, sku, category, unit || 'piece', buying_price, selling_price,
       tax_rate || 0.18, current_stock || 0, minimum_stock || 5, supplier_id, expiry_date,
       req.user.business_id
     );
 
     res.status(201).json({
       message: 'Product created successfully.',
-      productId: result.lastInsertRowid
+      productId: result.lastInsertRowid || productId,
     });
   } catch (error) {
     console.error('Create product error:', error);
-    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE' || error.code === '23505') {
       return res.status(400).json({ error: 'Barcode or SKU already exists.' });
     }
     res.status(500).json({ error: 'Failed to create product.' });
@@ -221,7 +223,7 @@ router.put('/:id', checkPermission('add_edit_products'), async (req, res) => {
     res.json({ message: 'Product updated successfully.' });
   } catch (error) {
     console.error('Update product error:', error);
-    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE' || error.code === '23505') {
       return res.status(400).json({ error: 'Barcode or SKU already exists.' });
     }
     res.status(500).json({ error: 'Failed to update product.' });

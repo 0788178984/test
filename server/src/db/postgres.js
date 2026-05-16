@@ -14,7 +14,16 @@ function prepareOn(client, sql) {
       }),
     all: (...params) => client.query(q, params).then((res) => res.rows),
     run: (...params) =>
-      client.query(q, params).then((res) => ({ changes: res.rowCount, rowCount: res.rowCount })),
+      client.query(q, params).then((res) => {
+        const row = res.rows && res.rows[0];
+        const id = row && (row.id ?? row.ID);
+        return {
+          changes: res.rowCount,
+          rowCount: res.rowCount,
+          lastInsertRowid: id,
+          rows: res.rows,
+        };
+      }),
   };
 }
 

@@ -13,7 +13,7 @@ function translateSql(sql) {
     /date\s*\(\s*'now'\s*,\s*'\s*\+\s*'\s*\|\|\s*\?\s*\|\|\s*'\s+days\s*'\s*\)/gi,
     "(CURRENT_DATE + (?::text || ' days')::interval)"
   );
-  s = s.replace(/date\s*\(\s*'now'\s*,\s*'\+\s*(\d+)\s+days'\s*\)/gi, "(CURRENT_DATE + INTERVAL '$1 days')");
+  s = s.replace(/date\s*\(\s*'now'\s*,\s*'\+(\d+)\s+days'\s*\)/gi, "(CURRENT_DATE + INTERVAL '$1 days')");
   s = s.replace(/date\s*\(\s*'now'\s*\)/gi, 'CURRENT_DATE');
   s = s.replace(/date\s*\(\s*([a-z_.]+)\s*\)/gi, 'DATE($1)');
 

@@ -48,7 +48,7 @@ router.post('/push', authorize('admin'), async (req, res) => {
         // Check if record exists locally
         let existing;
         if (table === 'sale_items') {
-          existing = db
+          existing = (await db
             .prepare(
               `
             SELECT si.id, si.created_at AS updated_at, si.sync_status
@@ -59,17 +59,17 @@ router.post('/push', authorize('admin'), async (req, res) => {
             )
             .get(record.id, req.user.business_id);
         } else if (TABLES_BUSINESS_NO_SOFT_DELETE.has(table)) {
-          existing = db
+          existing = await db
             .prepare(
               `SELECT id, created_at AS updated_at, sync_status FROM ${table} WHERE id = ? AND business_id = ?`
             )
             .get(record.id, req.user.business_id);
         } else if (TABLES_WITH_BUSINESS_ID.has(table)) {
-          existing = db
+          existing = await db
             .prepare(`SELECT id, updated_at, sync_status FROM ${table} WHERE id = ? AND business_id = ?`)
             .get(record.id, req.user.business_id);
         } else {
-          existing = db
+          existing = await db
             .prepare(`SELECT id, updated_at, sync_status FROM ${table} WHERE id = ?`)
             .get(record.id);
         }
@@ -207,7 +207,7 @@ router.get('/status', authorize('admin', 'manager'), async (req, res) => {
       const b = req.user.business_id;
 
       if (table === 'sale_items') {
-        pending = db
+        pending = await db
           .prepare(
             `
           SELECT COUNT(*) as count FROM sale_items si
@@ -215,8 +215,8 @@ router.get('/status', authorize('admin', 'manager'), async (req, res) => {
           WHERE si.sync_status = 'pending' AND s.business_id = ?
         `
           )
-          .get(b).count;
-        synced = db
+          .get(b)).count;
+        synced = (await db
           .prepare(
             `
           SELECT COUNT(*) as count FROM sale_items si
@@ -224,8 +224,8 @@ router.get('/status', authorize('admin', 'manager'), async (req, res) => {
           WHERE si.sync_status = 'synced' AND s.business_id = ?
         `
           )
-          .get(b).count;
-        lastSync = db
+          .get(b)).count;
+        lastSync = (await db
           .prepare(
             `
           SELECT MAX(si.created_at) as last_sync FROM sale_items si
@@ -233,82 +233,82 @@ router.get('/status', authorize('admin', 'manager'), async (req, res) => {
           WHERE si.sync_status = 'synced' AND s.business_id = ?
         `
           )
-          .get(b).last_sync;
+          .get(b)).last_sync;
       } else if (TABLES_BUSINESS_NO_SOFT_DELETE.has(table)) {
-        pending = db
+        pending = (await db
           .prepare(
             `
           SELECT COUNT(*) as count FROM ${table}
           WHERE sync_status = 'pending' AND business_id = ?
         `
           )
-          .get(b).count;
-        synced = db
+          .get(b)).count;
+        synced = (await db
           .prepare(
             `
           SELECT COUNT(*) as count FROM ${table}
           WHERE sync_status = 'synced' AND business_id = ?
         `
           )
-          .get(b).count;
-        lastSync = db
+          .get(b)).count;
+        lastSync = (await db
           .prepare(
             `
           SELECT MAX(created_at) as last_sync FROM ${table}
           WHERE sync_status = 'synced' AND business_id = ?
         `
           )
-          .get(b).last_sync;
+          .get(b)).last_sync;
       } else if (TABLES_WITH_BUSINESS_ID.has(table)) {
-        pending = db
+        pending = (await db
           .prepare(
             `
           SELECT COUNT(*) as count FROM ${table}
           WHERE sync_status = 'pending' AND deleted_at IS NULL AND business_id = ?
         `
           )
-          .get(b).count;
-        synced = db
+          .get(b)).count;
+        synced = (await db
           .prepare(
             `
           SELECT COUNT(*) as count FROM ${table}
           WHERE sync_status = 'synced' AND deleted_at IS NULL AND business_id = ?
         `
           )
-          .get(b).count;
-        lastSync = db
+          .get(b)).count;
+        lastSync = (await db
           .prepare(
             `
           SELECT MAX(updated_at) as last_sync FROM ${table}
           WHERE sync_status = 'synced' AND deleted_at IS NULL AND business_id = ?
         `
           )
-          .get(b).last_sync;
+          .get(b)).last_sync;
       } else {
-        pending = db
+        pending = (await db
           .prepare(
             `
           SELECT COUNT(*) as count FROM ${table}
           WHERE sync_status = 'pending' AND deleted_at IS NULL
         `
           )
-          .get().count;
-        synced = db
+          .get()).count;
+        synced = (await db
           .prepare(
             `
           SELECT COUNT(*) as count FROM ${table}
           WHERE sync_status = 'synced' AND deleted_at IS NULL
         `
           )
-          .get().count;
-        lastSync = db
+          .get()).count;
+        lastSync = (await db
           .prepare(
             `
           SELECT MAX(updated_at) as last_sync FROM ${table}
           WHERE sync_status = 'synced' AND deleted_at IS NULL
         `
           )
-          .get().last_sync;
+          .get()).last_sync;
       }
 
       status[table] = {
@@ -353,7 +353,7 @@ router.post('/force', authorize('admin'), async (req, res) => {
       for (const table of SYNC_TABLES) {
         let result;
         if (table === 'sale_items') {
-          result = db
+          result = await db
             .prepare(
               `
             UPDATE sale_items SET sync_status = 'pending'
@@ -362,7 +362,7 @@ router.post('/force', authorize('admin'), async (req, res) => {
             )
             .run(b);
         } else if (TABLES_BUSINESS_NO_SOFT_DELETE.has(table)) {
-          result = db
+          result = await db
             .prepare(
               `
             UPDATE ${table} SET sync_status = 'pending'
@@ -371,7 +371,7 @@ router.post('/force', authorize('admin'), async (req, res) => {
             )
             .run(b);
         } else {
-          result = db
+          result = await db
             .prepare(
               `
             UPDATE ${table} SET sync_status = 'pending', updated_at = datetime('now')
@@ -386,7 +386,7 @@ router.post('/force', authorize('admin'), async (req, res) => {
       for (const table of SYNC_TABLES) {
         let result;
         if (table === 'sale_items') {
-          result = db
+          result = await db
             .prepare(
               `
             UPDATE sale_items SET sync_status = 'pending'
@@ -395,7 +395,7 @@ router.post('/force', authorize('admin'), async (req, res) => {
             )
             .run(b);
         } else if (TABLES_BUSINESS_NO_SOFT_DELETE.has(table)) {
-          result = db
+          result = await db
             .prepare(
               `
             UPDATE ${table} SET sync_status = 'pending'
@@ -404,7 +404,7 @@ router.post('/force', authorize('admin'), async (req, res) => {
             )
             .run(b);
         } else {
-          result = db
+          result = await db
             .prepare(
               `
             UPDATE ${table} SET sync_status = 'pending', updated_at = datetime('now')
@@ -501,7 +501,7 @@ router.get('/conflicts', authorize('admin'), async (req, res) => {
     for (const table of SYNC_TABLES) {
       let pendingRecords;
       if (table === 'sale_items') {
-        pendingRecords = db
+        pendingRecords = await db
           .prepare(
             `
           SELECT si.id, si.created_at AS updated_at, si.sync_status
@@ -513,7 +513,7 @@ router.get('/conflicts', authorize('admin'), async (req, res) => {
           )
           .all(b);
       } else if (TABLES_BUSINESS_NO_SOFT_DELETE.has(table)) {
-        pendingRecords = db
+        pendingRecords = await db
           .prepare(
             `
           SELECT id, created_at AS updated_at, sync_status FROM ${table}
@@ -523,7 +523,7 @@ router.get('/conflicts', authorize('admin'), async (req, res) => {
           )
           .all(b);
       } else if (TABLES_WITH_BUSINESS_ID.has(table)) {
-        pendingRecords = db
+        pendingRecords = await db
           .prepare(
             `
           SELECT id, updated_at, sync_status FROM ${table}
@@ -533,7 +533,7 @@ router.get('/conflicts', authorize('admin'), async (req, res) => {
           )
           .all(b);
       } else {
-        pendingRecords = db
+        pendingRecords = await db
           .prepare(
             `
           SELECT id, updated_at, sync_status FROM ${table}

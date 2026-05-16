@@ -308,7 +308,7 @@ router.get('/today-summary', async (req, res) => {
         SUM(total_amount - (SELECT SUM(si.quantity * si.buying_price)
                            FROM sale_items si WHERE si.sale_id = s.id)) as profit
       FROM sales s
-      WHERE date(s.created_at) = ? AND s.status = 'completed' AND s.deleted_at IS NULL
+      WHERE DATE(s.created_at) = ?::date AND s.status = 'completed' AND s.deleted_at IS NULL
       AND s.business_id = ?
     `;
 
@@ -326,7 +326,7 @@ router.get('/today-summary', async (req, res) => {
       FROM sale_items si
       JOIN products p ON p.id = si.product_id
       JOIN sales s ON s.id = si.sale_id
-      WHERE date(s.created_at) = ? AND s.status = 'completed' AND s.deleted_at IS NULL
+      WHERE DATE(s.created_at) = ?::date AND s.status = 'completed' AND s.deleted_at IS NULL
       AND s.business_id = ?
     `;
 
