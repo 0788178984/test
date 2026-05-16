@@ -18,7 +18,8 @@ const checkPermission = (requiredPermission) => {
         'view_sales', 'make_sale', 'apply_discount', 'void_sale',
         'view_reports', 'export_reports', 'view_products', 'add_edit_products',
         'adjust_stock', 'view_customers', 'manage_customers', 'view_suppliers',
-        'manage_suppliers', 'view_notifications', 'view_inventory'
+        'manage_suppliers', 'view_notifications', 'view_inventory',
+        'view_expenses', 'manage_expenses'
       ];
       
       if (managerPermissions.includes(requiredPermission)) {

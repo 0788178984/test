@@ -21,6 +21,7 @@ const Reports = () => {
   const tabs = [
     { id: 'daily', name: 'Daily Sales', icon: Calendar },
     { id: 'monthly', name: 'Monthly Sales', icon: TrendingUp },
+    { id: 'annual', name: 'Annual', icon: BarChart3 },
     { id: 'profit', name: 'Profit & Loss', icon: DollarSign },
     { id: 'best-sellers', name: 'Best Sellers', icon: Package },
     { id: 'cashier', name: 'Cashier Performance', icon: Users }
@@ -41,8 +42,18 @@ const Reports = () => {
         case 'daily':
           response = await reportsAPI.getDaily(dateRange);
           break;
-        case 'monthly':
-          response = await reportsAPI.getMonthly(dateRange);
+        case 'monthly': {
+          const d = new Date(dateRange.from);
+          response = await reportsAPI.getMonthly({
+            year: d.getFullYear(),
+            month: d.getMonth() + 1,
+          });
+          break;
+        }
+        case 'annual':
+          response = await reportsAPI.getAnnual({
+            year: dateRange.from.slice(0, 4),
+          });
           break;
         case 'profit':
           response = await reportsAPI.getProfit(dateRange);
@@ -231,30 +242,71 @@ const Reports = () => {
             )}
 
             {/* Monthly Sales Report */}
-            {activeTab === 'monthly' && reports.monthlySales && (
+            {activeTab === 'monthly' && reports.dailyBreakdown && (
               <div className="overflow-x-auto">
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>Month</th>
+                      <th>Day</th>
                       <th>Sales</th>
                       <th>Revenue</th>
                       <th>Profit</th>
-                      <th>Profit Margin</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {reports.monthlySales.map((month, index) => (
+                    {reports.dailyBreakdown.map((row, index) => (
                       <tr key={index}>
-                        <td>{month.month}</td>
-                        <td>{month.salesCount}</td>
-                        <td>{formatCurrency(month.revenue)}</td>
-                        <td>{formatCurrency(month.profit)}</td>
-                        <td>{month.profitMargin}%</td>
+                        <td>{formatDate(row.day)}</td>
+                        <td>{row.sales_count}</td>
+                        <td>{formatCurrency(row.revenue)}</td>
+                        <td>{formatCurrency(row.profit)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {activeTab === 'annual' && reports.summary && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="text-center p-4 bg-gray-50 rounded-lg">
+                    <p className="text-2xl font-bold text-green-600">{formatCurrency(reports.summary.revenue || 0)}</p>
+                    <p className="text-sm text-gray-600">Year revenue</p>
+                  </div>
+                  <div className="text-center p-4 bg-gray-50 rounded-lg">
+                    <p className="text-2xl font-bold text-red-600">{formatCurrency(reports.summary.expenses_total || 0)}</p>
+                    <p className="text-sm text-gray-600">Year expenses</p>
+                  </div>
+                  <div className="text-center p-4 bg-gray-50 rounded-lg">
+                    <p className="text-2xl font-bold text-blue-600">{formatCurrency(reports.summary.net_cash ?? reports.summary.revenue)}</p>
+                    <p className="text-sm text-gray-600">Net (after expenses)</p>
+                  </div>
+                </div>
+                {reports.monthlyBreakdown?.length > 0 && (
+                  <div className="overflow-x-auto">
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th>Month</th>
+                          <th>Sales</th>
+                          <th>Revenue</th>
+                          <th>Profit</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {reports.monthlyBreakdown.map((row) => (
+                          <tr key={row.month}>
+                            <td>{row.month}</td>
+                            <td>{row.sales_count}</td>
+                            <td>{formatCurrency(row.revenue)}</td>
+                            <td>{formatCurrency(row.profit)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
 

@@ -3,21 +3,23 @@ const { authenticate } = require('../middleware/auth');
 const { restrictToBusinessStaff } = require('../middleware/tenantContext');
 const { checkPermission } = require('../middleware/roleCheck');
 const db = require('../db/connection');
+const { getStoreToday, saleLocalDate } = require('../utils/storeTime');
 const router = express.Router();
 
 router.use(authenticate, restrictToBusinessStaff);
 
 // Generate unique sale number (per business, per day)
 async function generateSaleNumber(businessId) {
-  const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const today = getStoreToday().replace(/-/g, '');
+  const localDate = saleLocalDate('created_at');
   const count = (
     await db.prepare(`
     SELECT COUNT(*) as count FROM sales
-    WHERE date(created_at) = date('now') AND business_id = ?
-  `).get(businessId)
+    WHERE ${localDate} = ? AND business_id = ? AND deleted_at IS NULL
+  `).get(getStoreToday(), businessId)
   ).count;
 
-  return `INV-${today}-${String(count + 1).padStart(6, '0')}`;
+  return `INV-${today}-${String(Number(count) + 1).padStart(6, '0')}`;
 }
 
 // Create sale
@@ -216,31 +218,33 @@ router.get('/', async (req, res) => {
       WHERE s.deleted_at IS NULL AND s.business_id = ?
     `;
     const params = [req.user.business_id];
+    const localDate = saleLocalDate('s.created_at');
 
-    if (from) {
-      query += ` AND date(s.created_at) >= date(?)`;
-      params.push(from);
-    }
-
-    if (to) {
-      query += ` AND date(s.created_at) <= date(?)`;
-      params.push(to);
-    }
-
-    if (cashier_id) {
-      query += ` AND s.cashier_id = ?`;
-      params.push(cashier_id);
+    if (req.user.role === 'cashier') {
+      const today = getStoreToday();
+      if ((from && from !== today) || (to && to !== today)) {
+        return res.status(403).json({ error: 'Cashiers can only view today\'s sales.' });
+      }
+      query += ` AND ${localDate} = ? AND s.cashier_id = ?`;
+      params.push(today, req.user.id);
+    } else {
+      if (from) {
+        query += ` AND ${localDate} >= ?`;
+        params.push(from);
+      }
+      if (to) {
+        query += ` AND ${localDate} <= ?`;
+        params.push(to);
+      }
+      if (cashier_id) {
+        query += ` AND s.cashier_id = ?`;
+        params.push(cashier_id);
+      }
     }
 
     if (status) {
       query += ` AND s.status = ?`;
       params.push(status);
-    }
-
-    // Cashiers can only see their own sales
-    if (req.user.role === 'cashier') {
-      query += ` AND s.cashier_id = ?`;
-      params.push(req.user.id);
     }
 
     query += ` ORDER BY s.created_at DESC LIMIT ? OFFSET ?`;
@@ -254,29 +258,28 @@ router.get('/', async (req, res) => {
     `;
     const countParams = [req.user.business_id];
 
-    if (from) {
-      countQuery += ` AND date(s.created_at) >= date(?)`;
-      countParams.push(from);
-    }
-
-    if (to) {
-      countQuery += ` AND date(s.created_at) <= date(?)`;
-      countParams.push(to);
-    }
-
-    if (cashier_id) {
-      countQuery += ` AND s.cashier_id = ?`;
-      countParams.push(cashier_id);
+    if (req.user.role === 'cashier') {
+      const today = getStoreToday();
+      countQuery += ` AND ${localDate} = ? AND s.cashier_id = ?`;
+      countParams.push(today, req.user.id);
+    } else {
+      if (from) {
+        countQuery += ` AND ${localDate} >= ?`;
+        countParams.push(from);
+      }
+      if (to) {
+        countQuery += ` AND ${localDate} <= ?`;
+        countParams.push(to);
+      }
+      if (cashier_id) {
+        countQuery += ` AND s.cashier_id = ?`;
+        countParams.push(cashier_id);
+      }
     }
 
     if (status) {
       countQuery += ` AND s.status = ?`;
       countParams.push(status);
-    }
-
-    if (req.user.role === 'cashier') {
-      countQuery += ` AND s.cashier_id = ?`;
-      countParams.push(req.user.id);
     }
 
     const { total } = await db.prepare(countQuery).get(...countParams);
@@ -299,7 +302,8 @@ router.get('/', async (req, res) => {
 // Must be registered before /:id — otherwise "today-summary" is captured as an id
 router.get('/today-summary', async (req, res) => {
   try {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getStoreToday();
+    const localDate = saleLocalDate('s.created_at');
 
     let query = `
       SELECT
@@ -308,7 +312,7 @@ router.get('/today-summary', async (req, res) => {
         SUM(total_amount - (SELECT SUM(si.quantity * si.buying_price)
                            FROM sale_items si WHERE si.sale_id = s.id)) as profit
       FROM sales s
-      WHERE DATE(s.created_at) = ?::date AND s.status = 'completed' AND s.deleted_at IS NULL
+      WHERE ${localDate} = ? AND s.status = 'completed' AND s.deleted_at IS NULL
       AND s.business_id = ?
     `;
 
@@ -326,7 +330,7 @@ router.get('/today-summary', async (req, res) => {
       FROM sale_items si
       JOIN products p ON p.id = si.product_id
       JOIN sales s ON s.id = si.sale_id
-      WHERE DATE(s.created_at) = ?::date AND s.status = 'completed' AND s.deleted_at IS NULL
+      WHERE ${localDate} = ? AND s.status = 'completed' AND s.deleted_at IS NULL
       AND s.business_id = ?
     `;
 
@@ -369,9 +373,17 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Sale not found.' });
     }
 
-    // Cashiers can only see their own sales
-    if (req.user.role === 'cashier' && sale.cashier_id !== req.user.id) {
-      return res.status(403).json({ error: 'Access denied.' });
+    if (req.user.role === 'cashier') {
+      if (sale.cashier_id !== req.user.id) {
+        return res.status(403).json({ error: 'Access denied.' });
+      }
+      const today = getStoreToday();
+      const onToday = await db
+        .prepare(`SELECT 1 as ok FROM sales s WHERE s.id = ? AND ${saleLocalDate('s.created_at')} = ?`)
+        .get(sale.id, today);
+      if (!onToday) {
+        return res.status(403).json({ error: 'Cashiers can only view today\'s sales.' });
+      }
     }
 
     // Get sale items

@@ -19,6 +19,20 @@ const TABLES_WITH_BUSINESS_ID = new Set([
 /** business_id set by migration, but no deleted_at / updated_at in base schema — generic sync SQL must not reference those columns */
 const TABLES_BUSINESS_NO_SOFT_DELETE = new Set(['stock_adjustments', 'loyalty_transactions']);
 
+/** Has business_id + deleted_at but only created_at (no updated_at column) */
+const TABLES_USE_CREATED_AT_VERSION = new Set(['notifications']);
+
+function lastSyncTimestampColumn(table) {
+  if (
+    table === 'sale_items' ||
+    TABLES_BUSINESS_NO_SOFT_DELETE.has(table) ||
+    TABLES_USE_CREATED_AT_VERSION.has(table)
+  ) {
+    return 'created_at';
+  }
+  return 'updated_at';
+}
+
 router.use(authenticate, restrictToBusinessStaff);
 
 // Tables that need to be synced
@@ -64,6 +78,12 @@ router.post('/push', authorize('admin'), async (req, res) => {
               `SELECT id, created_at AS updated_at, sync_status FROM ${table} WHERE id = ? AND business_id = ?`
             )
             .get(record.id, req.user.business_id));
+        } else if (TABLES_USE_CREATED_AT_VERSION.has(table)) {
+          existing = await db
+            .prepare(
+              `SELECT id, created_at AS updated_at, sync_status FROM ${table} WHERE id = ? AND business_id = ? AND deleted_at IS NULL`
+            )
+            .get(record.id, req.user.business_id);
         } else if (TABLES_WITH_BUSINESS_ID.has(table)) {
           existing = await db
             .prepare(`SELECT id, updated_at, sync_status FROM ${table} WHERE id = ? AND business_id = ?`)
@@ -176,7 +196,8 @@ router.post('/pull', authorize('admin'), async (req, res) => {
         params.push(req.user.business_id);
       }
       if (last_sync_at) {
-        query += ` AND updated_at > ?`;
+        const tsCol = lastSyncTimestampColumn(table);
+        query += ` AND ${tsCol} > ?`;
         params.push(last_sync_at);
       }
       query += ` AND sync_status IN ('pending', 'synced')`;
@@ -290,11 +311,12 @@ router.get('/status', authorize('admin', 'manager'), async (req, res) => {
             )
             .get(b))?.count ?? 0
         );
+        const lastSyncCol = lastSyncTimestampColumn(table);
         lastSync =
           (await db
             .prepare(
               `
-          SELECT MAX(updated_at) as last_sync FROM ${table}
+          SELECT MAX(${lastSyncCol}) as last_sync FROM ${table}
           WHERE sync_status = 'synced' AND deleted_at IS NULL AND business_id = ?
         `
             )
@@ -396,6 +418,15 @@ router.post('/force', authorize('admin'), async (req, res) => {
           `
             )
             .run(b);
+        } else if (TABLES_USE_CREATED_AT_VERSION.has(table)) {
+          result = await db
+            .prepare(
+              `
+            UPDATE ${table} SET sync_status = 'pending'
+            WHERE deleted_at IS NULL AND business_id = ?
+          `
+            )
+            .run(b);
         } else {
           result = await db
             .prepare(
@@ -426,6 +457,15 @@ router.post('/force', authorize('admin'), async (req, res) => {
               `
             UPDATE ${table} SET sync_status = 'pending'
             WHERE business_id = ?
+          `
+            )
+            .run(b);
+        } else if (TABLES_USE_CREATED_AT_VERSION.has(table)) {
+          result = await db
+            .prepare(
+              `
+            UPDATE ${table} SET sync_status = 'pending'
+            WHERE deleted_at IS NULL AND business_id = ?
           `
             )
             .run(b);
@@ -544,6 +584,16 @@ router.get('/conflicts', authorize('admin'), async (req, res) => {
             `
           SELECT id, created_at AS updated_at, sync_status FROM ${table}
           WHERE sync_status = 'pending' AND business_id = ?
+          LIMIT 10
+        `
+          )
+          .all(b);
+      } else if (TABLES_USE_CREATED_AT_VERSION.has(table)) {
+        pendingRecords = await db
+          .prepare(
+            `
+          SELECT id, created_at AS updated_at, sync_status FROM ${table}
+          WHERE sync_status = 'pending' AND deleted_at IS NULL AND business_id = ?
           LIMIT 10
         `
           )

@@ -44,6 +44,12 @@ async function init() {
     console.log('PostgreSQL schema migration applied (PG_RUN_MIGRATION).');
   }
 
+  const expensesMigration = fs.readFileSync(
+    path.join(__dirname, 'migrations/003_expenses_postgres.sql'),
+    'utf8'
+  );
+  await pool.query(expensesMigration);
+
   const db = {
     dialect: 'postgres',
     name: 'postgresql (Supabase)',

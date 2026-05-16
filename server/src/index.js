@@ -33,6 +33,7 @@ const syncRoutes = require('./routes/sync');
 const developerRoutes = require('./routes/developer');
 const supportRequestRoutes = require('./routes/supportRequests');
 const paymentRoutes = require('./routes/payments');
+const expenseRoutes = require('./routes/expenses');
 
 // Import services
 const { dispatch, createNotification } = require('./routes/notifications');
@@ -178,6 +179,7 @@ app.use('/api/sync', syncRoutes);
 app.use('/api/developer', developerRoutes);
 app.use('/api/support-requests', supportRequestRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/expenses', expenseRoutes);
 
 // Static files for client (in production)
 if (process.env.NODE_ENV === 'production') {

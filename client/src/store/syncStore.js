@@ -44,7 +44,7 @@ const useSyncStore = create((set, get) => ({
       });
     } catch (error) {
       const status = error?.response?.status;
-      if (status === 403 || status === 401) {
+      if (status === 403 || status === 401 || status === 500) {
         set({ syncStatus: null });
         return;
       }

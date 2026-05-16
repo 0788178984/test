@@ -13,6 +13,7 @@ import Products from './pages/Products';
 import Inventory from './pages/Inventory';
 import Customers from './pages/Customers';
 import Suppliers from './pages/Suppliers';
+import Expenses from './pages/Expenses';
 import Reports from './pages/Reports';
 import DataAnalysis from './pages/DataAnalysis';
 import Users from './pages/Users';
@@ -52,6 +53,7 @@ function App() {
                 <Route element={<RoleRoute allow={['admin', 'manager']} />}>
                   <Route path="products" element={<Products />} />
                   <Route path="suppliers" element={<Suppliers />} />
+                  <Route path="expenses" element={<Expenses />} />
                   <Route path="reports" element={<Reports />} />
                   <Route path="data-analysis" element={<DataAnalysis />} />
                   <Route path="team-messages" element={<TeamMessages />} />

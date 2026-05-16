@@ -19,6 +19,7 @@ import {
   Megaphone,
   PieChart,
   Award,
+  Wallet,
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../../store/authStore';
@@ -127,6 +128,12 @@ const Layout = () => {
       title: 'Suppliers',
       icon: Users2,
       path: '/suppliers',
+      roles: ['admin', 'manager'],
+    },
+    {
+      title: 'Expenses',
+      icon: Wallet,
+      path: '/expenses',
       roles: ['admin', 'manager'],
     },
     {

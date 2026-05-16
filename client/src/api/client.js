@@ -118,6 +118,17 @@ export const suppliersAPI = {
   delete: (id) => api.delete(`/api/suppliers/${id}`),
 };
 
+export const expensesAPI = {
+  getAll: (params = {}) => api.get('/api/expenses', { params }),
+  getById: (id) => api.get(`/api/expenses/${id}`),
+  getCategories: () => api.get('/api/expenses/categories/list'),
+  getTodaySummary: () => api.get('/api/expenses/summary/today'),
+  getSummary: (params = {}) => api.get('/api/expenses/summary', { params }),
+  create: (data) => api.post('/api/expenses', data),
+  update: (id, data) => api.put(`/api/expenses/${id}`, data),
+  delete: (id) => api.delete(`/api/expenses/${id}`),
+};
+
 export const usersAPI = {
   getAll: (params = {}) => api.get('/api/users', { params }),
   getDirectory: () => api.get('/api/users/directory'),
@@ -141,6 +152,7 @@ export const inventoryAPI = {
 export const reportsAPI = {
   getDaily: (params = {}) => api.get('/api/reports/daily', { params }),
   getMonthly: (params = {}) => api.get('/api/reports/monthly', { params }),
+  getAnnual: (params = {}) => api.get('/api/reports/annual', { params }),
   getProfit: (params = {}) => api.get('/api/reports/profit', { params }),
   getBestSellers: (params = {}) => api.get('/api/reports/best-sellers', { params }),
   getCashier: (params = {}) => api.get('/api/reports/cashier', { params }),

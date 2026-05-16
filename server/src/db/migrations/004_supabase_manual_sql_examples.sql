@@ -1,0 +1,36 @@
+-- =============================================================================
+-- Manual SQL examples (Supabase SQL Editor)
+-- Run AFTER 001_init_postgres.sql (+ 003_expenses if using expenses).
+-- Every row keeps created_at / updated_at timestamps automatically if you use NOW().
+-- =============================================================================
+
+-- Add a product (replace business_id if not DEFAULT store)
+-- INSERT INTO products (
+--   id, name, barcode, sku, category, unit,
+--   buying_price, selling_price, current_stock, minimum_stock,
+--   business_id, created_at, updated_at, sync_status
+-- ) VALUES (
+--   'prod-' || encode(gen_random_bytes(6), 'hex'),
+--   'Sugar 1kg', '6001234567890', 'SUG-1KG', 'Groceries', 'piece',
+--   3500, 4500, 100, 10,
+--   'biz-default', NOW(), NOW(), 'synced'
+-- );
+
+-- Record an expense for a calendar day (expense_date = YYYY-MM-DD in Uganda)
+-- INSERT INTO expenses (
+--   id, business_id, user_id, title, category, amount, payment_method,
+--   expense_date, notes, created_at, updated_at, sync_status
+-- ) VALUES (
+--   'exp-' || encode(gen_random_bytes(6), 'hex'),
+--   'biz-default', 'user-admin-001', 'Shop rent', 'rent', 500000, 'bank',
+--   '2026-05-16', 'May rent', NOW(), NOW(), 'synced'
+-- );
+
+-- View today's completed sales (Uganda calendar day)
+-- SELECT s.sale_number, s.total_amount, s.payment_method,
+--        (s.created_at AT TIME ZONE 'Africa/Kampala') AS sale_time_local
+-- FROM sales s
+-- WHERE s.business_id = 'biz-default'
+--   AND s.status = 'completed'
+--   AND s.deleted_at IS NULL
+--   AND (s.created_at AT TIME ZONE 'Africa/Kampala')::date = CURRENT_DATE;

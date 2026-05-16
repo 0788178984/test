@@ -5,7 +5,14 @@ const { authenticate } = require('../middleware/auth');
 const { restrictToBusinessStaff } = require('../middleware/tenantContext');
 const { checkPermission } = require('../middleware/roleCheck');
 const db = require('../db/connection');
+const { getStoreToday, saleLocalDate, STORE_TZ } = require('../utils/storeTime');
 const pdfService = require('../services/pdfService');
+
+const LD = saleLocalDate('s.created_at');
+const LOCAL_HOUR = `LPAD(EXTRACT(HOUR FROM (s.created_at AT TIME ZONE '${STORE_TZ}'))::text, 2, '0')`;
+const LOCAL_YEAR = `EXTRACT(YEAR FROM (s.created_at AT TIME ZONE '${STORE_TZ}'))`;
+const LOCAL_MONTH = `EXTRACT(MONTH FROM (s.created_at AT TIME ZONE '${STORE_TZ}'))`;
+const LOCAL_DAY = saleLocalDate('s.created_at');
 const excelService = require('../services/excelService');
 const router = express.Router();
 
@@ -14,6 +21,7 @@ router.use(authenticate, restrictToBusinessStaff);
 const EXPORT_REPORT_TYPES = new Set([
   'daily',
   'monthly',
+  'annual',
   'profit',
   'best-sellers',
   'cashier',
@@ -43,7 +51,7 @@ function sendGeneratedExportFile(res, result) {
 // Daily report
 router.get('/daily', checkPermission('view_reports'), async (req, res) => {
   try {
-    const { date = new Date().toISOString().split('T')[0] } = req.query;
+    const { date = getStoreToday() } = req.query;
 
     let query = `
       SELECT 
@@ -55,60 +63,64 @@ router.get('/daily', checkPermission('view_reports'), async (req, res) => {
         SUM(total_amount - (SELECT SUM(si.quantity * si.buying_price) 
                            FROM sale_items si WHERE si.sale_id = s.id)) as profit
       FROM sales s
-      WHERE date(s.created_at) = ? AND s.status = 'completed' AND s.deleted_at IS NULL
+      WHERE ${LD} = ? AND s.status = 'completed' AND s.deleted_at IS NULL
       AND s.business_id = ?
     `;
 
     const params = [date, req.user.business_id];
 
-    // Cashiers can only see their own reports
-    if (req.user.role === 'cashier') {
-      query += ` AND s.cashier_id = ?`;
-      params.push(req.user.id);
-    }
-
     const summary = await db.prepare(query).get(...params);
 
-    // Get sales by payment method
     let paymentQuery = `
       SELECT payment_method, COUNT(*) as count, SUM(total_amount) as amount
       FROM sales s
-      WHERE date(s.created_at) = ? AND s.status = 'completed' AND s.deleted_at IS NULL
+      WHERE ${LD} = ? AND s.status = 'completed' AND s.deleted_at IS NULL
       AND s.business_id = ?
     `;
 
     const paymentParams = [date, req.user.business_id];
 
-    if (req.user.role === 'cashier') {
-      paymentQuery += ` AND s.cashier_id = ?`;
-      paymentParams.push(req.user.id);
-    }
-
     paymentQuery += ` GROUP BY payment_method`;
 
     const paymentMethods = await db.prepare(paymentQuery).all(...paymentParams);
 
-    // Get hourly sales
     let hourlyQuery = `
       SELECT
-        strftime('%H', created_at) as hour,
+        ${LOCAL_HOUR} as hour,
         COUNT(*) as sales_count,
         SUM(total_amount) as revenue
       FROM sales s
-      WHERE date(s.created_at) = ? AND s.status = 'completed' AND s.deleted_at IS NULL
+      WHERE ${LD} = ? AND s.status = 'completed' AND s.deleted_at IS NULL
       AND s.business_id = ?
     `;
 
     const hourlyParams = [date, req.user.business_id];
 
-    if (req.user.role === 'cashier') {
-      hourlyQuery += ` AND s.cashier_id = ?`;
-      hourlyParams.push(req.user.id);
-    }
-
-    hourlyQuery += ` GROUP BY strftime('%H', created_at) ORDER BY hour`;
+    hourlyQuery += ` GROUP BY ${LOCAL_HOUR} ORDER BY hour`;
 
     const hourlySales = await db.prepare(hourlyQuery).all(...hourlyParams);
+
+    let expensesSummary = { count: 0, total: 0 };
+    try {
+      const exp = await db
+        .prepare(
+          `
+        SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as total
+        FROM expenses
+        WHERE deleted_at IS NULL AND business_id = ? AND expense_date = ?
+      `
+        )
+        .get(req.user.business_id, date);
+      expensesSummary = {
+        count: Number(exp?.count ?? 0),
+        total: Number(exp?.total ?? 0),
+      };
+    } catch (_) {
+      /* expenses table may not exist on very old DBs until migration runs */
+    }
+
+    const revenue = Number(summary.revenue || 0);
+    const expensesTotal = expensesSummary.total;
 
     res.json({
       date,
@@ -118,10 +130,13 @@ router.get('/daily', checkPermission('view_reports'), async (req, res) => {
         gross_sales: summary.gross_sales || 0,
         total_discount: summary.total_discount || 0,
         total_tax: summary.total_tax || 0,
-        profit: summary.profit || 0
+        profit: summary.profit || 0,
+        expenses_count: expensesSummary.count,
+        expenses_total: expensesTotal,
+        net_cash: revenue - expensesTotal,
       },
       paymentMethods,
-      hourlySales
+      hourlySales,
     });
   } catch (error) {
     console.error('Get daily report error:', error);
@@ -144,47 +159,35 @@ router.get('/monthly', checkPermission('view_reports'), async (req, res) => {
         SUM(total_amount - (SELECT SUM(si.quantity * si.buying_price) 
                            FROM sale_items si WHERE si.sale_id = s.id)) as profit
       FROM sales s
-      WHERE strftime('%Y', s.created_at) = ? 
-      AND strftime('%m', s.created_at) = ? 
+      WHERE ${LOCAL_YEAR} = ? 
+      AND ${LOCAL_MONTH} = ? 
       AND s.status = 'completed'
       AND s.deleted_at IS NULL
       AND s.business_id = ?
     `;
 
-    const params = [year.toString(), month.toString().padStart(2, '0'), req.user.business_id];
-
-    // Cashiers can only see their own reports
-    if (req.user.role === 'cashier') {
-      query += ` AND s.cashier_id = ?`;
-      params.push(req.user.id);
-    }
+    const params = [parseInt(year, 10), parseInt(month, 10), req.user.business_id];
 
     const summary = await db.prepare(query).get(...params);
 
-    // Get daily breakdown
     let dailyQuery = `
       SELECT
-        date(created_at) as day,
+        ${LOCAL_DAY} as day,
         COUNT(*) as sales_count,
         SUM(total_amount) as revenue,
         SUM(total_amount - (SELECT SUM(si.quantity * si.buying_price)
                            FROM sale_items si WHERE si.sale_id = s.id)) as profit
       FROM sales s
-      WHERE strftime('%Y', s.created_at) = ?
-      AND strftime('%m', s.created_at) = ?
+      WHERE ${LOCAL_YEAR} = ?
+      AND ${LOCAL_MONTH} = ?
       AND s.status = 'completed'
       AND s.deleted_at IS NULL
       AND s.business_id = ?
     `;
 
-    const dailyParams = [year.toString(), month.toString().padStart(2, '0'), req.user.business_id];
+    const dailyParams = [parseInt(year, 10), parseInt(month, 10), req.user.business_id];
 
-    if (req.user.role === 'cashier') {
-      dailyQuery += ` AND s.cashier_id = ?`;
-      dailyParams.push(req.user.id);
-    }
-
-    dailyQuery += ` GROUP BY date(created_at) ORDER BY day`;
+    dailyQuery += ` GROUP BY ${LOCAL_DAY} ORDER BY day`;
 
     const dailyBreakdown = await db.prepare(dailyQuery).all(...dailyParams);
 
@@ -204,6 +207,90 @@ router.get('/monthly', checkPermission('view_reports'), async (req, res) => {
   } catch (error) {
     console.error('Get monthly report error:', error);
     res.status(500).json({ error: 'Failed to fetch monthly report.' });
+  }
+});
+
+// Annual report (admin / manager only — view_reports)
+router.get('/annual', checkPermission('view_reports'), async (req, res) => {
+  try {
+    const year = parseInt(req.query.year || getStoreToday().slice(0, 4), 10);
+
+    const summary = await db
+      .prepare(
+        `
+      SELECT 
+        COUNT(*) as sales_count,
+        SUM(total_amount) as revenue,
+        SUM(subtotal) as gross_sales,
+        SUM(discount_amount) as total_discount,
+        SUM(tax_amount) as total_tax,
+        SUM(total_amount - (SELECT SUM(si.quantity * si.buying_price) 
+                           FROM sale_items si WHERE si.sale_id = s.id)) as profit
+      FROM sales s
+      WHERE ${LOCAL_YEAR} = ?
+      AND s.status = 'completed'
+      AND s.deleted_at IS NULL
+      AND s.business_id = ?
+    `
+      )
+      .get(year, req.user.business_id);
+
+    const monthlyBreakdown = await db
+      .prepare(
+        `
+      SELECT
+        ${LOCAL_MONTH}::int as month,
+        COUNT(*) as sales_count,
+        SUM(total_amount) as revenue,
+        SUM(total_amount - (SELECT SUM(si.quantity * si.buying_price)
+                           FROM sale_items si WHERE si.sale_id = s.id)) as profit
+      FROM sales s
+      WHERE ${LOCAL_YEAR} = ?
+      AND s.status = 'completed'
+      AND s.deleted_at IS NULL
+      AND s.business_id = ?
+      GROUP BY ${LOCAL_MONTH}
+      ORDER BY month
+    `
+      )
+      .all(year, req.user.business_id);
+
+    let expensesTotal = 0;
+    try {
+      const exp = await db
+        .prepare(
+          `
+        SELECT COALESCE(SUM(amount), 0) as total
+        FROM expenses
+        WHERE deleted_at IS NULL AND business_id = ?
+          AND expense_date >= ? AND expense_date <= ?
+      `
+        )
+        .get(req.user.business_id, `${year}-01-01`, `${year}-12-31`);
+      expensesTotal = Number(exp?.total ?? 0);
+    } catch (_) {
+      /* optional */
+    }
+
+    const revenue = Number(summary.revenue || 0);
+
+    res.json({
+      year,
+      summary: {
+        sales_count: summary.sales_count || 0,
+        revenue: summary.revenue || 0,
+        gross_sales: summary.gross_sales || 0,
+        total_discount: summary.total_discount || 0,
+        total_tax: summary.total_tax || 0,
+        profit: summary.profit || 0,
+        expenses_total: expensesTotal,
+        net_cash: revenue - expensesTotal,
+      },
+      monthlyBreakdown,
+    });
+  } catch (error) {
+    console.error('Get annual report error:', error);
+    res.status(500).json({ error: 'Failed to fetch annual report.' });
   }
 });
 
@@ -230,8 +317,8 @@ router.get('/profit', checkPermission('view_reports'), async (req, res) => {
       JOIN sale_items si ON s.id = si.sale_id
       LEFT JOIN users u ON s.cashier_id = u.id
       LEFT JOIN customers c ON s.customer_id = c.id
-      WHERE date(s.created_at) >= date(?) 
-      AND date(s.created_at) <= date(?)
+      WHERE ${LD} >= ? 
+      AND ${LD} <= ?
       AND s.status = 'completed'
       AND s.deleted_at IS NULL
       AND s.business_id = ?
@@ -291,12 +378,12 @@ router.get('/best-sellers', checkPermission('view_reports'), async (req, res) =>
     const params = [req.user.business_id];
 
     if (from) {
-      query += ` AND date(s.created_at) >= date(?)`;
+      query += ` AND ${LD} >= ?`;
       params.push(from);
     }
 
     if (to) {
-      query += ` AND date(s.created_at) <= date(?)`;
+      query += ` AND ${LD} <= ?`;
       params.push(to);
     }
 
@@ -364,12 +451,12 @@ router.get('/cashier', checkPermission('view_reports'), async (req, res) => {
     }
 
     if (from) {
-      query += ` AND date(s.created_at) >= date(?)`;
+      query += ` AND ${LD} >= ?`;
       params.push(from);
     }
 
     if (to) {
-      query += ` AND date(s.created_at) <= date(?)`;
+      query += ` AND ${LD} <= ?`;
       params.push(to);
     }
 
@@ -480,14 +567,14 @@ router.get('/export-data', checkPermission('export_reports'), async (req, res) =
       case 'daily': {
         let dailyQuery = `
           SELECT 
-            date(s.created_at) as date,
+            ${LOCAL_DAY} as date,
             COUNT(*) as sales_count,
             SUM(s.total_amount) as revenue,
             SUM(s.total_amount - (SELECT COALESCE(SUM(si.quantity * si.buying_price), 0)
                                FROM sale_items si WHERE si.sale_id = s.id)) as profit
           FROM sales s
-          WHERE date(s.created_at) >= date(?) 
-          AND date(s.created_at) <= date(?)
+          WHERE ${LD} >= ? 
+          AND ${LD} <= ?
           AND s.status = 'completed' 
           AND s.deleted_at IS NULL
           AND s.business_id = ?
@@ -495,38 +582,30 @@ router.get('/export-data', checkPermission('export_reports'), async (req, res) =
 
         const dailyParams = [from, to, req.user.business_id];
 
-        if (req.user.role === 'cashier') {
-          dailyQuery += ` AND s.cashier_id = ?`;
-          dailyParams.push(req.user.id);
-        }
-
-        dailyQuery += ` GROUP BY date(s.created_at) ORDER BY date`;
+        dailyQuery += ` GROUP BY ${LOCAL_DAY} ORDER BY date`;
 
         data.dailySales = await db.prepare(dailyQuery).all(...dailyParams);
         break;
       }
 
       case 'monthly': {
+        const monthLabel = `to_char((s.created_at AT TIME ZONE '${STORE_TZ}'), 'YYYY-MM')`;
         let monthlyQuery = `
           SELECT 
-            strftime('%Y-%m', s.created_at) as month,
+            ${monthLabel} as month,
             COUNT(*) as sales_count,
             SUM(s.total_amount) as revenue,
             SUM(s.total_amount - (SELECT COALESCE(SUM(si.quantity * si.buying_price), 0)
                                FROM sale_items si WHERE si.sale_id = s.id)) as profit
           FROM sales s
-          WHERE date(s.created_at) >= date(?) 
-          AND date(s.created_at) <= date(?)
+          WHERE ${LD} >= ? 
+          AND ${LD} <= ?
           AND s.status = 'completed' 
           AND s.deleted_at IS NULL
           AND s.business_id = ?
         `;
         const monthlyParams = [from, to, req.user.business_id];
-        if (req.user.role === 'cashier') {
-          monthlyQuery += ` AND s.cashier_id = ?`;
-          monthlyParams.push(req.user.id);
-        }
-        monthlyQuery += ` GROUP BY strftime('%Y-%m', s.created_at) ORDER BY month`;
+        monthlyQuery += ` GROUP BY ${monthLabel} ORDER BY month`;
         const rows = await db.prepare(monthlyQuery).all(...monthlyParams);
         data.monthlySales = rows.map((r) => {
           const revenue = Number(r.revenue) || 0;
@@ -557,8 +636,8 @@ router.get('/export-data', checkPermission('export_reports'), async (req, res) =
           JOIN sale_items si ON s.id = si.sale_id
           LEFT JOIN users u ON s.cashier_id = u.id
           LEFT JOIN customers c ON s.customer_id = c.id
-          WHERE date(s.created_at) >= date(?) 
-          AND date(s.created_at) <= date(?)
+          WHERE ${LD} >= ? 
+          AND ${LD} <= ?
           AND s.status = 'completed' 
           AND s.deleted_at IS NULL
           AND s.business_id = ?
@@ -607,8 +686,8 @@ router.get('/export-data', checkPermission('export_reports'), async (req, res) =
           JOIN sales s ON si.sale_id = s.id
           WHERE s.status = 'completed' AND s.deleted_at IS NULL AND p.deleted_at IS NULL
           AND s.business_id = ?
-          AND date(s.created_at) >= date(?)
-          AND date(s.created_at) <= date(?)
+          AND ${LD} >= ?
+          AND ${LD} <= ?
         `;
         const bestParams = [req.user.business_id, from, to];
         if (req.user.role === 'cashier') {
@@ -653,8 +732,8 @@ router.get('/export-data', checkPermission('export_reports'), async (req, res) =
             AND s.status = 'completed'
             AND s.deleted_at IS NULL
             AND s.business_id = ?
-            AND date(s.created_at) >= date(?)
-            AND date(s.created_at) <= date(?)
+            AND ${LD} >= ?
+            AND ${LD} <= ?
           WHERE u.role = 'cashier' AND u.deleted_at IS NULL AND u.business_id = ?
         `;
         const cashParams = [req.user.business_id, from, to, req.user.business_id];
@@ -695,8 +774,8 @@ router.get('/export-data', checkPermission('export_reports'), async (req, res) =
           FROM sales s
           LEFT JOIN users u ON s.cashier_id = u.id
           LEFT JOIN customers c ON s.customer_id = c.id
-          WHERE date(s.created_at) >= date(?) 
-          AND date(s.created_at) <= date(?)
+          WHERE ${LD} >= ? 
+          AND ${LD} <= ?
           AND s.status = 'completed' 
           AND s.deleted_at IS NULL
           AND s.business_id = ?
@@ -739,8 +818,8 @@ router.get('/export-data', checkPermission('export_reports'), async (req, res) =
             AND s.status = 'completed'
             AND s.deleted_at IS NULL
             AND s.business_id = ?
-            AND date(s.created_at) >= date(?)
-            AND date(s.created_at) <= date(?)
+            AND ${LD} >= ?
+            AND ${LD} <= ?
           WHERE p.deleted_at IS NULL AND p.business_id = ?
         `;
 

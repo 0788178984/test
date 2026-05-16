@@ -9,9 +9,10 @@ import {
   DollarSign,
   BarChart3,
   Eye,
+  Wallet,
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
-import { salesAPI, productsAPI, inventoryAPI, customersAPI } from '../api/client';
+import { salesAPI, productsAPI, inventoryAPI, customersAPI, expensesAPI } from '../api/client';
 import { formatCurrency, formatDate } from '../api/client';
 import Card from '../components/ui/Card';
 
@@ -22,6 +23,7 @@ const Dashboard = () => {
   const [stats, setStats] = useState({
     todaySales: 0,
     todayRevenue: 0,
+    todayExpenses: 0,
     totalProducts: 0,
     lowStockItems: 0,
     totalCustomers: 0,
@@ -38,14 +40,26 @@ const Dashboard = () => {
       
       // Fetch today's sales summary
       const salesResponse = await salesAPI.getTodaySummary();
+      const today = salesResponse.data.date;
       const productsResponse = await productsAPI.getAll({ limit: 1 });
       const lowStockResponse = await inventoryAPI.getLowStock();
       const customersResponse = await customersAPI.getAll({ limit: 1 });
-      const recentSalesResponse = await salesAPI.getAll({ limit: 5 });
+      const recentSalesResponse = await salesAPI.getAll({ from: today, to: today, limit: 5 });
+
+      let todayExpenses = 0;
+      if (hasRole('admin', 'manager')) {
+        try {
+          const expRes = await expensesAPI.getTodaySummary();
+          todayExpenses = expRes.data.total || 0;
+        } catch {
+          todayExpenses = 0;
+        }
+      }
 
       setStats({
         todaySales: salesResponse.data.sales_count || 0,
         todayRevenue: salesResponse.data.revenue || 0,
+        todayExpenses,
         totalProducts: productsResponse.data.pagination?.total || 0,
         lowStockItems: lowStockResponse.data.lowStockItems?.length || 0,
         totalCustomers: customersResponse.data.pagination?.total || 0,
@@ -75,6 +89,18 @@ const Dashboard = () => {
       change: '+8%',
       changeType: 'increase'
     },
+    ...(hasRole('admin', 'manager')
+      ? [
+          {
+            title: "Today's Expenses",
+            value: formatCurrency(stats.todayExpenses),
+            icon: Wallet,
+            color: 'red',
+            change: '',
+            changeType: 'decrease',
+          },
+        ]
+      : []),
     {
       title: 'Total Products',
       value: stats.totalProducts,
@@ -151,7 +177,7 @@ const Dashboard = () => {
       {/* Recent Sales Table */}
       <Card>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Recent Sales</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Today&apos;s Sales</h2>
           <button className="text-primary-600 hover:text-primary-700 text-sm font-medium">
             View All
           </button>
@@ -222,6 +248,18 @@ const Dashboard = () => {
               <div className="min-w-0">
                 <p className="font-medium text-gray-900">Add Customer</p>
                 <p className="text-sm text-gray-500">Customer management</p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => navigate('/expenses')}
+              className="flex items-center space-x-3 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-red-400 hover:bg-red-50 transition-all text-left"
+            >
+              <Wallet className="w-6 h-6 shrink-0 text-red-600" />
+              <div className="min-w-0">
+                <p className="font-medium text-gray-900">Record expense</p>
+                <p className="text-sm text-gray-500">Money going out today</p>
               </div>
             </button>
 
