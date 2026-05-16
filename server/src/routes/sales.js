@@ -3,6 +3,7 @@ const { authenticate } = require('../middleware/auth');
 const { restrictToBusinessStaff } = require('../middleware/tenantContext');
 const { checkPermission } = require('../middleware/roleCheck');
 const db = require('../db/connection');
+const { newId } = require('../db/ids');
 const { getStoreToday, saleLocalDate } = require('../utils/storeTime');
 const router = express.Router();
 
@@ -111,39 +112,32 @@ router.post('/', checkPermission('make_sale'), async (req, res) => {
 
     // Generate sale number
     const saleNumber = await generateSaleNumber(req.user.business_id);
+    const saleId = newId('sale');
 
-    const saleId = await db.transaction(async (tx) => {
+    await db.transaction(async (tx) => {
       // Create sale record
       await tx.prepare(`
         INSERT INTO sales (
-          sale_number, cashier_id, customer_id, subtotal, discount_amount,
+          id, sale_number, cashier_id, customer_id, subtotal, discount_amount,
           discount_reason, tax_amount, total_amount, amount_paid, change_given,
           payment_method, payment_reference, notes, business_id, created_at, updated_at, sync_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 'pending')
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 'pending')
       `).run(
-        saleNumber, req.user.id, customer_id || null, subtotal, discount_amount,
+        saleId, saleNumber, req.user.id, customer_id || null, subtotal, discount_amount,
         discount_reason, taxAmount, totalAmount, paid, change,
         payment_method, payment_reference || null, notes || null, req.user.business_id
       );
-
-      const insertedSale = await tx.prepare(
-        `SELECT id FROM sales WHERE sale_number = ? AND business_id = ?`
-      ).get(saleNumber, req.user.business_id);
-      const saleId = insertedSale?.id;
-      if (!saleId) {
-        throw new Error('Failed to resolve sale id after insert');
-      }
 
       // Insert sale items and update stock
       for (const item of validatedItems) {
         // Insert sale item
         await tx.prepare(`
           INSERT INTO sale_items (
-            sale_id, product_id, product_name, quantity, unit_price,
+            id, sale_id, product_id, product_name, quantity, unit_price,
             buying_price, line_total, created_at, sync_status
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), 'pending')
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), 'pending')
         `).run(
-          saleId, item.product_id, item.product_name, item.quantity,
+          newId('si'), saleId, item.product_id, item.product_name, item.quantity,
           item.unit_price, item.buying_price, item.line_total
         );
 
@@ -169,9 +163,9 @@ router.post('/', checkPermission('make_sale'), async (req, res) => {
           // Add loyalty transaction
           await tx.prepare(`
             INSERT INTO loyalty_transactions (
-              customer_id, sale_id, points_change, reason, business_id, created_at, sync_status
-            ) VALUES (?, ?, ?, ?, ?, datetime('now'), 'pending')
-          `).run(customer_id, saleId, pointsEarned, `Purchase of UGX ${totalAmount.toLocaleString()}`, req.user.business_id);
+              id, customer_id, sale_id, points_change, reason, business_id, created_at, sync_status
+            ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), 'pending')
+          `).run(newId('loy'), customer_id, saleId, pointsEarned, `Purchase of UGX ${totalAmount.toLocaleString()}`, req.user.business_id);
 
           // Update customer points and stats
           await tx.prepare(`
@@ -187,7 +181,6 @@ router.post('/', checkPermission('make_sale'), async (req, res) => {
         }
       }
 
-      return saleId;
     });
 
     res.status(201).json({
@@ -459,9 +452,9 @@ router.post('/:id/void', checkPermission('void_sale'), async (req, res) => {
           // Add negative loyalty transaction
           await tx.prepare(`
             INSERT INTO loyalty_transactions (
-              customer_id, sale_id, points_change, reason, business_id, created_at, sync_status
-            ) VALUES (?, ?, ?, ?, ?, datetime('now'), 'pending')
-          `).run(customerInfo.customer_id, sale.id, -pointsToReverse, `Sale voided: ${sale.id}`, req.user.business_id);
+              id, customer_id, sale_id, points_change, reason, business_id, created_at, sync_status
+            ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), 'pending')
+          `).run(newId('loy'), customerInfo.customer_id, sale.id, -pointsToReverse, `Sale voided: ${sale.id}`, req.user.business_id);
 
           // Update customer points
           await tx.prepare(`

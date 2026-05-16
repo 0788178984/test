@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { syncAPI } from '../api/client';
+import { useAuthStore } from './authStore';
 
 const useSyncStore = create((set, get) => ({
   // State
@@ -36,6 +37,12 @@ const useSyncStore = create((set, get) => ({
   },
 
   checkSyncStatus: async () => {
+    const role = useAuthStore.getState().user?.role;
+    if (role === 'cashier') {
+      set({ syncStatus: null });
+      return;
+    }
+
     try {
       const response = await syncAPI.getStatus();
       set({ 
