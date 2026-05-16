@@ -19,7 +19,7 @@ class SyncEngine {
   async initialize() {
     try {
       // Get sync settings
-      const intervalSetting = (await db.prepare(`
+      const intervalSetting = await db.prepare(`
         SELECT value FROM settings WHERE key = 'sync_interval_seconds'
       `).get();
       
@@ -407,7 +407,7 @@ class SyncEngine {
       const status = {};
       
       for (const table of this.SYNC_TABLES) {
-        const pending = await db.prepare(`
+        const pending = (await db.prepare(`
           SELECT COUNT(*) as count FROM ${table} 
           WHERE sync_status = 'pending' AND deleted_at IS NULL
         `).get()).count;

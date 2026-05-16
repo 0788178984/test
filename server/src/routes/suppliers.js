@@ -161,14 +161,14 @@ router.delete('/:id', checkPermission('manage_suppliers'), async (req, res) => {
       return res.status(404).json({ error: 'Supplier not found.' });
     }
 
-    const productCount = await db
+    const productCount = (await db
       .prepare(
         `
       SELECT COUNT(*) as count FROM products
       WHERE supplier_id = ? AND deleted_at IS NULL AND business_id = ?
     `
       )
-      .get(req.params.id, bid(req)).count;
+      .get(req.params.id, bid(req))).count;
 
     if (productCount > 0) {
       return res.status(400).json({

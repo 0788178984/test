@@ -143,7 +143,7 @@ router.post(
           .prepare(
             `SELECT id, role, business_id FROM users WHERE id = ? AND deleted_at IS NULL`
           )
-          .get(target_user_id);
+          .get(target_user_id));
         if (!target || target.business_id !== req.user.business_id) {
           return res.status(400).json({ error: 'Invalid recipient.' });
         }
@@ -256,11 +256,11 @@ router.post('/:id/read', authenticate, async (req, res) => {
   try {
     let notification;
     if (req.user.role === 'developer') {
-      notification = await db
+      notification = (await db
         .prepare(
           `SELECT id FROM notifications WHERE id = ? AND target_user_id = ?`
         )
-        .get(req.params.id, req.user.id);
+        .get(req.params.id, req.user.id));
     } else {
       notification = await db
         .prepare(
@@ -279,7 +279,7 @@ router.post('/:id/read', authenticate, async (req, res) => {
 
     let unreadCount;
     if (req.user.role === 'developer') {
-      unreadCount = await db
+      unreadCount = (await db
         .prepare(
           `SELECT COUNT(*) as count FROM notifications WHERE target_user_id = ? AND is_read = 0`
         )
@@ -308,7 +308,7 @@ router.post('/:id/read', authenticate, async (req, res) => {
 router.post('/read-all', authenticate, async (req, res) => {
   try {
     if (req.user.role === 'developer') {
-      (await db.prepare(
+      await db.prepare(
         `UPDATE notifications SET is_read = 1, sync_status = 'pending' WHERE target_user_id = ? AND is_read = 0`
       ).run(req.user.id);
     } else {
@@ -338,7 +338,7 @@ router.get('/count', authenticate, async (req, res) => {
   try {
     let count;
     if (req.user.role === 'developer') {
-      count = await db
+      count = (await db
         .prepare(
           `SELECT COUNT(*) as count FROM notifications WHERE target_user_id = ? AND is_read = 0`
         )

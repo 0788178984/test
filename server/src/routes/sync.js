@@ -57,13 +57,13 @@ router.post('/push', authorize('admin'), async (req, res) => {
             WHERE si.id = ? AND s.business_id = ?
           `
             )
-            .get(record.id, req.user.business_id);
+            .get(record.id, req.user.business_id));
         } else if (TABLES_BUSINESS_NO_SOFT_DELETE.has(table)) {
-          existing = await db
+          existing = (await db
             .prepare(
               `SELECT id, created_at AS updated_at, sync_status FROM ${table} WHERE id = ? AND business_id = ?`
             )
-            .get(record.id, req.user.business_id);
+            .get(record.id, req.user.business_id));
         } else if (TABLES_WITH_BUSINESS_ID.has(table)) {
           existing = await db
             .prepare(`SELECT id, updated_at, sync_status FROM ${table} WHERE id = ? AND business_id = ?`)
@@ -207,7 +207,7 @@ router.get('/status', authorize('admin', 'manager'), async (req, res) => {
       const b = req.user.business_id;
 
       if (table === 'sale_items') {
-        pending = await db
+        pending = (await db
           .prepare(
             `
           SELECT COUNT(*) as count FROM sale_items si
