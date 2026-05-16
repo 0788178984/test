@@ -21,6 +21,10 @@ function translateSql(sql) {
   s = s.replace(/INSERT\s+OR\s+IGNORE\s+INTO/gi, 'INSERT INTO');
   s = s.replace(/INSERT\s+OR\s+REPLACE\s+INTO/gi, 'INSERT INTO');
 
+  // SQLite ? placeholders → PostgreSQL $1, $2, …
+  let n = 0;
+  s = s.replace(/\?/g, () => `$${++n}`);
+
   return s;
 }
 

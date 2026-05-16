@@ -5,11 +5,12 @@ import { authAPI } from '../api/client';
 function formatAuthError(error, fallback) {
   if (!error?.response) {
     if (error?.code === 'ECONNABORTED') {
-      return 'Request timed out. Is the server running?';
+      return 'Request timed out. The server may be waking up (Render free tier) — wait 30s and try again.';
     }
-    return 'Cannot reach the server. Start the API on port 4000 (e.g. npm run server:dev from the project root).';
+    return 'Cannot reach the server. Check your connection or open the deployed app URL (not localhost unless you ran npm run dev).';
   }
-  const raw = error.response?.data?.error ?? error.message ?? fallback;
+  const data = error.response?.data;
+  const raw = data?.error ?? data?.detail ?? error.message ?? fallback;
   return typeof raw === 'string' ? raw : fallback;
 }
 

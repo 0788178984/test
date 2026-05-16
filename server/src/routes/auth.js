@@ -115,7 +115,9 @@ router.post('/login', async (req, res) => {
     });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ error: 'Login failed.' });
+    const detail =
+      process.env.NODE_ENV !== 'production' ? error.message : undefined;
+    res.status(500).json({ error: 'Login failed.', ...(detail && { detail }) });
   }
 });
 
