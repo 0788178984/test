@@ -290,11 +290,11 @@ router.post('/:id/adjust-stock', checkPermission('adjust_stock'), async (req, re
       // Record stock adjustment
       await tx.prepare(`
         INSERT INTO stock_adjustments (
-          product_id, user_id, adjustment_type, quantity_before, quantity_change,
+          id, product_id, user_id, adjustment_type, quantity_before, quantity_change,
           quantity_after, reason, supplier_id, cost_per_unit, business_id, created_at, sync_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), 'pending')
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), 'pending')
       `).run(
-        req.params.id, req.user.id, adjustment_type, quantityBefore,
+        newId('adj'), req.params.id, req.user.id, adjustment_type, quantityBefore,
         quantity_change, quantityAfter, reason, supplier_id, cost_per_unit,
         req.user.business_id
       );

@@ -2,6 +2,7 @@ const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
 const { restrictToBusinessStaff } = require('../middleware/tenantContext');
 const db = require('../db/connection');
+const { newId } = require('../db/ids');
 const router = express.Router();
 
 const clients = new Map();
@@ -364,14 +365,15 @@ const createNotification = async (notificationData) => {
       .prepare(
         `
       INSERT INTO notifications (
-        type, title, message, severity, target_role, target_user_id,
+        id, type, title, message, severity, target_role, target_user_id,
         business_id, sender_user_id,
         channels, meta, created_at, sync_status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), 'pending')
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), 'pending')
       RETURNING *
     `
       )
       .get(
+        notificationData.id || newId('notif'),
         notificationData.type,
         notificationData.title,
         notificationData.message,

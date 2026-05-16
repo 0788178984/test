@@ -261,10 +261,10 @@ router.post('/:id/redeem-points', checkPermission('manage_customers'), async (re
       await tx.prepare(
         `
         INSERT INTO loyalty_transactions (
-          customer_id, points_change, reason, business_id, created_at, sync_status
-        ) VALUES (?, ?, ?, ?, datetime('now'), 'pending')
+          id, customer_id, points_change, reason, business_id, created_at, sync_status
+        ) VALUES (?, ?, ?, ?, ?, datetime('now'), 'pending')
       `
-      ).run(req.params.id, -points, reason || `Redeemed ${points} points`, bid(req));
+      ).run(newId('loy'), req.params.id, -points, reason || `Redeemed ${points} points`, bid(req));
 
       await tx.prepare(
         `

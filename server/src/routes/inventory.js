@@ -3,6 +3,7 @@ const { authenticate } = require('../middleware/auth');
 const { restrictToBusinessStaff } = require('../middleware/tenantContext');
 const { checkPermission } = require('../middleware/roleCheck');
 const db = require('../db/connection');
+const { newId } = require('../db/ids');
 const router = express.Router();
 
 router.use(authenticate, restrictToBusinessStaff);
@@ -184,11 +185,12 @@ router.post('/restock', checkPermission('adjust_stock'), async (req, res) => {
       await tx.prepare(
         `
         INSERT INTO stock_adjustments (
-          product_id, user_id, adjustment_type, quantity_before, quantity_change,
+          id, product_id, user_id, adjustment_type, quantity_before, quantity_change,
           quantity_after, reason, supplier_id, cost_per_unit, business_id, created_at, sync_status
-        ) VALUES (?, ?, 'restock', ?, ?, ?, ?, ?, ?, ?, datetime('now'), 'pending')
+        ) VALUES (?, ?, ?, 'restock', ?, ?, ?, ?, ?, ?, ?, datetime('now'), 'pending')
       `
       ).run(
+        newId('adj'),
         product_id,
         req.user.id,
         quantityBefore,
