@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Wallet, Plus, Edit, Trash2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { useAuthStore } from '../store/authStore';
 import { expensesAPI } from '../api/client';
 import { formatCurrency, formatDate, handleApiError } from '../api/client';
 import Button from '../components/ui/Button';
@@ -40,7 +39,6 @@ const defaultForm = () => ({
 });
 
 const Expenses = () => {
-  const { hasRole } = useAuthStore();
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -164,18 +162,6 @@ const Expenses = () => {
     { header: 'Recorded by', accessor: 'recorded_by_name', render: (row) => row.recorded_by_name || '?' },
     { header: 'Actions', accessor: 'actions', cellClassName: 'text-right', render: renderActions },
   ];
-
-  if (!hasRole('admin', 'manager')) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <Wallet className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-          <h2 className="text-xl font-semibold text-gray-900">Access Denied</h2>
-          <p className="text-gray-600">Only admin and manager can record expenses.</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">

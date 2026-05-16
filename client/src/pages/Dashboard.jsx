@@ -47,7 +47,7 @@ const Dashboard = () => {
       const recentSalesResponse = await salesAPI.getAll({ from: today, to: today, limit: 5 });
 
       let todayExpenses = 0;
-      if (hasRole('admin', 'manager')) {
+      if (hasRole('admin', 'manager', 'cashier')) {
         try {
           const expRes = await expensesAPI.getTodaySummary();
           todayExpenses = expRes.data.total || 0;
@@ -89,7 +89,7 @@ const Dashboard = () => {
       change: '+8%',
       changeType: 'increase'
     },
-    ...(hasRole('admin', 'manager')
+    ...(hasRole('admin', 'manager', 'cashier')
       ? [
           {
             title: "Today's Expenses",
@@ -221,6 +221,23 @@ const Dashboard = () => {
           </div>
         )}
       </Card>
+
+      {hasRole('cashier') && !hasRole('admin', 'manager') && (
+        <Card>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
+          <button
+            type="button"
+            onClick={() => navigate('/expenses')}
+            className="flex w-full max-w-md items-center space-x-3 rounded-lg border-2 border-dashed border-gray-300 p-4 text-left transition-all hover:border-red-400 hover:bg-red-50"
+          >
+            <Wallet className="h-6 w-6 shrink-0 text-red-600" />
+            <div className="min-w-0">
+              <p className="font-medium text-gray-900">Record expense</p>
+              <p className="text-sm text-gray-500">Money going out today</p>
+            </div>
+          </button>
+        </Card>
+      )}
 
       {/* Quick Actions */}
       {hasRole('admin', 'manager') && (

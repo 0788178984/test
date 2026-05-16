@@ -137,7 +137,7 @@ const Layout = () => {
       title: 'Expenses',
       icon: Wallet,
       path: '/expenses',
-      roles: ['admin', 'manager'],
+      roles: ['admin', 'manager', 'cashier'],
     },
     {
       title: 'Reports',

@@ -32,7 +32,7 @@ const checkPermission = (requiredPermission) => {
       const cashierPermissions = [
         'make_sale', 'apply_small_discount', 'view_own_sales',
         'view_products', 'view_notifications', 'view_inventory',
-        'manage_customers'
+        'manage_customers', 'view_expenses', 'manage_expenses'
       ];
       
       // Special case: cashiers can apply small discounts only
