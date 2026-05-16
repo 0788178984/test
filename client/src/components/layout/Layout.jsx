@@ -24,6 +24,7 @@ import {
 import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../../store/authStore';
 import { useSyncStore } from '../../store/syncStore';
+import { storeHeaderLabel, storeReceiptBranding } from '../../utils/storeBrand';
 import { supportAPI } from '../../api/client';
 import NotificationBell from '../notifications/NotificationBell';
 import Modal from '../ui/Modal';
@@ -51,6 +52,8 @@ const Layout = () => {
   const getLastSyncText = useSyncStore((s) => s.getLastSyncText);
   const hasPendingChanges = useSyncStore((s) => s.hasPendingChanges);
   const initializeSync = useSyncStore((s) => s.initializeSync);
+  const headerCode = storeHeaderLabel(user);
+  const { name: storeName } = storeReceiptBranding(user);
 
   useEffect(() => {
     const cleanup = initializeSync();
@@ -379,7 +382,12 @@ const Layout = () => {
         ].join(' ')}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-gray-200 p-4">
-          <h1 className="text-xl font-bold text-gray-800">SuperMkt</h1>
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-xl font-bold text-gray-800">{headerCode}</h1>
+            {storeName && storeName !== headerCode ? (
+              <p className="truncate text-xs text-gray-500">{storeName}</p>
+            ) : null}
+          </div>
           <button
             type="button"
             onClick={() => setSidebarOpen(false)}
@@ -446,9 +454,12 @@ const Layout = () => {
               >
                 {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
               </button>
-              <span className="truncate text-sm font-medium text-gray-500 lg:hidden">
-                Menu
-              </span>
+              <div className="min-w-0 lg:hidden">
+                <p className="truncate text-sm font-bold text-gray-800">{headerCode}</p>
+                {storeName && storeName !== headerCode ? (
+                  <p className="truncate text-xs text-gray-500">{storeName}</p>
+                ) : null}
+              </div>
             </div>
 
             <div className="flex shrink-0 items-center gap-4 sm:gap-6">

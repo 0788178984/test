@@ -1,12 +1,17 @@
 import React from 'react';
 import { X, Printer, Smartphone, MessageCircle } from 'lucide-react';
 import { formatCurrency, formatDate } from '../../api/client';
+import { useAuthStore } from '../../store/authStore';
+import { storeReceiptBranding } from '../../utils/storeBrand';
 import Button from '../ui/Button';
 
 /**
  * Receipt summary — render inside parent <Modal> only.
  */
 const ReceiptModal = ({ sale, onClose, onPrint, onSendSMS, onSendWhatsApp }) => {
+  const user = useAuthStore((s) => s.user);
+  const { name: storeName, code: storeCode } = storeReceiptBranding(user);
+
   if (!sale) return null;
 
   const items = (sale.items || []).map((item) => ({
@@ -33,8 +38,10 @@ const ReceiptModal = ({ sale, onClose, onPrint, onSendSMS, onSendWhatsApp }) => 
 
       <div className="receipt rounded-lg bg-white p-6 shadow-inner">
         <div className="receipt-header mb-4 text-center">
-          <h1 className="text-lg font-bold">SuperMkt</h1>
-          <p className="text-sm text-gray-600">Uganda Supermarket</p>
+          <h1 className="text-lg font-bold">{storeName}</h1>
+          {storeCode ? (
+            <p className="text-base font-semibold tracking-wide text-gray-800">Code: {storeCode}</p>
+          ) : null}
         </div>
 
         <div className="mb-4 space-y-1 text-sm">

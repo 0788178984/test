@@ -57,7 +57,7 @@ class PrintService {
         WHERE sale_id = ?
       `).all(saleId);
 
-      const storeName = await this.getStoreName();
+      const branding = await this.getBusinessBranding(sale.business_id);
       const storeAddress = await this.getStoreAddress();
       const storePhone = await this.getStorePhone();
       const storeTin = await this.getStoreTin();
@@ -67,7 +67,8 @@ class PrintService {
         await this.printThermalReceipt({
           sale,
           items,
-          storeName,
+          storeName: branding.displayName,
+          storeCode: branding.businessCode,
           storeAddress,
           storePhone,
           storeTin,
@@ -81,7 +82,8 @@ class PrintService {
           receiptData: await this.formatReceiptForBrowser({
             sale,
             items,
-            storeName,
+            storeName: branding.displayName,
+            storeCode: branding.businessCode,
             storeAddress,
             storePhone,
             storeTin,
@@ -104,7 +106,7 @@ class PrintService {
   }
 
   async printThermalReceipt(data) {
-    const { sale, items, storeName, storeAddress, storePhone, storeTin } = data;
+    const { sale, items, storeName, storeCode, storeAddress, storePhone, storeTin } = data;
     let customerPoints = null;
     if (sale.customer_id) {
       const customer = await db.prepare(`
@@ -122,7 +124,11 @@ class PrintService {
           .style('b')
           .size(1, 1)
           .text(storeName.toUpperCase())
-          .style('normal')
+          .style('normal');
+        if (storeCode) {
+          this.printer.style('b').text(`Code: ${storeCode}`).style('normal');
+        }
+        this.printer
           .text(storeAddress)
           .text(`Tel: ${storePhone}`)
           .text(`TIN: ${storeTin}`)
@@ -194,7 +200,7 @@ class PrintService {
   }
 
   async formatReceiptForBrowser(data) {
-    const { sale, items, storeName, storeAddress, storePhone, storeTin } = data;
+    const { sale, items, storeName, storeCode, storeAddress, storePhone, storeTin } = data;
     const loyaltyPoints = Math.round(sale.total_amount * 0.01);
     let customerPoints = null;
     if (sale.customer_id) {
@@ -208,6 +214,7 @@ class PrintService {
       <div style="font-family: monospace; max-width: 400px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 10px;">
           <h2 style="margin: 0; font-size: 18px;">${storeName.toUpperCase()}</h2>
+          ${storeCode ? `<p style="margin: 4px 0; font-size: 14px; font-weight: bold;">Code: ${storeCode}</p>` : ''}
           <p style="margin: 2px 0; font-size: 12px;">${storeAddress}</p>
           <p style="margin: 2px 0; font-size: 12px;">Tel: ${storePhone}</p>
           <p style="margin: 2px 0; font-size: 12px;">TIN: ${storeTin}</p>
@@ -509,6 +516,24 @@ class PrintService {
   }
 
   // Utility methods
+  async getBusinessBranding(businessId) {
+    const settingsName = await this.getStoreName();
+    if (!businessId) {
+      return { displayName: settingsName, businessCode: null };
+    }
+    const biz = await db
+      .prepare(`SELECT name, business_code FROM businesses WHERE id = ?`)
+      .get(businessId);
+    const displayName =
+      biz?.name ||
+      (settingsName && settingsName !== 'My Supermarket' ? settingsName : null) ||
+      settingsName;
+    return {
+      displayName,
+      businessCode: biz?.business_code ? String(biz.business_code).trim().toUpperCase() : null,
+    };
+  }
+
   async getStoreName() {
     const storeName = await db.prepare(`
       SELECT value FROM settings WHERE key = 'store_name'
