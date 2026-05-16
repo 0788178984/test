@@ -307,8 +307,8 @@ router.get('/best-sellers', checkPermission('view_reports'), async (req, res) =>
     }
 
     query += `
-      GROUP BY si.product_id 
-      ORDER BY total_quantity DESC 
+      GROUP BY si.product_id, p.id, p.name, p.category
+      ORDER BY total_quantity DESC
       LIMIT ?
     `;
 
@@ -616,8 +616,8 @@ router.get('/export-data', checkPermission('export_reports'), async (req, res) =
           bestParams.push(req.user.id);
         }
         bestQuery += `
-          GROUP BY si.product_id 
-          ORDER BY total_quantity DESC 
+          GROUP BY si.product_id, p.id, p.name, p.category
+          ORDER BY total_quantity DESC
           LIMIT 100
         `;
         const bestSellers = await db.prepare(bestQuery).all(...bestParams);

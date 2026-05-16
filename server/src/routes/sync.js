@@ -207,108 +207,128 @@ router.get('/status', authorize('admin', 'manager'), async (req, res) => {
       const b = req.user.business_id;
 
       if (table === 'sale_items') {
-        pending = (await db
-          .prepare(
-            `
+        pending = Number(
+          (await db
+            .prepare(
+              `
           SELECT COUNT(*) as count FROM sale_items si
           JOIN sales s ON s.id = si.sale_id
           WHERE si.sync_status = 'pending' AND s.business_id = ?
         `
-          )
-          .get(b)).count;
-        synced = (await db
-          .prepare(
-            `
+            )
+            .get(b))?.count ?? 0
+        );
+        synced = Number(
+          (await db
+            .prepare(
+              `
           SELECT COUNT(*) as count FROM sale_items si
           JOIN sales s ON s.id = si.sale_id
           WHERE si.sync_status = 'synced' AND s.business_id = ?
         `
-          )
-          .get(b)).count;
-        lastSync = (await db
-          .prepare(
-            `
+            )
+            .get(b))?.count ?? 0
+        );
+        lastSync =
+          (await db
+            .prepare(
+              `
           SELECT MAX(si.created_at) as last_sync FROM sale_items si
           JOIN sales s ON s.id = si.sale_id
           WHERE si.sync_status = 'synced' AND s.business_id = ?
         `
-          )
-          .get(b)).last_sync;
+            )
+            .get(b))?.last_sync ?? null;
       } else if (TABLES_BUSINESS_NO_SOFT_DELETE.has(table)) {
-        pending = (await db
-          .prepare(
-            `
+        pending = Number(
+          (await db
+            .prepare(
+              `
           SELECT COUNT(*) as count FROM ${table}
           WHERE sync_status = 'pending' AND business_id = ?
         `
-          )
-          .get(b)).count;
-        synced = (await db
-          .prepare(
-            `
+            )
+            .get(b))?.count ?? 0
+        );
+        synced = Number(
+          (await db
+            .prepare(
+              `
           SELECT COUNT(*) as count FROM ${table}
           WHERE sync_status = 'synced' AND business_id = ?
         `
-          )
-          .get(b)).count;
-        lastSync = (await db
-          .prepare(
-            `
+            )
+            .get(b))?.count ?? 0
+        );
+        lastSync =
+          (await db
+            .prepare(
+              `
           SELECT MAX(created_at) as last_sync FROM ${table}
           WHERE sync_status = 'synced' AND business_id = ?
         `
-          )
-          .get(b)).last_sync;
+            )
+            .get(b))?.last_sync ?? null;
       } else if (TABLES_WITH_BUSINESS_ID.has(table)) {
-        pending = (await db
-          .prepare(
-            `
+        pending = Number(
+          (await db
+            .prepare(
+              `
           SELECT COUNT(*) as count FROM ${table}
           WHERE sync_status = 'pending' AND deleted_at IS NULL AND business_id = ?
         `
-          )
-          .get(b)).count;
-        synced = (await db
-          .prepare(
-            `
+            )
+            .get(b))?.count ?? 0
+        );
+        synced = Number(
+          (await db
+            .prepare(
+              `
           SELECT COUNT(*) as count FROM ${table}
           WHERE sync_status = 'synced' AND deleted_at IS NULL AND business_id = ?
         `
-          )
-          .get(b)).count;
-        lastSync = (await db
-          .prepare(
-            `
+            )
+            .get(b))?.count ?? 0
+        );
+        lastSync =
+          (await db
+            .prepare(
+              `
           SELECT MAX(updated_at) as last_sync FROM ${table}
           WHERE sync_status = 'synced' AND deleted_at IS NULL AND business_id = ?
         `
-          )
-          .get(b)).last_sync;
+            )
+            .get(b))?.last_sync ?? null;
       } else {
-        pending = (await db
-          .prepare(
-            `
+        pending = Number(
+          (await db
+            .prepare(
+              `
           SELECT COUNT(*) as count FROM ${table}
           WHERE sync_status = 'pending' AND deleted_at IS NULL
         `
-          )
-          .get()).count;
-        synced = (await db
-          .prepare(
-            `
+            )
+            .get())?.count ?? 0
+        );
+        synced = Number(
+          (await db
+            .prepare(
+              `
           SELECT COUNT(*) as count FROM ${table}
           WHERE sync_status = 'synced' AND deleted_at IS NULL
         `
-          )
-          .get()).count;
-        lastSync = (await db
-          .prepare(
-            `
+            )
+            .get())?.count ?? 0
+        );
+        lastSync =
+          (await db
+            .prepare(
+              `
           SELECT MAX(updated_at) as last_sync FROM ${table}
           WHERE sync_status = 'synced' AND deleted_at IS NULL
         `
-          )
-          .get()).last_sync;
+            )
+            .get())?.last_sync ?? null;
       }
 
       status[table] = {
@@ -319,8 +339,14 @@ router.get('/status', authorize('admin', 'manager'), async (req, res) => {
     }
 
     // Get overall sync status
-    const totalPending = Object.values(status).reduce((sum, table) => sum + table.pending, 0);
-    const totalSynced = Object.values(status).reduce((sum, table) => sum + table.synced, 0);
+    const totalPending = Object.values(status).reduce(
+      (sum, table) => sum + Number(table.pending || 0),
+      0
+    );
+    const totalSynced = Object.values(status).reduce(
+      (sum, table) => sum + Number(table.synced || 0),
+      0
+    );
 
     res.json({
       status,

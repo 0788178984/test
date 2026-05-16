@@ -1,0 +1,17 @@
+# Optional Render Blueprint — import in Render Dashboard or use manual settings below.
+services:
+  - type: web
+    name: supermkt
+    runtime: node
+    buildCommand: npm run render-build
+    startCommand: npm run start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "1"
+      - key: PGSSL_REJECT_UNAUTHORIZED
+        value: "0"
+      # Set in Render Dashboard (secrets):
+      # DATABASE_URL, JWT_SECRET, VITE_API_URL=https://YOUR-SERVICE.onrender.com

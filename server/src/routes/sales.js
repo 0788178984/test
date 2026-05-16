@@ -337,7 +337,7 @@ router.get('/today-summary', async (req, res) => {
       topProductParams.push(req.user.id);
     }
 
-    topProductQuery += ` GROUP BY si.product_id ORDER BY quantity_sold DESC LIMIT 1`;
+    topProductQuery += ` GROUP BY si.product_id, p.name ORDER BY quantity_sold DESC LIMIT 1`;
 
     const topProduct = await db.prepare(topProductQuery).get(...topProductParams);
 
