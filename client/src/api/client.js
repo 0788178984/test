@@ -1,13 +1,21 @@
 import axios from 'axios';
 
-// API host: use VITE_API_URL when set (e.g. production). Otherwise talk to the local Express server on :4000.
-// Do not use an empty baseURL in dev — that posts to :5173/api/... and only works if a Vite proxy is perfect.
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+// API host: VITE_API_URL when set; same origin in production (Render); localhost in dev.
+function resolveApiBaseUrl() {
+  if (import.meta.env.VITE_API_URL) {
+    return String(import.meta.env.VITE_API_URL).replace(/\/$/, '');
+  }
+  if (import.meta.env.PROD && typeof window !== 'undefined') {
+    return window.location.origin;
+  }
+  return 'http://localhost:4000';
+}
+const API_BASE_URL = resolveApiBaseUrl();
 
 // Create axios instance
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 60000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -148,12 +156,12 @@ export const notificationsAPI = {
   stream: () => {
     try {
       const token = localStorage.getItem('auth_token');
-      const base = (import.meta.env.VITE_API_URL || 'http://localhost:4000').replace(/\/$/, '');
+      const base = resolveApiBaseUrl();
       const u = new URL('/api/notifications/stream', base);
       if (token) u.searchParams.set('token', token);
       return u.toString();
     } catch {
-      return `${(import.meta.env.VITE_API_URL || 'http://localhost:4000').replace(/\/$/, '')}/api/notifications/stream`;
+      return `${resolveApiBaseUrl()}/api/notifications/stream`;
     }
   },
 };
