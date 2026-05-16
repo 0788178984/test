@@ -314,7 +314,7 @@ class ConflictResolver {
         const columns = Object.keys(record);
         const placeholders = columns.map(() => '?').join(',');
         
-        db.prepare(`
+        await db.prepare(`
           INSERT OR REPLACE INTO ${table} (${columns}) VALUES (${placeholders})
         `).run(...Object.values(record));
         

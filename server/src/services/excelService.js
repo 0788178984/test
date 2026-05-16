@@ -281,7 +281,7 @@ class ExcelService {
       ];
 
       // Get all products with calculations
-      const allProducts = db.prepare(`
+      const allProducts = await db.prepare(`
         SELECT p.*, s.name as supplier_name,
                (p.current_stock * p.buying_price) as total_value
         FROM products p
@@ -487,7 +487,7 @@ class ExcelService {
 
     query += ` GROUP BY s.id ORDER BY s.created_at DESC`;
 
-    return db.prepare(query).all(...params);
+    return await db.prepare(query).all(...params);
   }
 
   async getDailyData(date, options) {
@@ -495,7 +495,7 @@ class ExcelService {
     if (!bid) throw new Error('business_id is required');
 
     // Get summary
-    const summary = db.prepare(`
+    const summary = await db.prepare(`
       SELECT
         COUNT(*) as sales_count,
         SUM(total_amount) as revenue,
@@ -507,7 +507,7 @@ class ExcelService {
     `).get(date, bid);
 
     // Get hourly sales
-    const hourlySales = db.prepare(`
+    const hourlySales = await db.prepare(`
       SELECT
         strftime('%H', created_at) as hour,
         COUNT(*) as sales_count,
@@ -520,7 +520,7 @@ class ExcelService {
     `).all(date, bid);
 
     // Get payment methods
-    const paymentMethods = db.prepare(`
+    const paymentMethods = await db.prepare(`
       SELECT payment_method, COUNT(*) as count, SUM(total_amount) as amount
       FROM sales s
       WHERE date(s.created_at) = ? AND s.status = 'completed' AND s.deleted_at IS NULL
@@ -576,7 +576,7 @@ class ExcelService {
       params.push(options.limit);
     }
 
-    return db.prepare(query).all(...params);
+    return await db.prepare(query).all(...params);
   }
 
   async getInventoryData(options) {
@@ -584,7 +584,7 @@ class ExcelService {
     if (!bid) throw new Error('business_id is required');
 
     // Get summary
-    const summary = db.prepare(`
+    const summary = await db.prepare(`
       SELECT
         COUNT(*) as total_products,
         COUNT(CASE WHEN is_active = 1 THEN 1 END) as active_products,
@@ -595,7 +595,7 @@ class ExcelService {
     `).get(bid);
 
     // Get low stock items
-    const lowStock = db.prepare(`
+    const lowStock = await db.prepare(`
       SELECT p.*, s.name as supplier_name
       FROM products p
       LEFT JOIN suppliers s ON p.supplier_id = s.id
@@ -607,7 +607,7 @@ class ExcelService {
     `).all(bid);
 
     // Get expiring items
-    const expiring = db.prepare(`
+    const expiring = await db.prepare(`
       SELECT p.*, s.name as supplier_name,
         CASE
           WHEN date(p.expiry_date) < date('now') THEN 'expired'

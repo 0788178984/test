@@ -1,7 +1,7 @@
 const errorHandler = (err, req, res, next) => {
   console.error('Error:', err);
 
-  // SQLite constraint errors
+  // Database constraint errors
   if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
     return res.status(400).json({ 
       error: 'Duplicate entry. This record already exists.' 

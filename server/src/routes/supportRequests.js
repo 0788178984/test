@@ -7,27 +7,27 @@ const { createNotification } = require('./notifications');
 
 const router = express.Router();
 
-const getDeveloperUserId = () => {
-  const row = db.prepare(`SELECT id FROM users WHERE role = 'developer' AND deleted_at IS NULL LIMIT 1`).get();
+async function getDeveloperUserId() {
+  const row = await db.prepare(`SELECT id FROM users WHERE role = 'developer' AND deleted_at IS NULL LIMIT 1`).get();
   return row?.id || null;
-};
+}
 
 // Staff: submit help / contact developer (no in-app message to developer — ticket only)
-router.post('/', authenticate, restrictToBusinessStaff, (req, res) => {
+router.post('/', authenticate, restrictToBusinessStaff, async (req, res) => {
   try {
     const { subject, body } = req.body;
     if (!subject || !body) {
       return res.status(400).json({ error: 'Subject and body are required.' });
     }
     const id = `sr-${crypto.randomBytes(12).toString('hex')}`;
-    db.prepare(
+    await db.prepare(
       `
       INSERT INTO support_requests (id, business_id, from_user_id, subject, body, status, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, 'open', datetime('now'), datetime('now'))
     `
     ).run(id, req.user.business_id, req.user.id, String(subject).trim(), String(body).trim());
 
-    const devId = getDeveloperUserId();
+    const devId = await getDeveloperUserId();
     if (devId) {
       createNotification({
         type: 'help_request',
@@ -49,7 +49,7 @@ router.post('/', authenticate, restrictToBusinessStaff, (req, res) => {
 });
 
 // Staff: list own business requests (admin/manager)
-router.get('/', authenticate, restrictToBusinessStaff, authorize('admin', 'manager'), (req, res) => {
+router.get('/', authenticate, restrictToBusinessStaff, authorize('admin', 'manager'), async (req, res) => {
   try {
     const rows = db
       .prepare(
@@ -71,7 +71,7 @@ router.get('/', authenticate, restrictToBusinessStaff, authorize('admin', 'manag
 });
 
 // Developer: all tickets
-router.get('/developer/all', authenticate, authorize('developer'), (req, res) => {
+router.get('/developer/all', authenticate, authorize('developer'), async (req, res) => {
   try {
     const rows = db
       .prepare(
@@ -93,10 +93,10 @@ router.get('/developer/all', authenticate, authorize('developer'), (req, res) =>
 });
 
 // Developer: update ticket
-router.patch('/developer/:id', authenticate, authorize('developer'), (req, res) => {
+router.patch('/developer/:id', authenticate, authorize('developer'), async (req, res) => {
   try {
     const { status, developer_notes } = req.body;
-    const row = db.prepare(`SELECT * FROM support_requests WHERE id = ?`).get(req.params.id);
+    const row = await db.prepare(`SELECT * FROM support_requests WHERE id = ?`).get(req.params.id);
     if (!row) return res.status(404).json({ error: 'Request not found.' });
 
     const fields = ["updated_at = datetime('now')"];
@@ -110,7 +110,7 @@ router.patch('/developer/:id', authenticate, authorize('developer'), (req, res) 
       vals.push(developer_notes);
     }
     vals.push(req.params.id);
-    db.prepare(`UPDATE support_requests SET ${fields.join(', ')} WHERE id = ?`).run(...vals);
+    await db.prepare(`UPDATE support_requests SET ${fields.join(', ')} WHERE id = ?`).run(...vals);
 
     if (status && ['resolved', 'closed'].includes(status)) {
       const admins = db

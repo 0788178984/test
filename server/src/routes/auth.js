@@ -5,10 +5,10 @@ const db = require('../db/connection');
 const { paymentMethodsAvailability } = require('../services/paymentConfigService');
 const router = express.Router();
 
-function resolveBusinessCode(raw) {
+async function resolveBusinessCode(raw) {
   let code = raw !== undefined && raw !== null ? String(raw).trim().toUpperCase() : '';
   if (code) return code;
-  const rows = db.prepare(`SELECT business_code FROM businesses ORDER BY created_at`).all();
+  const rows = await db.prepare(`SELECT business_code FROM businesses ORDER BY created_at`).all();
   if (rows.length === 1) return String(rows[0].business_code).trim().toUpperCase();
   return '';
 }
@@ -33,14 +33,14 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Developers sign in with email and password.' });
     }
 
-    const code = resolveBusinessCode(business_code);
+    const code = await resolveBusinessCode(business_code);
     if (!code) {
       return res.status(400).json({
         error: 'Business code is required when more than one store exists (e.g. DEFAULT for the demo store).',
       });
     }
 
-    const business = db
+    const business = await db
       .prepare(
         `SELECT id, business_code, name, subscription_status, subscription_expires_at, payment_config FROM businesses WHERE upper(trim(business_code)) = ?`
       )
@@ -50,7 +50,7 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Unknown business code.' });
     }
 
-    const candidates = db
+    const candidates = await db
       .prepare(
         `
       SELECT id, name, email, phone, pin, role, is_active, business_id
@@ -62,7 +62,7 @@ router.post('/login', async (req, res) => {
       .all(role, business.id);
 
     if (!candidates.length) {
-      const anyone = db.prepare(`SELECT COUNT(*) as c FROM users WHERE deleted_at IS NULL`).get().c;
+      const anyone = await db.prepare(`SELECT COUNT(*) as c FROM users WHERE deleted_at IS NULL`).get().c;
       if (anyone === 0) {
         return res.status(401).json({
           error:
@@ -93,7 +93,7 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    db.prepare(`UPDATE users SET last_login = datetime('now') WHERE id = ?`).run(userData.id);
+    await db.prepare(`UPDATE users SET last_login = datetime('now') WHERE id = ?`).run(userData.id);
 
     const token = generateToken(userData.id);
 
@@ -110,7 +110,7 @@ router.post('/login', async (req, res) => {
         business_name: business.name,
         subscription_status: business.subscription_status,
         subscription_expires_at: business.subscription_expires_at,
-        payment_methods: paymentMethodsAvailability(business.payment_config),
+        payment_methods: await paymentMethodsAvailability(business.payment_config),
       },
     });
   } catch (error) {
@@ -130,7 +130,7 @@ router.post('/login-web', async (req, res) => {
 
     email = String(email).trim().toLowerCase();
 
-    const devUser = db
+    const devUser = await db
       .prepare(
         `
       SELECT id, name, email, phone, password_hash, role, is_active, business_id
@@ -143,7 +143,7 @@ router.post('/login-web', async (req, res) => {
     if (devUser && devUser.password_hash) {
       const ok = await bcrypt.compare(password, devUser.password_hash);
       if (ok) {
-        db.prepare(`UPDATE users SET last_login = datetime('now') WHERE id = ?`).run(devUser.id);
+        await db.prepare(`UPDATE users SET last_login = datetime('now') WHERE id = ?`).run(devUser.id);
         const token = generateToken(devUser.id);
         return res.json({
           token,
@@ -163,10 +163,10 @@ router.post('/login-web', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials.' });
     }
 
-    const code = resolveBusinessCode(business_code);
+    const code = await resolveBusinessCode(business_code);
     let business = null;
     if (code) {
-      business = db
+      business = await db
         .prepare(
           `SELECT id, business_code, name, subscription_status, subscription_expires_at, payment_config FROM businesses WHERE upper(trim(business_code)) = ?`
         )
@@ -178,7 +178,7 @@ router.post('/login-web', async (req, res) => {
 
     let user = null;
     if (business) {
-      user = db
+      user = await db
         .prepare(
           `
         SELECT id, name, email, phone, password_hash, role, is_active, business_id
@@ -188,7 +188,7 @@ router.post('/login-web', async (req, res) => {
         )
         .get(email, business.id);
     } else {
-      const matches = db
+      const matches = await db
         .prepare(
           `
         SELECT id, name, email, phone, password_hash, role, is_active, business_id,
@@ -204,7 +204,7 @@ router.post('/login-web', async (req, res) => {
 
       if (matches.length === 1) {
         user = matches[0];
-        business = db
+        business = await db
           .prepare(
             `SELECT id, business_code, name, subscription_status, subscription_expires_at, payment_config FROM businesses WHERE id = ?`
           )
@@ -217,7 +217,7 @@ router.post('/login-web', async (req, res) => {
     }
 
     if (!user || !user.password_hash) {
-      const anyone = db.prepare(`SELECT COUNT(*) as c FROM users WHERE deleted_at IS NULL`).get().c;
+      const anyone = await db.prepare(`SELECT COUNT(*) as c FROM users WHERE deleted_at IS NULL`).get().c;
       if (anyone === 0) {
         return res.status(401).json({
           error:
@@ -242,7 +242,7 @@ router.post('/login-web', async (req, res) => {
       });
     }
 
-    db.prepare(`UPDATE users SET last_login = datetime('now') WHERE id = ?`).run(user.id);
+    await db.prepare(`UPDATE users SET last_login = datetime('now') WHERE id = ?`).run(user.id);
 
     const token = generateToken(user.id);
 
@@ -260,7 +260,7 @@ router.post('/login-web', async (req, res) => {
         subscription_status: business?.subscription_status ?? user.subscription_status,
         subscription_expires_at: business?.subscription_expires_at ?? user.subscription_expires_at,
         payment_methods: business
-          ? paymentMethodsAvailability(business.payment_config)
+          ? await paymentMethodsAvailability(business.payment_config)
           : { cash: true, mtn_momo: false, airtel_money: false },
       },
     });
@@ -271,7 +271,7 @@ router.post('/login-web', async (req, res) => {
 });
 
 // Get current user
-router.get('/me', authenticate, (req, res) => {
+router.get('/me', authenticate, async (req, res) => {
   const u = req.user;
   res.json({
     user: {
@@ -291,7 +291,7 @@ router.get('/me', authenticate, (req, res) => {
 });
 
 // Logout (client-side token removal)
-router.post('/logout', authenticate, (req, res) => {
+router.post('/logout', authenticate, async (req, res) => {
   res.json({ message: 'Logged out successfully.' });
 });
 
@@ -312,7 +312,7 @@ router.post('/change-pin', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'PIN must be exactly 4 digits.' });
     }
 
-    const user = db.prepare(`SELECT pin FROM users WHERE id = ?`).get(req.user.id);
+    const user = await db.prepare(`SELECT pin FROM users WHERE id = ?`).get(req.user.id);
 
     const isValidPin = await bcrypt.compare(currentPin, user.pin);
     if (!isValidPin) {
@@ -321,7 +321,7 @@ router.post('/change-pin', authenticate, async (req, res) => {
 
     const hashedNewPin = await bcrypt.hash(newPin, 12);
 
-    db.prepare(`UPDATE users SET pin = ?, updated_at = datetime('now') WHERE id = ?`).run(
+    await db.prepare(`UPDATE users SET pin = ?, updated_at = datetime('now') WHERE id = ?`).run(
       hashedNewPin,
       req.user.id
     );
@@ -346,7 +346,7 @@ router.post('/change-password', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 8 characters long.' });
     }
 
-    const user = db.prepare(`SELECT password_hash FROM users WHERE id = ?`).get(req.user.id);
+    const user = await db.prepare(`SELECT password_hash FROM users WHERE id = ?`).get(req.user.id);
 
     if (!user.password_hash) {
       return res.status(400).json({ error: 'Web password not set for this user.' });
@@ -359,7 +359,7 @@ router.post('/change-password', authenticate, async (req, res) => {
 
     const hashedNewPassword = await bcrypt.hash(newPassword, 12);
 
-    db.prepare(`UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?`).run(
+    await db.prepare(`UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?`).run(
       hashedNewPassword,
       req.user.id
     );

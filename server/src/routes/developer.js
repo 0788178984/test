@@ -14,7 +14,7 @@ const router = express.Router();
 router.use(authenticate, authorize('developer'));
 
 // List all businesses / tenants
-router.get('/businesses', (req, res) => {
+router.get('/businesses', async (req, res) => {
   try {
     const rows = db
       .prepare(
@@ -43,7 +43,7 @@ router.post('/businesses', async (req, res) => {
     }
     const code = String(business_code).trim().toUpperCase();
     const id = `biz-${crypto.randomBytes(8).toString('hex')}`;
-    db.prepare(
+    await db.prepare(
       `
       INSERT INTO businesses (id, name, business_code, subscription_status, subscription_expires_at, notes, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
@@ -60,10 +60,10 @@ router.post('/businesses', async (req, res) => {
 });
 
 // Update license / subscription
-router.patch('/businesses/:id', (req, res) => {
+router.patch('/businesses/:id', async (req, res) => {
   try {
     const { name, subscription_status, subscription_expires_at, notes } = req.body;
-    const existing = db.prepare(`SELECT id FROM businesses WHERE id = ?`).get(req.params.id);
+    const existing = await db.prepare(`SELECT id FROM businesses WHERE id = ?`).get(req.params.id);
     if (!existing) return res.status(404).json({ error: 'Business not found.' });
 
     const fields = [];
@@ -89,7 +89,7 @@ router.patch('/businesses/:id', (req, res) => {
     }
     fields.push("updated_at = datetime('now')");
     vals.push(req.params.id);
-    db.prepare(`UPDATE businesses SET ${fields.join(', ')} WHERE id = ?`).run(...vals);
+    await db.prepare(`UPDATE businesses SET ${fields.join(', ')} WHERE id = ?`).run(...vals);
     res.json({ message: 'Business updated.' });
   } catch (e) {
     console.error(e);
@@ -98,13 +98,13 @@ router.patch('/businesses/:id', (req, res) => {
 });
 
 // Notify store admins/managers (in-app)
-router.post('/businesses/:id/notify-staff', (req, res) => {
+router.post('/businesses/:id/notify-staff', async (req, res) => {
   try {
     const { title, message, target_role } = req.body;
     if (!title || !message) {
       return res.status(400).json({ error: 'Title and message are required.' });
     }
-    const biz = db.prepare(`SELECT id, name FROM businesses WHERE id = ?`).get(req.params.id);
+    const biz = await db.prepare(`SELECT id, name FROM businesses WHERE id = ?`).get(req.params.id);
     if (!biz) return res.status(404).json({ error: 'Business not found.' });
 
     if (target_role && ['admin', 'manager'].includes(target_role)) {
@@ -155,7 +155,7 @@ router.post('/businesses/:id/bootstrap-admin', async (req, res) => {
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'Name, email, and password are required.' });
     }
-    const biz = db.prepare(`SELECT id FROM businesses WHERE id = ?`).get(req.params.id);
+    const biz = await db.prepare(`SELECT id FROM businesses WHERE id = ?`).get(req.params.id);
     if (!biz) return res.status(404).json({ error: 'Business not found.' });
 
     const hashedPassword = await bcrypt.hash(String(password), 12);
@@ -165,7 +165,7 @@ router.post('/businesses/:id/bootstrap-admin', async (req, res) => {
 
     const userId = `usr-${crypto.randomBytes(12).toString('hex')}`;
 
-    db.prepare(
+    await db.prepare(
       `
       INSERT INTO users (id, name, email, phone, pin, password_hash, role, business_id, is_active, created_at, updated_at, sync_status)
       VALUES (?, ?, ?, NULL, ?, ?, 'admin', ?, 1, datetime('now'), datetime('now'), 'pending')
@@ -183,9 +183,9 @@ router.post('/businesses/:id/bootstrap-admin', async (req, res) => {
 });
 
 // List staff for a store (no secrets) — for lockout recovery
-router.get('/businesses/:id/staff', (req, res) => {
+router.get('/businesses/:id/staff', async (req, res) => {
   try {
-    const biz = db.prepare(`SELECT id, name, business_code FROM businesses WHERE id = ?`).get(req.params.id);
+    const biz = await db.prepare(`SELECT id, name, business_code FROM businesses WHERE id = ?`).get(req.params.id);
     if (!biz) return res.status(404).json({ error: 'Business not found.' });
     const staff = db
       .prepare(
@@ -207,7 +207,7 @@ router.get('/businesses/:id/staff', (req, res) => {
 // Reset web password and/or PIN for a staff member (lockout recovery — no DB wipe)
 router.patch('/businesses/:id/staff/:userId', async (req, res) => {
   try {
-    const biz = db.prepare(`SELECT id FROM businesses WHERE id = ?`).get(req.params.id);
+    const biz = await db.prepare(`SELECT id FROM businesses WHERE id = ?`).get(req.params.id);
     if (!biz) return res.status(404).json({ error: 'Business not found.' });
 
     const { password, pin } = req.body || {};
@@ -250,7 +250,7 @@ router.patch('/businesses/:id/staff/:userId', async (req, res) => {
     fields.push("sync_status = 'pending'");
     vals.push(req.params.userId);
 
-    db.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).run(...vals);
+    await db.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).run(...vals);
 
     res.json({
       message: 'Credentials updated. Share the new password/PIN with the store only over a secure channel.',
@@ -263,9 +263,9 @@ router.patch('/businesses/:id/staff/:userId', async (req, res) => {
 });
 
 // Per-business MTN / Airtel API credentials (developer only; stored on businesses.payment_config)
-router.get('/businesses/:id/payment-config', (req, res) => {
+router.get('/businesses/:id/payment-config', async (req, res) => {
   try {
-    const biz = db.prepare(`SELECT id, name, business_code, payment_config FROM businesses WHERE id = ?`).get(req.params.id);
+    const biz = await db.prepare(`SELECT id, name, business_code, payment_config FROM businesses WHERE id = ?`).get(req.params.id);
     if (!biz) return res.status(404).json({ error: 'Business not found.' });
     res.json({
       business_id: biz.id,
@@ -279,16 +279,16 @@ router.get('/businesses/:id/payment-config', (req, res) => {
   }
 });
 
-router.patch('/businesses/:id/payment-config', (req, res) => {
+router.patch('/businesses/:id/payment-config', async (req, res) => {
   try {
-    const biz = db.prepare(`SELECT id, payment_config FROM businesses WHERE id = ?`).get(req.params.id);
+    const biz = await db.prepare(`SELECT id, payment_config FROM businesses WHERE id = ?`).get(req.params.id);
     if (!biz) return res.status(404).json({ error: 'Business not found.' });
     const merged = mergePaymentConfig(biz.payment_config, req.body || {});
-    db.prepare(`UPDATE businesses SET payment_config = ?, updated_at = datetime('now') WHERE id = ?`).run(
+    await db.prepare(`UPDATE businesses SET payment_config = ?, updated_at = datetime('now') WHERE id = ?`).run(
       merged,
       req.params.id
     );
-    const updated = db.prepare(`SELECT payment_config FROM businesses WHERE id = ?`).get(req.params.id);
+    const updated = await db.prepare(`SELECT payment_config FROM businesses WHERE id = ?`).get(req.params.id);
     res.json({
       message: 'Payment configuration saved for this store.',
       config: paymentConfigForDeveloperGet(updated.payment_config),

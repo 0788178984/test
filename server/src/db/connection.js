@@ -1,46 +1,72 @@
-const Database = require('better-sqlite3');
-const path = require('path');
-const fs = require('fs');
-
 /**
- * Single source of truth for the SQLite file path.
- * - If DB_PATH is set: when not absolute, resolved relative to the **repository root** (parent of `server/`), same as the default path, so `./data/supermarket.db` always means `<repo>/data/supermarket.db`.
- * - Otherwise: `<repo-root>/data/supermarket.db`.
+ * Database layer — Supabase PostgreSQL only (DATABASE_URL required).
  */
-function resolveDbPath() {
-  const repoRoot = path.join(__dirname, '../../..');
-  const raw = process.env.DB_PATH && String(process.env.DB_PATH).trim();
-  if (raw) {
-    const resolved = path.isAbsolute(raw) ? raw : path.resolve(repoRoot, raw);
-    fs.mkdirSync(path.dirname(resolved), { recursive: true });
-    return resolved;
+const { getPool } = require('./pool');
+
+function assertDatabaseUrl() {
+  const url = process.env.DATABASE_URL && String(process.env.DATABASE_URL).trim();
+  if (!url) {
+    throw new Error(
+      'DATABASE_URL is required. Add your Supabase Session pooler URI to .env (see .env.example).'
+    );
   }
-  const dataDir = path.join(repoRoot, 'data');
-  fs.mkdirSync(dataDir, { recursive: true });
-  return path.join(dataDir, 'supermarket.db');
+  if (process.env.DB_BACKEND === 'sqlite' || process.env.DB_PATH) {
+    throw new Error(
+      'SQLite is not supported. Remove DB_BACKEND, DB_PATH, and LOCAL_SQLITE_FALLBACK from .env — use DATABASE_URL (Supabase) only.'
+    );
+  }
+  try {
+    const parsed = new URL(url.replace(/^postgresql:\/\//, 'http://'));
+    const host = parsed.hostname;
+    if (!host || host.startsWith('postgres.') || host === 'postgres') {
+      throw new Error(
+        `DATABASE_URL hostname looks wrong ("${host}"). Use the pooler host from Supabase → Connect → Session pooler, e.g. aws-0-eu-west-1.pooler.supabase.com`
+      );
+    }
+  } catch (e) {
+    if (e.message.includes('hostname')) throw e;
+    throw new Error(`DATABASE_URL is not a valid connection string: ${e.message}`);
+  }
 }
 
-const dbPath = resolveDbPath();
-const db = new Database(dbPath);
+let _impl = null;
 
-db.pragma('foreign_keys = ON');
-db.pragma('journal_mode = WAL');
+const ready = (async () => {
+  assertDatabaseUrl();
+  _impl = await require('./postgres').init();
+  return _impl;
+})();
 
-// Run migrations (idempotent SQL)
-const migrationPath = path.join(__dirname, 'migrations/001_init.sql');
-const migration = fs.readFileSync(migrationPath, 'utf8');
-try {
-  db.exec(migration);
-  console.log('Database migrations completed');
-} catch (err) {
-  console.error('Migration error:', err);
-}
-
-const { migrate: migrateMultiTenant } = require('./multiTenantMigrate');
-try {
-  migrateMultiTenant(db);
-} catch (err) {
-  console.error('Multi-tenant migration error:', err);
-}
+const db = {
+  get ready() {
+    return ready;
+  },
+  get dialect() {
+    return _impl?.dialect;
+  },
+  get isPostgres() {
+    return !!_impl?.isPostgres;
+  },
+  get name() {
+    return _impl?.name ?? 'initializing';
+  },
+  prepare(sql) {
+    return {
+      get: (...params) => ready.then((d) => d.prepare(sql).get(...params)),
+      all: (...params) => ready.then((d) => d.prepare(sql).all(...params)),
+      run: (...params) => ready.then((d) => d.prepare(sql).run(...params)),
+    };
+  },
+  transaction(fn) {
+    return ready.then((d) => d.transaction(fn));
+  },
+  exec(sql) {
+    return ready.then((d) => d.exec(sql));
+  },
+  close() {
+    return ready.then((d) => d.close());
+  },
+};
 
 module.exports = db;
+module.exports.getPool = getPool;

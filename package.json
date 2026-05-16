@@ -14,11 +14,11 @@
     "render-build": "NPM_CONFIG_PRODUCTION=false npm install && npm run client:build",
     "start": "cd server && npm start",
     "install:all": "npm install && cd server && npm install && cd ../client && npm install && cd ../desktop && npm install && cd ../cloud && npm install",
-    "setup": "npm run install:all && cd server && node src/db/seed.js",
+    "setup": "npm run install:all",
+    "db:counts": "node server/scripts/show-db-counts.js",
+    "db:test-connect": "node server/scripts/test-pg-connect.js",
     "validate:auth": "node scripts/validate-auth.cjs",
-    "validate:auth:http": "node scripts/validate-auth.cjs --http",
-    "reinstall:sqlite": "node scripts/reinstall-better-sqlite3.cjs",
-    "postinstall": "node scripts/ensure-better-sqlite3.cjs"
+    "validate:auth:http": "node scripts/validate-auth.cjs --http"
   },
   "keywords": [
     "supermarket",
@@ -33,9 +33,6 @@
   "license": "MIT",
   "engines": {
     "node": ">=18"
-  },
-  "overrides": {
-    "better-sqlite3": "^12.9.0"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

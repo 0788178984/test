@@ -172,6 +172,60 @@ The server serves the **built** React app when `NODE_ENV=production`.
 
 **Database:** SQLite file must live on **persistent disk** on the server (not ephemeral-only storage).
 
+### Supabase (PostgreSQL) — copy data, then point Render at it
+
+**Production (Render):** set **`DATABASE_URL`** to your Supabase **Session pooler** URI. The API uses **PostgreSQL only** — you do not need `DB_PATH` or a Render disk for the database. Code, API, and frontend still deploy from GitHub to Render as before.
+
+**Local dev:** leave `DATABASE_URL` unset; the app uses **SQLite** at `DB_PATH`.
+
+#### A. Create schema in Supabase
+
+1. Supabase → **SQL Editor** → run `server/src/db/migrations/001_init_postgres.sql`.
+
+#### B. Copy your SQLite data into Supabase
+
+Your PC may block Postgres ports (`ENOTFOUND` / timeout). Use **Render Shell** if local migrate fails.
+
+**Windows PowerShell** (not `set` — that is CMD only):
+
+```powershell
+cd C:\Users\SAFIQ\Desktop\uganda-supermarket\server
+$env:SUPABASE_DB_PASSWORD = "your_database_password"
+.\scripts\migrate-to-supabase.ps1
+```
+
+**CMD:**
+
+```cmd
+cd server
+set SUPABASE_DB_PASSWORD=your_database_password
+scripts\migrate-to-supabase.cmd
+```
+
+**Render Shell** (recommended if you have live data on disk):
+
+```sh
+cd server
+export SUPABASE_DB_PASSWORD='your_password'
+export DB_PATH=/var/data/supermarket.db
+sh scripts/render-migrate-supabase.sh
+```
+
+Use the **Session pooler** URI from Supabase → **Connect** → **Pooler settings** (not the direct host that says “Not IPv4 compatible”).
+
+#### C. Render environment (after data is in Supabase)
+
+| Variable | Value |
+|----------|--------|
+| `DATABASE_URL` | Session pooler URI from Supabase (with real password) |
+| `DB_PATH` | Keep until app uses Postgres only — e.g. `/var/data/supermarket.db` |
+
+Save → redeploy. Keep-alive runs every 6 days.
+
+#### D. Later: app uses Supabase only
+
+When the Postgres backend is enabled in code, remove `DB_PATH` / persistent disk and rely on `DATABASE_URL` only.
+
 ---
 
 ## 7. Useful API links (replace host)

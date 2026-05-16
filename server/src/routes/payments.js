@@ -11,10 +11,10 @@ const router = express.Router();
 router.use(authenticate, restrictToBusinessStaff);
 
 /** Which MoMo options this store can use (from developer-configured credentials). Cash is always on. */
-router.get('/methods', (req, res) => {
+router.get('/methods', async (req, res) => {
   try {
-    const row = db.prepare(`SELECT payment_config FROM businesses WHERE id = ?`).get(req.user.business_id);
-    res.json({ methods: paymentMethodsAvailability(row?.payment_config) });
+    const row = await db.prepare(`SELECT payment_config FROM businesses WHERE id = ?`).get(req.user.business_id);
+    res.json({ methods: await paymentMethodsAvailability(row?.payment_config) });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Failed to load payment methods.' });

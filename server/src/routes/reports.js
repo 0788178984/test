@@ -41,7 +41,7 @@ function sendGeneratedExportFile(res, result) {
 }
 
 // Daily report
-router.get('/daily', checkPermission('view_reports'), (req, res) => {
+router.get('/daily', checkPermission('view_reports'), async (req, res) => {
   try {
     const { date = new Date().toISOString().split('T')[0] } = req.query;
 
@@ -67,7 +67,7 @@ router.get('/daily', checkPermission('view_reports'), (req, res) => {
       params.push(req.user.id);
     }
 
-    const summary = db.prepare(query).get(...params);
+    const summary = await db.prepare(query).get(...params);
 
     // Get sales by payment method
     let paymentQuery = `
@@ -86,7 +86,7 @@ router.get('/daily', checkPermission('view_reports'), (req, res) => {
 
     paymentQuery += ` GROUP BY payment_method`;
 
-    const paymentMethods = db.prepare(paymentQuery).all(...paymentParams);
+    const paymentMethods = await db.prepare(paymentQuery).all(...paymentParams);
 
     // Get hourly sales
     let hourlyQuery = `
@@ -108,7 +108,7 @@ router.get('/daily', checkPermission('view_reports'), (req, res) => {
 
     hourlyQuery += ` GROUP BY strftime('%H', created_at) ORDER BY hour`;
 
-    const hourlySales = db.prepare(hourlyQuery).all(...hourlyParams);
+    const hourlySales = await db.prepare(hourlyQuery).all(...hourlyParams);
 
     res.json({
       date,
@@ -130,7 +130,7 @@ router.get('/daily', checkPermission('view_reports'), (req, res) => {
 });
 
 // Monthly report
-router.get('/monthly', checkPermission('view_reports'), (req, res) => {
+router.get('/monthly', checkPermission('view_reports'), async (req, res) => {
   try {
     const { year = new Date().getFullYear(), month = new Date().getMonth() + 1 } = req.query;
 
@@ -159,7 +159,7 @@ router.get('/monthly', checkPermission('view_reports'), (req, res) => {
       params.push(req.user.id);
     }
 
-    const summary = db.prepare(query).get(...params);
+    const summary = await db.prepare(query).get(...params);
 
     // Get daily breakdown
     let dailyQuery = `
@@ -186,7 +186,7 @@ router.get('/monthly', checkPermission('view_reports'), (req, res) => {
 
     dailyQuery += ` GROUP BY date(created_at) ORDER BY day`;
 
-    const dailyBreakdown = db.prepare(dailyQuery).all(...dailyParams);
+    const dailyBreakdown = await db.prepare(dailyQuery).all(...dailyParams);
 
     res.json({
       year: parseInt(year),
@@ -208,7 +208,7 @@ router.get('/monthly', checkPermission('view_reports'), (req, res) => {
 });
 
 // Profit report
-router.get('/profit', checkPermission('view_reports'), (req, res) => {
+router.get('/profit', checkPermission('view_reports'), async (req, res) => {
   try {
     const { from, to } = req.query;
 
@@ -247,7 +247,7 @@ router.get('/profit', checkPermission('view_reports'), (req, res) => {
 
     query += ` GROUP BY s.id ORDER BY s.created_at DESC`;
 
-    const sales = db.prepare(query).all(...params);
+    const sales = await db.prepare(query).all(...params);
 
     // Calculate totals
     const totals = sales.reduce((acc, sale) => ({
@@ -269,7 +269,7 @@ router.get('/profit', checkPermission('view_reports'), (req, res) => {
 });
 
 // Best sellers report
-router.get('/best-sellers', checkPermission('view_reports'), (req, res) => {
+router.get('/best-sellers', checkPermission('view_reports'), async (req, res) => {
   try {
     const { from, to, limit = 10 } = req.query;
 
@@ -314,7 +314,7 @@ router.get('/best-sellers', checkPermission('view_reports'), (req, res) => {
 
     params.push(parseInt(limit));
 
-    const bestSellers = db.prepare(query).all(...params);
+    const bestSellers = await db.prepare(query).all(...params);
 
     res.json({
       from,
@@ -328,7 +328,7 @@ router.get('/best-sellers', checkPermission('view_reports'), (req, res) => {
 });
 
 // Cashier performance report
-router.get('/cashier', checkPermission('view_reports'), (req, res) => {
+router.get('/cashier', checkPermission('view_reports'), async (req, res) => {
   try {
     const { user_id, from, to } = req.query;
 
@@ -380,7 +380,7 @@ router.get('/cashier', checkPermission('view_reports'), (req, res) => {
 
     query += ` GROUP BY u.id ORDER BY total_revenue DESC`;
 
-    const cashierStats = db.prepare(query).all(...params);
+    const cashierStats = await db.prepare(query).all(...params);
 
     res.json({
       from,
@@ -502,7 +502,7 @@ router.get('/export-data', checkPermission('export_reports'), async (req, res) =
 
         dailyQuery += ` GROUP BY date(s.created_at) ORDER BY date`;
 
-        data.dailySales = db.prepare(dailyQuery).all(...dailyParams);
+        data.dailySales = await db.prepare(dailyQuery).all(...dailyParams);
         break;
       }
 
@@ -527,7 +527,7 @@ router.get('/export-data', checkPermission('export_reports'), async (req, res) =
           monthlyParams.push(req.user.id);
         }
         monthlyQuery += ` GROUP BY strftime('%Y-%m', s.created_at) ORDER BY month`;
-        const rows = db.prepare(monthlyQuery).all(...monthlyParams);
+        const rows = await db.prepare(monthlyQuery).all(...monthlyParams);
         data.monthlySales = rows.map((r) => {
           const revenue = Number(r.revenue) || 0;
           const profit = Number(r.profit) || 0;
@@ -569,7 +569,7 @@ router.get('/export-data', checkPermission('export_reports'), async (req, res) =
           profitParams.push(req.user.id);
         }
         profitQuery += ` GROUP BY s.id ORDER BY s.created_at DESC`;
-        const sales = db.prepare(profitQuery).all(...profitParams);
+        const sales = await db.prepare(profitQuery).all(...profitParams);
         const totals = sales.reduce(
           (acc, sale) => ({
             totalRevenue: acc.totalRevenue + (Number(sale.revenue) || 0),
@@ -620,7 +620,7 @@ router.get('/export-data', checkPermission('export_reports'), async (req, res) =
           ORDER BY total_quantity DESC 
           LIMIT 100
         `;
-        const bestSellers = db.prepare(bestQuery).all(...bestParams);
+        const bestSellers = await db.prepare(bestQuery).all(...bestParams);
         data.bestSellers = bestSellers.map((p) => {
           const rev = Number(p.total_revenue) || 0;
           const cost = Number(p.total_cost) || 0;
@@ -663,7 +663,7 @@ router.get('/export-data', checkPermission('export_reports'), async (req, res) =
           cashParams.push(req.user.id);
         }
         cashQuery += ` GROUP BY u.id ORDER BY total_revenue DESC`;
-        const cashierStats = db.prepare(cashQuery).all(...cashParams);
+        const cashierStats = await db.prepare(cashQuery).all(...cashParams);
         data.cashierPerformance = cashierStats.map((c) => {
           const rev = Number(c.total_revenue) || 0;
           const cnt = Number(c.sales_count) || 0;
@@ -711,10 +711,10 @@ router.get('/export-data', checkPermission('export_reports'), async (req, res) =
 
         salesQuery += ` ORDER BY s.created_at`;
 
-        data.sales = db.prepare(salesQuery).all(...salesParams);
+        data.sales = await db.prepare(salesQuery).all(...salesParams);
 
         for (const sale of data.sales) {
-          sale.items = db.prepare(`
+          sale.items = await db.prepare(`
             SELECT product_name, quantity, unit_price, line_total
             FROM sale_items
             WHERE sale_id = (SELECT id FROM sales WHERE sale_number = ? AND business_id = ?)
@@ -753,7 +753,7 @@ router.get('/export-data', checkPermission('export_reports'), async (req, res) =
 
         productQuery += ` GROUP BY p.id ORDER BY total_revenue DESC`;
 
-        data.products = db.prepare(productQuery).all(...productParams);
+        data.products = await db.prepare(productQuery).all(...productParams);
         break;
       }
 

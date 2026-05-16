@@ -1,4 +1,6 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../../.env') });
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -16,7 +18,6 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 const cron = require('node-cron');
-const path = require('path');
 
 // Import routes
 const authRoutes = require('./routes/auth');
@@ -39,7 +40,8 @@ const { runDailyLicenseReminders } = require('./services/licenseAlertService');
 
 // Import database
 const db = require('./db/connection');
-const { DEFAULT_BUSINESS_ID } = require('./db/multiTenantMigrate');
+const { getPool, ping: pingPostgres, closePool } = require('./db/pool');
+const { DEFAULT_BUSINESS_ID } = require('./db/constants');
 const { authenticate, authorize } = require('./middleware/auth');
 const { classifyLicenseStates } = require('./services/licenseAlertService');
 
@@ -87,7 +89,7 @@ const globalLimiter = rateLimit({
     const p = req.path || '';
     return p === '/health' || p === '/api/notifications/stream' || p.endsWith('/notifications/stream');
   },
-  handler: (req, res) => {
+  handler: async (req, res) => {
     res.status(429).json({ error: 'Too many requests. Try again later.' });
   },
 });
@@ -98,7 +100,7 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: false,
-  handler: (req, res) => {
+  handler: async (req, res) => {
     res.status(429).json({ error: 'Too many authentication attempts. Try again later.' });
   },
 });
@@ -112,17 +114,31 @@ app.use((req, res, next) => {
 });
 
 // Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({
+app.get('/health', async (req, res) => {
+  const payload = {
     status: 'ok',
     timestamp: new Date().toISOString(),
     version: '1.0.0',
-  });
+    database: 'unknown',
+  };
+
+  try {
+    await db.ready;
+    payload.database = 'postgresql';
+    await pingPostgres();
+    payload.database_name = db.name;
+  } catch (err) {
+    payload.status = 'degraded';
+    payload.database_error = err.message;
+  }
+
+  const code = payload.status === 'ok' ? 200 : 503;
+  res.status(code).json(payload);
 });
 
 // Root JSON hint — dev only. In production, `/` is served by `client/dist` (SPA); this route would win over static if registered here.
 if (process.env.NODE_ENV !== 'production') {
-  app.get('/', (req, res) => {
+  app.get('/', async (req, res) => {
     res.json({
       service: 'Uganda Supermarket API',
       message:
@@ -133,7 +149,7 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // Developer licence dashboard (explicit mount so it is never shadowed by router internals)
-app.get('/api/developer/license-alerts', authenticate, authorize('developer'), (req, res) => {
+app.get('/api/developer/license-alerts', authenticate, authorize('developer'), async (req, res) => {
   try {
     const { out_of_licence, expiring_soon, expiring_this_month } = classifyLicenseStates();
     res.json({
@@ -187,16 +203,16 @@ app.use((err, req, res, next) => {
 });
 
 // 404 handler
-app.use((req, res) => {
+app.use(async (req, res) => {
   res.status(404).json({ error: 'Route not found.' });
 });
 
 // CRON JOBS
 
 // Daily 7:25 AM — licence / subscription reminders (developer digest + store admins)
-cron.schedule('25 7 * * *', () => {
+cron.schedule('25 7 * * *', async () => {
   try {
-    runDailyLicenseReminders(createNotification);
+    await runDailyLicenseReminders(createNotification);
     logger.info('Daily licence reminder job finished.');
   } catch (error) {
     logger.error('Daily licence reminder job error:', error);
@@ -208,7 +224,7 @@ cron.schedule('0 8 * * *', async () => {
   logger.info('Running expiry check job...');
 
   try {
-    const expiring = db.prepare(`
+    const expiring = await db.prepare(`
       SELECT * FROM products
       WHERE expiry_date IS NOT NULL
       AND current_stock > 0
@@ -243,10 +259,10 @@ cron.schedule('0 21 * * *', async () => {
 
   try {
     const today = new Date().toISOString().split('T')[0];
-    const businesses = db.prepare(`SELECT id FROM businesses`).all();
+    const businesses = await db.prepare(`SELECT id FROM businesses`).all();
 
     for (const b of businesses) {
-      const summary = db.prepare(`
+      const summary = await db.prepare(`
       SELECT COUNT(*) as count,
              SUM(total_amount) as revenue,
              SUM(total_amount - (SELECT SUM(si.quantity * si.buying_price)
@@ -255,7 +271,7 @@ cron.schedule('0 21 * * *', async () => {
       WHERE date(created_at) = ? AND status = 'completed' AND business_id = ?
     `).get(today, b.id);
 
-      const topProduct = db.prepare(`
+      const topProduct = await db.prepare(`
       SELECT p.name, SUM(si.quantity) as qty
       FROM sale_items si
       JOIN products p ON p.id = si.product_id
@@ -288,7 +304,7 @@ cron.schedule('0 21 * * *', async () => {
 // Every 5 minutes — low stock check
 cron.schedule('*/5 * * * *', async () => {
   try {
-    const lowStock = db.prepare(`
+    const lowStock = await db.prepare(`
       SELECT * FROM products
       WHERE current_stock <= minimum_stock
       AND is_active = 1
@@ -296,7 +312,7 @@ cron.schedule('*/5 * * * *', async () => {
     `).all();
 
     for (const product of lowStock) {
-      const recent = db.prepare(`
+      const recent = await db.prepare(`
         SELECT id FROM notifications
         WHERE type = 'low_stock'
         AND json_extract(meta, '$.product_id') = ?
@@ -340,20 +356,32 @@ const isProdLikeHost =
 const runSeedIfEmpty = wantsSeedIfEmpty && (!isProdLikeHost || allowAutoDemoSeedOnProd);
 
 (async () => {
+  try {
+    await db.ready;
+  } catch (err) {
+    logger.error('FATAL: Cannot connect to Supabase (PostgreSQL).', err.message);
+    logger.error(
+      'Check DATABASE_URL in .env (Supabase → Connect → Session pooler). ' +
+        'Run 001_init_postgres.sql and 002_seed_demo_supabase.sql in the Supabase SQL Editor. ' +
+        'If connection times out on your PC, your network may block port 5432 — try another network, disable VPN, or test from Render after deploy.'
+    );
+    process.exit(1);
+  }
+
   if (wantsSeedIfEmpty && !runSeedIfEmpty) {
     logger.warn(
-      'SEED_IF_EMPTY is set but demo auto-seed is skipped on production/Render. Without a Persistent Disk + DB_PATH, SQLite is recreated empty each deploy — attach a disk, set DB_PATH to a file on it, then redeploy. For a one-time demo seed here only, set ALLOW_AUTO_DEMO_SEED=1 (then remove it).'
+      'SEED_IF_EMPTY is set but demo auto-seed is skipped on production/Render. Seed via Supabase SQL Editor (002_seed_demo_supabase.sql) or set ALLOW_AUTO_DEMO_SEED=1 for a one-time Node seed.'
     );
   }
 
   if (runSeedIfEmpty) {
     try {
-      const userCount = db.prepare(`SELECT COUNT(*) as c FROM users WHERE deleted_at IS NULL`).get().c;
-      const nonDefaultBiz = db
-        .prepare(`SELECT COUNT(*) as c FROM businesses WHERE id != ?`)
-        .get(DEFAULT_BUSINESS_ID).c;
+      const userCount = (await db.prepare(`SELECT COUNT(*) as c FROM users WHERE deleted_at IS NULL`).get()).c;
+      const nonDefaultBiz = (
+        await db.prepare(`SELECT COUNT(*) as c FROM businesses WHERE id != ?`).get(DEFAULT_BUSINESS_ID)
+      ).c;
 
-      const counts = db
+      const counts = await db
         .prepare(
           `
           SELECT
@@ -384,13 +412,6 @@ const runSeedIfEmpty = wantsSeedIfEmpty && (!isProdLikeHost || allowAutoDemoSeed
         );
       } else {
         logger.warn('SEED_IF_EMPTY: empty database; running one-time demo seed...');
-        if (process.env.RENDER === 'true') {
-          logger.warn(
-            'RENDER: Each deploy starts with a fresh SQLite file unless DB_PATH points to a Render Persistent Disk. ' +
-              'With ALLOW_AUTO_DEMO_SEED enabled, an empty DB triggers this demo seed every time — that is why users and data disappear. ' +
-              'Mount a disk, set DB_PATH to a path on that volume (e.g. /var/data/supermarket.db), redeploy, then remove ALLOW_AUTO_DEMO_SEED (and SEED_IF_EMPTY when you are done bootstrapping).'
-          );
-        }
         const seedDatabase = require('./db/seed');
         await seedDatabase({ skipGuard: true });
         logger.warn('SEED_IF_EMPTY: seed finished. Remove SEED_IF_EMPTY from env after first deploy if you want.');
@@ -405,26 +426,40 @@ const runSeedIfEmpty = wantsSeedIfEmpty && (!isProdLikeHost || allowAutoDemoSeed
       `Uganda Supermarket Server listening on port ${PORT} (env=${process.env.NODE_ENV || 'development'}, log=${logger.level})`
     );
     logger.info(`Health check: http://localhost:${PORT}/health`);
-    logger.info(`Database file: ${db.name}`);
-    if (process.env.RENDER === 'true' && !(process.env.DB_PATH || '').trim()) {
-      logger.warn(
-        'RENDER: DB_PATH is unset — default SQLite is usually on an ephemeral disk and is lost on every deploy. Add a Render Persistent Disk, set DB_PATH to a path on that volume (e.g. /var/data/supermarket.db), redeploy, then create stores once.'
-      );
-    }
+    logger.info(`Database: ${db.name}`);
+    logger.info('Data store: Supabase (PostgreSQL) via DATABASE_URL.');
   });
+
+  // Ping Supabase every 6 days so free-tier projects are not paused after 7 days idle
+  if (getPool()) {
+    const SIX_DAYS_MS = 6 * 24 * 60 * 60 * 1000;
+    const runKeepAlive = async () => {
+      try {
+        await pingPostgres();
+        logger.info('Database keep-alive ping (Supabase)');
+      } catch (err) {
+        logger.warn(`Database keep-alive failed: ${err.message}`);
+      }
+    };
+    runKeepAlive();
+    setInterval(runKeepAlive, SIX_DAYS_MS);
+  }
 })();
 
 // Graceful shutdown
-process.on('SIGINT', () => {
-  logger.warn('Shutting down server (SIGINT)...');
+async function shutdown(signal) {
+  logger.warn(`Shutting down server (${signal})...`);
   db.close();
+  await closePool();
   process.exit(0);
+}
+
+process.on('SIGINT', () => {
+  shutdown('SIGINT').catch(() => process.exit(1));
 });
 
 process.on('SIGTERM', () => {
-  logger.warn('Shutting down server (SIGTERM)...');
-  db.close();
-  process.exit(0);
+  shutdown('SIGTERM').catch(() => process.exit(1));
 });
 
 module.exports = app;

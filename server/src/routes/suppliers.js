@@ -9,7 +9,7 @@ router.use(authenticate, restrictToBusinessStaff);
 
 const bid = (req) => req.user.business_id;
 
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const { page = 1, limit = 50 } = req.query;
     const offset = (page - 1) * limit;
@@ -44,7 +44,7 @@ router.get('/', (req, res) => {
   }
 });
 
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
     const supplier = db
       .prepare(`SELECT * FROM suppliers WHERE id = ? AND deleted_at IS NULL AND business_id = ?`)
@@ -72,7 +72,7 @@ router.get('/:id', (req, res) => {
   }
 });
 
-router.post('/', checkPermission('manage_suppliers'), (req, res) => {
+router.post('/', checkPermission('manage_suppliers'), async (req, res) => {
   try {
     const { name, contact_name, phone, email, address, tin_number, payment_terms, notes } = req.body;
 
@@ -80,7 +80,7 @@ router.post('/', checkPermission('manage_suppliers'), (req, res) => {
       return res.status(400).json({ error: 'Supplier name is required.' });
     }
 
-    db.prepare(
+    await db.prepare(
       `
       INSERT INTO suppliers (
         name, contact_name, phone, email, address, tin_number,
@@ -98,7 +98,7 @@ router.post('/', checkPermission('manage_suppliers'), (req, res) => {
   }
 });
 
-router.put('/:id', checkPermission('manage_suppliers'), (req, res) => {
+router.put('/:id', checkPermission('manage_suppliers'), async (req, res) => {
   try {
     const { name, contact_name, phone, email, address, tin_number, payment_terms, notes } = req.body;
 
@@ -110,7 +110,7 @@ router.put('/:id', checkPermission('manage_suppliers'), (req, res) => {
       return res.status(404).json({ error: 'Supplier not found.' });
     }
 
-    db.prepare(
+    await db.prepare(
       `
       UPDATE suppliers SET
         name = ?, contact_name = ?, phone = ?, email = ?, address = ?,
@@ -138,7 +138,7 @@ router.put('/:id', checkPermission('manage_suppliers'), (req, res) => {
   }
 });
 
-router.delete('/:id', checkPermission('manage_suppliers'), (req, res) => {
+router.delete('/:id', checkPermission('manage_suppliers'), async (req, res) => {
   try {
     const existingSupplier = db
       .prepare(`SELECT id FROM suppliers WHERE id = ? AND deleted_at IS NULL AND business_id = ?`)
@@ -164,7 +164,7 @@ router.delete('/:id', checkPermission('manage_suppliers'), (req, res) => {
       });
     }
 
-    db.prepare(
+    await db.prepare(
       `UPDATE suppliers SET deleted_at = datetime('now'), sync_status = 'pending' WHERE id = ? AND business_id = ?`
     ).run(req.params.id, bid(req));
 

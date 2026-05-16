@@ -24,7 +24,7 @@ class WhatsAppService {
   }
 
   async getSetting(key) {
-    const result = db.prepare(`
+    const result = await db.prepare(`
       SELECT value FROM settings WHERE key = ?
     `).get(key);
     return result?.value || '';

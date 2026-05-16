@@ -8,18 +8,20 @@ const router = express.Router();
 router.use(authenticate, restrictToBusinessStaff);
 
 // Generate unique sale number (per business, per day)
-function generateSaleNumber(businessId) {
+async function generateSaleNumber(businessId) {
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  const count = db.prepare(`
+  const count = (
+    await db.prepare(`
     SELECT COUNT(*) as count FROM sales
     WHERE date(created_at) = date('now') AND business_id = ?
-  `).get(businessId).count;
+  `).get(businessId)
+  ).count;
 
   return `INV-${today}-${String(count + 1).padStart(6, '0')}`;
 }
 
 // Create sale
-router.post('/', checkPermission('make_sale'), (req, res) => {
+router.post('/', checkPermission('make_sale'), async (req, res) => {
   try {
     const {
       items,
@@ -42,7 +44,7 @@ router.post('/', checkPermission('make_sale'), (req, res) => {
     }
 
     if (customer_id) {
-      const cust = db
+      const cust = await db
         .prepare(`SELECT id FROM customers WHERE id = ? AND business_id = ? AND deleted_at IS NULL`)
         .get(customer_id, req.user.business_id);
       if (!cust) {
@@ -55,7 +57,7 @@ router.post('/', checkPermission('make_sale'), (req, res) => {
     const validatedItems = [];
 
     for (const item of items) {
-      const product = db.prepare(`
+      const product = await db.prepare(`
         SELECT id, name, current_stock, buying_price, selling_price, is_active
         FROM products WHERE id = ? AND business_id = ? AND deleted_at IS NULL
       `).get(item.product_id, req.user.business_id);
@@ -106,11 +108,11 @@ router.post('/', checkPermission('make_sale'), (req, res) => {
     }
 
     // Generate sale number
-    const saleNumber = generateSaleNumber(req.user.business_id);
+    const saleNumber = await generateSaleNumber(req.user.business_id);
 
-    const saleId = db.transaction(() => {
+    const saleId = await db.transaction(async (tx) => {
       // Create sale record
-      db.prepare(`
+      await tx.prepare(`
         INSERT INTO sales (
           sale_number, cashier_id, customer_id, subtotal, discount_amount,
           discount_reason, tax_amount, total_amount, amount_paid, change_given,
@@ -122,7 +124,7 @@ router.post('/', checkPermission('make_sale'), (req, res) => {
         payment_method, payment_reference || null, notes || null, req.user.business_id
       );
 
-      const insertedSale = db.prepare(
+      const insertedSale = await tx.prepare(
         `SELECT id FROM sales WHERE sale_number = ? AND business_id = ?`
       ).get(saleNumber, req.user.business_id);
       const saleId = insertedSale?.id;
@@ -133,7 +135,7 @@ router.post('/', checkPermission('make_sale'), (req, res) => {
       // Insert sale items and update stock
       for (const item of validatedItems) {
         // Insert sale item
-        db.prepare(`
+        await tx.prepare(`
           INSERT INTO sale_items (
             sale_id, product_id, product_name, quantity, unit_price,
             buying_price, line_total, created_at, sync_status
@@ -144,7 +146,7 @@ router.post('/', checkPermission('make_sale'), (req, res) => {
         );
 
         // Update product stock
-        db.prepare(`
+        await tx.prepare(`
           UPDATE products SET 
             current_stock = current_stock - ?,
             updated_at = datetime('now'),
@@ -155,7 +157,7 @@ router.post('/', checkPermission('make_sale'), (req, res) => {
 
       // Add loyalty points if customer exists
       if (customer_id) {
-        const loyaltyRate = parseFloat(db.prepare(`
+        const loyaltyRate = parseFloat(await tx.prepare(`
           SELECT value FROM settings WHERE key = 'loyalty_rate'
         `).get()?.value || '0.01');
         
@@ -163,14 +165,14 @@ router.post('/', checkPermission('make_sale'), (req, res) => {
         
         if (pointsEarned > 0) {
           // Add loyalty transaction
-          db.prepare(`
+          await tx.prepare(`
             INSERT INTO loyalty_transactions (
               customer_id, sale_id, points_change, reason, business_id, created_at, sync_status
             ) VALUES (?, ?, ?, ?, ?, datetime('now'), 'pending')
           `).run(customer_id, saleId, pointsEarned, `Purchase of UGX ${totalAmount.toLocaleString()}`, req.user.business_id);
 
           // Update customer points and stats
-          db.prepare(`
+          await tx.prepare(`
             UPDATE customers SET
               loyalty_points = loyalty_points + ?,
               total_spent = total_spent + ?,
@@ -184,7 +186,7 @@ router.post('/', checkPermission('make_sale'), (req, res) => {
       }
 
       return saleId;
-    })();
+    });
 
     res.status(201).json({
       message: 'Sale completed successfully.',
@@ -201,7 +203,7 @@ router.post('/', checkPermission('make_sale'), (req, res) => {
 });
 
 // Get sales with filters
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const { from, to, cashier_id, status, page = 1, limit = 50 } = req.query;
     const offset = (page - 1) * limit;
@@ -244,7 +246,7 @@ router.get('/', (req, res) => {
     query += ` ORDER BY s.created_at DESC LIMIT ? OFFSET ?`;
     params.push(parseInt(limit), offset);
 
-    const sales = db.prepare(query).all(...params);
+    const sales = await db.prepare(query).all(...params);
 
     // Get total count
     let countQuery = `
@@ -277,7 +279,7 @@ router.get('/', (req, res) => {
       countParams.push(req.user.id);
     }
 
-    const { total } = db.prepare(countQuery).get(...countParams);
+    const { total } = await db.prepare(countQuery).get(...countParams);
 
     res.json({
       sales,
@@ -295,7 +297,7 @@ router.get('/', (req, res) => {
 });
 
 // Must be registered before /:id — otherwise "today-summary" is captured as an id
-router.get('/today-summary', (req, res) => {
+router.get('/today-summary', async (req, res) => {
   try {
     const today = new Date().toISOString().split('T')[0];
 
@@ -317,7 +319,7 @@ router.get('/today-summary', (req, res) => {
       params.push(req.user.id);
     }
 
-    const summary = db.prepare(query).get(...params);
+    const summary = await db.prepare(query).get(...params);
 
     let topProductQuery = `
       SELECT p.name, SUM(si.quantity) as quantity_sold, SUM(si.line_total) as revenue
@@ -337,7 +339,7 @@ router.get('/today-summary', (req, res) => {
 
     topProductQuery += ` GROUP BY si.product_id ORDER BY quantity_sold DESC LIMIT 1`;
 
-    const topProduct = db.prepare(topProductQuery).get(...topProductParams);
+    const topProduct = await db.prepare(topProductQuery).get(...topProductParams);
 
     res.json({
       date: today,
@@ -353,9 +355,9 @@ router.get('/today-summary', (req, res) => {
 });
 
 // Get single sale with items
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
-    const sale = db.prepare(`
+    const sale = await db.prepare(`
       SELECT s.*, u.name as cashier_name, c.name as customer_name, c.phone as customer_phone
       FROM sales s
       LEFT JOIN users u ON s.cashier_id = u.id
@@ -373,7 +375,7 @@ router.get('/:id', (req, res) => {
     }
 
     // Get sale items
-    const items = db.prepare(`
+    const items = await db.prepare(`
       SELECT * FROM sale_items WHERE sale_id = ?
     `).all(sale.id);
 
@@ -385,11 +387,11 @@ router.get('/:id', (req, res) => {
 });
 
 // Void sale
-router.post('/:id/void', checkPermission('void_sale'), (req, res) => {
+router.post('/:id/void', checkPermission('void_sale'), async (req, res) => {
   try {
     const { reason } = req.body;
 
-    const sale = db.prepare(`
+    const sale = await db.prepare(`
       SELECT id, status, cashier_id FROM sales
       WHERE id = ? AND deleted_at IS NULL AND business_id = ?
     `).get(req.params.id, req.user.business_id);
@@ -403,13 +405,13 @@ router.post('/:id/void', checkPermission('void_sale'), (req, res) => {
     }
 
     // Get sale items to restore stock
-    const items = db.prepare(`
+    const items = await db.prepare(`
       SELECT product_id, quantity FROM sale_items WHERE sale_id = ?
     `).all(sale.id);
 
-    db.transaction(() => {
+    await db.transaction(async (tx) => {
       // Update sale status
-      db.prepare(`
+      await tx.prepare(`
         UPDATE sales SET 
           status = 'voided',
           notes = COALESCE(notes, '') || ' | Voided: ' || COALESCE(?, 'No reason provided'),
@@ -420,7 +422,7 @@ router.post('/:id/void', checkPermission('void_sale'), (req, res) => {
 
       // Restore stock
       for (const item of items) {
-        db.prepare(`
+        await tx.prepare(`
           UPDATE products SET 
             current_stock = current_stock + ?,
             updated_at = datetime('now'),
@@ -430,12 +432,12 @@ router.post('/:id/void', checkPermission('void_sale'), (req, res) => {
       }
 
       // Reverse loyalty points if customer exists
-      const customerInfo = db.prepare(`
+      const customerInfo = await tx.prepare(`
         SELECT customer_id, total_amount FROM sales WHERE id = ? AND business_id = ?
       `).get(sale.id, req.user.business_id);
 
       if (customerInfo.customer_id) {
-        const loyaltyRate = parseFloat(db.prepare(`
+        const loyaltyRate = parseFloat(await tx.prepare(`
           SELECT value FROM settings WHERE key = 'loyalty_rate'
         `).get()?.value || '0.01');
         
@@ -443,14 +445,14 @@ router.post('/:id/void', checkPermission('void_sale'), (req, res) => {
         
         if (pointsToReverse > 0) {
           // Add negative loyalty transaction
-          db.prepare(`
+          await tx.prepare(`
             INSERT INTO loyalty_transactions (
               customer_id, sale_id, points_change, reason, business_id, created_at, sync_status
             ) VALUES (?, ?, ?, ?, ?, datetime('now'), 'pending')
           `).run(customerInfo.customer_id, sale.id, -pointsToReverse, `Sale voided: ${sale.id}`, req.user.business_id);
 
           // Update customer points
-          db.prepare(`
+          await tx.prepare(`
             UPDATE customers SET
               loyalty_points = loyalty_points - ?,
               total_spent = total_spent - ?,
@@ -460,7 +462,7 @@ router.post('/:id/void', checkPermission('void_sale'), (req, res) => {
           `).run(pointsToReverse, customerInfo.total_amount, customerInfo.customer_id, req.user.business_id);
         }
       }
-    })();
+    });
 
     res.json({ message: 'Sale voided successfully.' });
   } catch (error) {

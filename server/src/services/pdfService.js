@@ -562,14 +562,14 @@ class PDFService {
 
     query += ` GROUP BY s.id ORDER BY s.created_at DESC`;
 
-    return db.prepare(query).all(...params);
+    return await db.prepare(query).all(...params);
   }
 
   async getDailyData(date, options) {
     const bid = options.business_id;
     if (!bid) throw new Error('business_id is required');
 
-    const summary = db.prepare(`
+    const summary = await db.prepare(`
       SELECT
         COUNT(*) as sales_count,
         SUM(total_amount) as revenue,
@@ -580,7 +580,7 @@ class PDFService {
       AND s.business_id = ?
     `).get(date, bid);
 
-    const hourlySales = db.prepare(`
+    const hourlySales = await db.prepare(`
       SELECT
         strftime('%H', created_at) as hour,
         COUNT(*) as sales_count,
@@ -592,7 +592,7 @@ class PDFService {
       ORDER BY hour
     `).all(date, bid);
 
-    const paymentMethods = db.prepare(`
+    const paymentMethods = await db.prepare(`
       SELECT payment_method, COUNT(*) as count, SUM(total_amount) as amount
       FROM sales s
       WHERE date(s.created_at) = ? AND s.status = 'completed' AND s.deleted_at IS NULL
@@ -611,7 +611,7 @@ class PDFService {
     const bid = options.business_id;
     if (!bid) throw new Error('business_id is required');
 
-    const summary = db.prepare(`
+    const summary = await db.prepare(`
       SELECT
         COUNT(*) as total_products,
         COUNT(CASE WHEN is_active = 1 THEN 1 END) as active_products,
@@ -621,7 +621,7 @@ class PDFService {
       WHERE deleted_at IS NULL AND business_id = ?
     `).get(bid);
 
-    const lowStock = db.prepare(`
+    const lowStock = await db.prepare(`
       SELECT name, current_stock, minimum_stock, unit
       FROM products
       WHERE current_stock <= minimum_stock
@@ -631,7 +631,7 @@ class PDFService {
       ORDER BY current_stock ASC
     `).all(bid);
 
-    const expiring = db.prepare(`
+    const expiring = await db.prepare(`
       SELECT name, expiry_date, current_stock,
         CASE
           WHEN date(expiry_date) < date('now') THEN 'expired'
@@ -653,24 +653,15 @@ class PDFService {
 
   // Utility methods
   getStoreName() {
-    const storeName = db.prepare(`
-      SELECT value FROM settings WHERE key = 'store_name'
-    `).get()?.value || 'My Supermarket';
-    return storeName;
+    return 'My Supermarket';
   }
 
   getStoreAddress() {
-    const address = db.prepare(`
-      SELECT value FROM settings WHERE key = 'store_address'
-    `).get()?.value || 'Kampala, Uganda';
-    return address;
+    return 'Kampala, Uganda';
   }
 
   getStorePhone() {
-    const phone = db.prepare(`
-      SELECT value FROM settings WHERE key = 'store_phone'
-    `).get()?.value || '+256700000000';
-    return phone;
+    return '+256700000000';
   }
 
   // Clean up temporary files

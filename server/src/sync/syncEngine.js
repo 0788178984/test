@@ -19,11 +19,11 @@ class SyncEngine {
   async initialize() {
     try {
       // Get sync settings
-      const intervalSetting = db.prepare(`
+      const intervalSetting = await db.prepare(`
         SELECT value FROM settings WHERE key = 'sync_interval_seconds'
       `).get();
       
-      const cloudUrlSetting = db.prepare(`
+      const cloudUrlSetting = await db.prepare(`
         SELECT value FROM settings WHERE key = 'cloud_api_url'
       `).get();
 
@@ -122,7 +122,7 @@ class SyncEngine {
   async pushTable(table) {
     try {
       // Get all records with sync_status = 'pending'
-      const pending = this.db.prepare(`
+      const pending = await db.prepare(`
         SELECT * FROM ${table} WHERE sync_status = 'pending' AND deleted_at IS NULL
       `).all();
 
@@ -159,7 +159,7 @@ class SyncEngine {
         const ids = result.accepted;
         const placeholders = ids.map(() => '?').join(',');
         
-        this.db.prepare(`
+        await db.prepare(`
           UPDATE ${table} SET sync_status = 'synced', updated_at = datetime('now')
           WHERE id IN (${placeholders})
         `).run(...ids);
@@ -223,7 +223,7 @@ class SyncEngine {
   async upsertRecord(table, record) {
     try {
       // Check if record exists locally
-      const existing = this.db.prepare(`
+      const existing = await db.prepare(`
         SELECT id, updated_at FROM ${table} WHERE id = ? AND deleted_at IS NULL
       `).get(record.id);
 
@@ -232,7 +232,7 @@ class SyncEngine {
         const columns = Object.keys(record).join(',');
         const placeholders = Object.keys(record).map(() => '?').join(',');
         
-        this.db.prepare(`
+        await db.prepare(`
           INSERT OR REPLACE INTO ${table} (${columns}) VALUES (${placeholders})
         `).run(...Object.values(record));
       } else {
@@ -245,7 +245,7 @@ class SyncEngine {
           const columns = Object.keys(record).join(',');
           const placeholders = Object.keys(record).map(() => '?').join(',');
           
-          this.db.prepare(`
+          await db.prepare(`
             INSERT OR REPLACE INTO ${table} (${columns}) VALUES (${placeholders})
           `).run(...Object.values(record));
         }
@@ -277,7 +277,7 @@ class SyncEngine {
   async getCloudToken() {
     try {
       // Try to get token from settings first
-      const tokenSetting = this.db.prepare(`
+      const tokenSetting = await db.prepare(`
         SELECT value FROM settings WHERE key = 'cloud_token'
       `).get();
 
@@ -333,7 +333,7 @@ class SyncEngine {
       const token = result.token;
 
       // Store new token
-      this.db.prepare(`
+      await db.prepare(`
         INSERT OR REPLACE INTO settings (key, value, updated_at) 
         VALUES ('cloud_token', ?, datetime('now'))
       `).run(token);
@@ -346,14 +346,14 @@ class SyncEngine {
   }
 
   async getMachineId() {
-    const setting = this.db.prepare(`
+    const setting = await db.prepare(`
       SELECT value FROM settings WHERE key = 'machine_id'
     `).get();
     return setting?.value || process.env.MACHINE_ID;
   }
 
   async getMachineSecret() {
-    const setting = this.db.prepare(`
+    const setting = await db.prepare(`
       SELECT value FROM settings WHERE key = 'machine_secret'
     `).get();
     return setting?.value || process.env.MACHINE_SECRET;
@@ -407,17 +407,17 @@ class SyncEngine {
       const status = {};
       
       for (const table of this.SYNC_TABLES) {
-        const pending = this.db.prepare(`
+        const pending = await db.prepare(`
           SELECT COUNT(*) as count FROM ${table} 
           WHERE sync_status = 'pending' AND deleted_at IS NULL
         `).get().count;
 
-        const synced = this.db.prepare(`
+        const synced = await db.prepare(`
           SELECT COUNT(*) as count FROM ${table} 
           WHERE sync_status = 'synced' AND deleted_at IS NULL
         `).get().count;
 
-        const lastSync = this.db.prepare(`
+        const lastSync = await db.prepare(`
           SELECT MAX(updated_at) as last_sync FROM ${table} 
           WHERE sync_status = 'synced' AND deleted_at IS NULL
         `).get().last_sync;
@@ -479,7 +479,7 @@ class SyncEngine {
           
           case 'merge':
             // Merge data (remote takes precedence for provided fields)
-            const current = this.db.prepare(`
+            const current = await db.prepare(`
               SELECT * FROM ${table} WHERE id = ? AND deleted_at IS NULL
             `).get(record_id);
 
@@ -499,7 +499,7 @@ class SyncEngine {
         const columns = Object.keys(updateData);
         const placeholders = columns.map(() => '?').join(',');
         
-        this.db.prepare(`
+        await db.prepare(`
           UPDATE ${table} SET ${columns.map(col => `${col} = ?`).join(', ')}
           WHERE id = ?
         `).run(...Object.values(updateData), record_id);
@@ -524,7 +524,7 @@ class SyncEngine {
     try {
       if (settings.cloudUrl !== undefined) {
         this.cloudUrl = settings.cloudUrl;
-        this.db.prepare(`
+        await db.prepare(`
           UPDATE settings SET value = ?, updated_at = datetime('now')
           WHERE key = 'cloud_api_url'
         `).run(settings.cloudUrl);
@@ -539,7 +539,7 @@ class SyncEngine {
 
       if (settings.interval !== undefined) {
         this.syncInterval = settings.interval;
-        this.db.prepare(`
+        await db.prepare(`
           UPDATE settings SET value = ?, updated_at = datetime('now')
           WHERE key = 'sync_interval_seconds'
         `).run(settings.interval.toString());

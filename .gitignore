@@ -5,6 +5,7 @@ node_modules/
 .env
 .env.local
 .env.*.local
+server/.supabase-url.tmp
 
 # Build output
 client/dist/

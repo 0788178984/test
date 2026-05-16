@@ -23,7 +23,7 @@ class MobileMoneyService {
   }
 
   async getMTNConfig() {
-    const url = db.prepare(`
+    const url = await db.prepare(`
       SELECT value FROM settings WHERE key = 'mtn_momo_url'
     `).get()?.value || 'https://sandbox.momodeveloper.mtn.com';
 
@@ -43,7 +43,7 @@ class MobileMoneyService {
   }
 
   async getAirtelConfig() {
-    const url = db.prepare(`
+    const url = await db.prepare(`
       SELECT value FROM settings WHERE key = 'airtel_momo_url'
     `).get()?.value || 'https://openapi.airtel.africa';
 
@@ -325,11 +325,11 @@ class MobileMoneyService {
     if (!businessId) {
       return { success: false, error: 'Business context is required.' };
     }
-    const row = db.prepare(`SELECT payment_config FROM businesses WHERE id = ?`).get(businessId);
+    const row = await db.prepare(`SELECT payment_config FROM businesses WHERE id = ?`).get(businessId);
     const externalId = this.generateTransactionId();
 
     if (method === 'mtn_momo') {
-      const mtn = resolveMtnRuntime(row?.payment_config);
+      const mtn = await resolveMtnRuntime(row?.payment_config);
       if (!mtn) {
         return {
           success: false,
@@ -339,7 +339,7 @@ class MobileMoneyService {
       return this.requestMTNPayment(phoneNumber, amount, reference, externalId, mtn, businessId);
     }
     if (method === 'airtel_money') {
-      const airtel = resolveAirtelRuntime(row?.payment_config);
+      const airtel = await resolveAirtelRuntime(row?.payment_config);
       if (!airtel) {
         return {
           success: false,
@@ -385,9 +385,9 @@ class MobileMoneyService {
       let mtnCfg = null;
       let airtelCfg = null;
       if (txn?.business_id) {
-        const bizRow = db.prepare(`SELECT payment_config FROM businesses WHERE id = ?`).get(txn.business_id);
-        mtnCfg = resolveMtnRuntime(bizRow?.payment_config);
-        airtelCfg = resolveAirtelRuntime(bizRow?.payment_config);
+        const bizRow = await db.prepare(`SELECT payment_config FROM businesses WHERE id = ?`).get(txn.business_id);
+        mtnCfg = await resolveMtnRuntime(bizRow?.payment_config);
+        airtelCfg = await resolveAirtelRuntime(bizRow?.payment_config);
       }
 
       let result;
@@ -442,7 +442,7 @@ class MobileMoneyService {
   }
 
   async storeTransaction(transactionData) {
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO mobile_money_transactions (
         external_id, business_id, reference, method, phone, amount, status,
         provider_response, created_at, sync_status
@@ -460,7 +460,7 @@ class MobileMoneyService {
   }
 
   async updateTransactionStatus(externalId, status, providerResponse) {
-    db.prepare(`
+    await db.prepare(`
       UPDATE mobile_money_transactions SET
         status = ?,
         provider_response = ?,
@@ -471,7 +471,7 @@ class MobileMoneyService {
   }
 
   async getTransaction(externalId) {
-    return db.prepare(`
+    return await db.prepare(`
       SELECT * FROM mobile_money_transactions WHERE external_id = ?
     `).get(externalId);
   }
@@ -479,7 +479,7 @@ class MobileMoneyService {
   async sendPaymentConfirmation(transaction) {
     try {
       // Get customer info if available
-      const customer = db.prepare(`
+      const customer = await db.prepare(`
         SELECT name, phone FROM customers WHERE phone = ?
       `).get(transaction.phone);
 
@@ -493,7 +493,7 @@ class MobileMoneyService {
 
       // Update sale record if this is for a sale
       if (transaction.reference.startsWith('INV-')) {
-        db.prepare(`
+        await db.prepare(`
           UPDATE sales SET
             payment_reference = ?,
             updated_at = datetime('now'),
@@ -575,7 +575,7 @@ class MobileMoneyService {
         params.push(filters.limit);
       }
 
-      return db.prepare(query).all(...params);
+      return await db.prepare(query).all(...params);
     } catch (error) {
       console.error('Get transaction history error:', error);
       return [];

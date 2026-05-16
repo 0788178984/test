@@ -1,17 +1,17 @@
 require('dotenv').config();
 const db = require('./connection');
 const bcrypt = require('bcryptjs');
-const { DEFAULT_BUSINESS_ID } = require('./multiTenantMigrate');
+const { DEFAULT_BUSINESS_ID } = require('./constants');
 
 async function seedDatabase(options = {}) {
   const forceEnv = ['1', 'true', 'yes'].includes(String(process.env.FORCE_SEED || '').toLowerCase());
   const skipGuard = options.skipGuard === true;
 
   if (!skipGuard && !forceEnv) {
-    const userCount = db.prepare(`SELECT COUNT(*) as c FROM users WHERE deleted_at IS NULL`).get().c;
-    const nonDefaultBiz = db
-      .prepare(`SELECT COUNT(*) as c FROM businesses WHERE id != ?`)
-      .get(DEFAULT_BUSINESS_ID).c;
+    const userCount = (await db.prepare(`SELECT COUNT(*) as c FROM users WHERE deleted_at IS NULL`).get()).c;
+    const nonDefaultBiz = (
+      await db.prepare(`SELECT COUNT(*) as c FROM businesses WHERE id != ?`).get(DEFAULT_BUSINESS_ID)
+    ).c;
 
     if (userCount > 0 || nonDefaultBiz > 0) {
       const msg =
@@ -25,7 +25,7 @@ async function seedDatabase(options = {}) {
 
   console.log('Seeding database...');
 
-  db.exec(`
+  await db.exec(`
     DELETE FROM support_requests;
     DELETE FROM loyalty_transactions;
     DELETE FROM sale_items;
@@ -38,7 +38,7 @@ async function seedDatabase(options = {}) {
     DELETE FROM users;
   `);
 
-  db.prepare(
+  await db.prepare(
     `
     INSERT OR IGNORE INTO businesses (id, name, business_code, subscription_status, subscription_expires_at)
     VALUES (?, 'Default Store', 'DEFAULT', 'active', NULL)
@@ -56,7 +56,7 @@ async function seedDatabase(options = {}) {
   const devPasswordHash = await bcrypt.hash(devPassword, 12);
   const devPin = await bcrypt.hash('0000', 12);
 
-  db.prepare(
+  await db.prepare(
     `
     INSERT INTO users (id, name, email, phone, pin, password_hash, role, business_id, is_active, created_at, updated_at, sync_status)
     VALUES ('dev-system-001', 'System Developer', 'developer@supermarket.ug', NULL, ?, ?, 'developer', NULL, 1, datetime('now'), datetime('now'), 'pending')
@@ -96,7 +96,7 @@ async function seedDatabase(options = {}) {
     }
   ];
 
-  const insertUser = db.prepare(`
+  const insertUser = await db.prepare(`
     INSERT INTO users (id, name, email, phone, pin, password_hash, role, business_id, is_active, created_at, updated_at, sync_status)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 'pending')
   `);
@@ -139,7 +139,7 @@ async function seedDatabase(options = {}) {
     }
   ];
 
-  const insertSupplier = db.prepare(`
+  const insertSupplier = await db.prepare(`
     INSERT INTO suppliers (id, name, contact_name, phone, email, address, tin_number, payment_terms, business_id, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
   `);
@@ -227,7 +227,7 @@ async function seedDatabase(options = {}) {
     }
   ];
 
-  const insertProduct = db.prepare(`
+  const insertProduct = await db.prepare(`
     INSERT INTO products (id, name, barcode, sku, category, unit, buying_price, selling_price,
                          current_stock, minimum_stock, supplier_id, business_id, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
@@ -272,7 +272,7 @@ async function seedDatabase(options = {}) {
     }
   ];
 
-  const insertCustomer = db.prepare(`
+  const insertCustomer = await db.prepare(`
     INSERT INTO customers (id, name, phone, email, loyalty_points, total_spent, visit_count, business_id, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
   `);
@@ -321,7 +321,7 @@ async function seedDatabase(options = {}) {
     }
   ];
 
-  const insertSale = db.prepare(`
+  const insertSale = await db.prepare(`
     INSERT INTO sales (id, sale_number, cashier_id, customer_id, subtotal, discount_amount,
                       tax_amount, total_amount, amount_paid, change_given, payment_method,
                       payment_reference, business_id, created_at, updated_at)
@@ -390,7 +390,7 @@ async function seedDatabase(options = {}) {
     }
   ];
 
-  const insertSaleItem = db.prepare(`
+  const insertSaleItem = await db.prepare(`
     INSERT INTO sale_items (id, sale_id, product_id, product_name, quantity, unit_price, 
                            buying_price, line_total, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
@@ -419,7 +419,7 @@ async function seedDatabase(options = {}) {
     }
   ];
 
-  const insertLoyalty = db.prepare(`
+  const insertLoyalty = await db.prepare(`
     INSERT INTO loyalty_transactions (id, customer_id, sale_id, points_change, reason, business_id, created_at)
     VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
   `);

@@ -9,7 +9,7 @@ router.use(authenticate, restrictToBusinessStaff);
 
 const bid = (req) => req.user.business_id;
 
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const { search, page = 1, limit = 50 } = req.query;
     const offset = (page - 1) * limit;
@@ -29,7 +29,7 @@ router.get('/', (req, res) => {
     query += ` ORDER BY name LIMIT ? OFFSET ?`;
     params.push(parseInt(limit, 10), offset);
 
-    const customers = db.prepare(query).all(...params);
+    const customers = await db.prepare(query).all(...params);
 
     let countQuery = `
       SELECT COUNT(*) as total FROM customers WHERE deleted_at IS NULL AND business_id = ?
@@ -42,7 +42,7 @@ router.get('/', (req, res) => {
       countParams.push(searchParam, searchParam, searchParam);
     }
 
-    const { total } = db.prepare(countQuery).get(...countParams);
+    const { total } = await db.prepare(countQuery).get(...countParams);
 
     res.json({
       customers,
@@ -59,7 +59,7 @@ router.get('/', (req, res) => {
   }
 });
 
-router.get('/:id/history', (req, res) => {
+router.get('/:id/history', async (req, res) => {
   try {
     const { page = 1, limit = 20 } = req.query;
     const offset = (page - 1) * limit;
@@ -125,7 +125,7 @@ router.get('/:id/history', (req, res) => {
   }
 });
 
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
     const customer = db
       .prepare(
@@ -147,7 +147,7 @@ router.get('/:id', (req, res) => {
   }
 });
 
-router.post('/', checkPermission('manage_customers'), (req, res) => {
+router.post('/', checkPermission('manage_customers'), async (req, res) => {
   try {
     const { name, phone, email, notes } = req.body;
 
@@ -155,7 +155,7 @@ router.post('/', checkPermission('manage_customers'), (req, res) => {
       return res.status(400).json({ error: 'Customer name is required.' });
     }
 
-    db.prepare(
+    await db.prepare(
       `
       INSERT INTO customers (
         name, phone, email, notes, business_id, created_at, updated_at, sync_status
@@ -175,7 +175,7 @@ router.post('/', checkPermission('manage_customers'), (req, res) => {
   }
 });
 
-router.put('/:id', checkPermission('manage_customers'), (req, res) => {
+router.put('/:id', checkPermission('manage_customers'), async (req, res) => {
   try {
     const { name, phone, email, notes } = req.body;
 
@@ -187,7 +187,7 @@ router.put('/:id', checkPermission('manage_customers'), (req, res) => {
       return res.status(404).json({ error: 'Customer not found.' });
     }
 
-    db.prepare(
+    await db.prepare(
       `
       UPDATE customers SET
         name = ?, phone = ?, email = ?, notes = ?,
@@ -206,7 +206,7 @@ router.put('/:id', checkPermission('manage_customers'), (req, res) => {
   }
 });
 
-router.delete('/:id', authorize('admin'), (req, res) => {
+router.delete('/:id', authorize('admin'), async (req, res) => {
   try {
     const existingCustomer = db
       .prepare(`SELECT id FROM customers WHERE id = ? AND deleted_at IS NULL AND business_id = ?`)
@@ -216,7 +216,7 @@ router.delete('/:id', authorize('admin'), (req, res) => {
       return res.status(404).json({ error: 'Customer not found.' });
     }
 
-    db.prepare(
+    await db.prepare(
       `UPDATE customers SET deleted_at = datetime('now'), sync_status = 'pending' WHERE id = ? AND business_id = ?`
     ).run(req.params.id, bid(req));
 
@@ -227,7 +227,7 @@ router.delete('/:id', authorize('admin'), (req, res) => {
   }
 });
 
-router.post('/:id/redeem-points', checkPermission('manage_customers'), (req, res) => {
+router.post('/:id/redeem-points', checkPermission('manage_customers'), async (req, res) => {
   try {
     const { points, reason } = req.body;
 
@@ -255,8 +255,8 @@ router.post('/:id/redeem-points', checkPermission('manage_customers'), (req, res
     const pointValue = 10;
     const discountAmount = points * pointValue;
 
-    db.transaction(() => {
-      db.prepare(
+    await db.transaction(async (tx) => {
+      await tx.prepare(
         `
         INSERT INTO loyalty_transactions (
           customer_id, points_change, reason, business_id, created_at, sync_status
@@ -264,7 +264,7 @@ router.post('/:id/redeem-points', checkPermission('manage_customers'), (req, res
       `
       ).run(req.params.id, -points, reason || `Redeemed ${points} points`, bid(req));
 
-      db.prepare(
+      await tx.prepare(
         `
         UPDATE customers SET
           loyalty_points = loyalty_points - ?,
@@ -273,7 +273,7 @@ router.post('/:id/redeem-points', checkPermission('manage_customers'), (req, res
         WHERE id = ? AND business_id = ?
       `
       ).run(points, req.params.id, bid(req));
-    })();
+    });
 
     res.json({
       message: 'Points redeemed successfully.',

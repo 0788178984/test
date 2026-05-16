@@ -1,7 +1,7 @@
 const db = require('../db/connection');
 
-function getDeveloperUserId() {
-  const row = db
+async function getDeveloperUserId() {
+  const row = await db
     .prepare(`SELECT id FROM users WHERE role = 'developer' AND deleted_at IS NULL LIMIT 1`)
     .get();
   return row?.id || null;
@@ -11,8 +11,8 @@ function getDeveloperUserId() {
  * Classify businesses for dashboards and scheduled reminders.
  * @returns {{ out_of_licence: object[], expiring_soon: object[], expiring_this_month: object[] }}
  */
-function classifyLicenseStates() {
-  const businesses = db.prepare(`SELECT * FROM businesses ORDER BY name`).all();
+async function classifyLicenseStates() {
+  const businesses = await db.prepare(`SELECT * FROM businesses ORDER BY name`).all();
   const now = new Date();
   const out_of_licence = [];
   const expiring_soon = [];
@@ -61,12 +61,12 @@ function classifyLicenseStates() {
  * Daily job: in-app digest for developer; reminders for store admins/managers.
  * @param {function} createNotification from routes/notifications
  */
-function runDailyLicenseReminders(createNotification) {
-  const { out_of_licence, expiring_soon, expiring_this_month } = classifyLicenseStates();
-  const devId = getDeveloperUserId();
+async function runDailyLicenseReminders(createNotification) {
+  const { out_of_licence, expiring_soon, expiring_this_month } = await classifyLicenseStates();
+  const devId = await getDeveloperUserId();
 
   if (devId && (out_of_licence.length || expiring_soon.length || expiring_this_month.length)) {
-    const recentDigest = db
+    const recentDigest = await db
       .prepare(
         `
       SELECT id FROM notifications
@@ -113,7 +113,7 @@ function runDailyLicenseReminders(createNotification) {
   }
 
   for (const b of out_of_licence) {
-    const recent = db
+    const recent = await db
       .prepare(
         `
       SELECT id FROM notifications
@@ -143,7 +143,7 @@ function runDailyLicenseReminders(createNotification) {
     const days = b.days_until_expiry;
     if (days == null || days < 0) continue;
     const bucket = days <= 7 ? '7d' : '14d';
-    const recent = db
+    const recent = await db
       .prepare(
         `
       SELECT id FROM notifications

@@ -8,7 +8,7 @@ const router = express.Router();
 router.use(authenticate, restrictToBusinessStaff);
 
 // Get all products with filters
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const { search, category, low_stock, expiring, page = 1, limit = 50 } = req.query;
     const offset = (page - 1) * limit;
@@ -44,7 +44,7 @@ router.get('/', (req, res) => {
     query += ` ORDER BY p.name LIMIT ? OFFSET ?`;
     params.push(parseInt(limit), offset);
 
-    const products = db.prepare(query).all(...params);
+    const products = await db.prepare(query).all(...params);
 
     // Get total count
     let countQuery = `
@@ -73,7 +73,7 @@ router.get('/', (req, res) => {
       countQuery += ` AND p.expiry_date IS NOT NULL AND date(p.expiry_date) <= date('now', '+30 days')`;
     }
 
-    const { total } = db.prepare(countQuery).get(...countParams);
+    const { total } = await db.prepare(countQuery).get(...countParams);
 
     res.json({
       products,
@@ -92,9 +92,9 @@ router.get('/', (req, res) => {
 
 // Static paths must be registered before /:id
 
-router.get('/categories/list', (req, res) => {
+router.get('/categories/list', async (req, res) => {
   try {
-    const categories = db.prepare(`
+    const categories = await db.prepare(`
       SELECT DISTINCT category 
       FROM products 
       WHERE category IS NOT NULL AND deleted_at IS NULL AND business_id = ?
@@ -108,9 +108,9 @@ router.get('/categories/list', (req, res) => {
   }
 });
 
-router.get('/barcode/:code', (req, res) => {
+router.get('/barcode/:code', async (req, res) => {
   try {
-    const product = db.prepare(`
+    const product = await db.prepare(`
       SELECT p.*, s.name as supplier_name
       FROM products p
       LEFT JOIN suppliers s ON p.supplier_id = s.id
@@ -129,9 +129,9 @@ router.get('/barcode/:code', (req, res) => {
 });
 
 // Get single product
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
-    const product = db.prepare(`
+    const product = await db.prepare(`
       SELECT p.*, s.name as supplier_name
       FROM products p
       LEFT JOIN suppliers s ON p.supplier_id = s.id
@@ -150,7 +150,7 @@ router.get('/:id', (req, res) => {
 });
 
 // Create product
-router.post('/', checkPermission('add_edit_products'), (req, res) => {
+router.post('/', checkPermission('add_edit_products'), async (req, res) => {
   try {
     const {
       name, barcode, sku, category, unit, buying_price, selling_price,
@@ -161,7 +161,7 @@ router.post('/', checkPermission('add_edit_products'), (req, res) => {
       return res.status(400).json({ error: 'Name, buying price, and selling price are required.' });
     }
 
-    const result = db.prepare(`
+    const result = await db.prepare(`
       INSERT INTO products (
         name, barcode, sku, category, unit, buying_price, selling_price,
         tax_rate, current_stock, minimum_stock, supplier_id, expiry_date, business_id,
@@ -187,14 +187,14 @@ router.post('/', checkPermission('add_edit_products'), (req, res) => {
 });
 
 // Update product
-router.put('/:id', checkPermission('add_edit_products'), (req, res) => {
+router.put('/:id', checkPermission('add_edit_products'), async (req, res) => {
   try {
     const {
       name, barcode, sku, category, unit, buying_price, selling_price,
       tax_rate, current_stock, minimum_stock, supplier_id, expiry_date, is_active
     } = req.body;
 
-    const existingProduct = db.prepare(`
+    const existingProduct = await db.prepare(`
       SELECT id FROM products WHERE id = ? AND business_id = ? AND deleted_at IS NULL
     `).get(req.params.id, req.user.business_id);
 
@@ -202,7 +202,7 @@ router.put('/:id', checkPermission('add_edit_products'), (req, res) => {
       return res.status(404).json({ error: 'Product not found.' });
     }
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE products SET
         name = ?, barcode = ?, sku = ?, category = ?, unit = ?,
         buying_price = ?, selling_price = ?, tax_rate = ?,
@@ -229,9 +229,9 @@ router.put('/:id', checkPermission('add_edit_products'), (req, res) => {
 });
 
 // Delete product (soft delete)
-router.delete('/:id', checkPermission('add_edit_products'), (req, res) => {
+router.delete('/:id', checkPermission('add_edit_products'), async (req, res) => {
   try {
-    const existingProduct = db.prepare(`
+    const existingProduct = await db.prepare(`
       SELECT id FROM products WHERE id = ? AND business_id = ? AND deleted_at IS NULL
     `).get(req.params.id, req.user.business_id);
 
@@ -239,7 +239,7 @@ router.delete('/:id', checkPermission('add_edit_products'), (req, res) => {
       return res.status(404).json({ error: 'Product not found.' });
     }
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE products SET deleted_at = datetime('now'), sync_status = 'pending'
       WHERE id = ? AND business_id = ?
     `).run(req.params.id, req.user.business_id);
@@ -252,7 +252,7 @@ router.delete('/:id', checkPermission('add_edit_products'), (req, res) => {
 });
 
 // Adjust stock
-router.post('/:id/adjust-stock', checkPermission('adjust_stock'), (req, res) => {
+router.post('/:id/adjust-stock', checkPermission('adjust_stock'), async (req, res) => {
   try {
     const { adjustment_type, quantity_change, reason, cost_per_unit, supplier_id } = req.body;
 
@@ -260,7 +260,7 @@ router.post('/:id/adjust-stock', checkPermission('adjust_stock'), (req, res) => 
       return res.status(400).json({ error: 'Adjustment type and quantity change are required.' });
     }
 
-    const product = db.prepare(`
+    const product = await db.prepare(`
       SELECT current_stock FROM products WHERE id = ? AND business_id = ? AND deleted_at IS NULL
     `).get(req.params.id, req.user.business_id);
 
@@ -275,9 +275,9 @@ router.post('/:id/adjust-stock', checkPermission('adjust_stock'), (req, res) => 
       return res.status(400).json({ error: 'Insufficient stock for this adjustment.' });
     }
 
-    db.transaction(() => {
+    await db.transaction(async (tx) => {
       // Update product stock
-      db.prepare(`
+      await tx.prepare(`
         UPDATE products SET 
           current_stock = ?, 
           updated_at = datetime('now'),
@@ -286,7 +286,7 @@ router.post('/:id/adjust-stock', checkPermission('adjust_stock'), (req, res) => 
       `).run(quantityAfter, req.params.id, req.user.business_id);
 
       // Record stock adjustment
-      db.prepare(`
+      await tx.prepare(`
         INSERT INTO stock_adjustments (
           product_id, user_id, adjustment_type, quantity_before, quantity_change,
           quantity_after, reason, supplier_id, cost_per_unit, business_id, created_at, sync_status
@@ -296,7 +296,7 @@ router.post('/:id/adjust-stock', checkPermission('adjust_stock'), (req, res) => 
         quantity_change, quantityAfter, reason, supplier_id, cost_per_unit,
         req.user.business_id
       );
-    })();
+    });
 
     res.json({
       message: 'Stock adjusted successfully.',

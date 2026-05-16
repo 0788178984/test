@@ -39,7 +39,7 @@ class PrintService {
 
   async printReceipt(saleId, options = {}) {
     try {
-      const sale = db.prepare(`
+      const sale = await db.prepare(`
         SELECT s.*, u.name as cashier_name, c.name as customer_name, c.phone as customer_phone
         FROM sales s
         LEFT JOIN users u ON s.cashier_id = u.id
@@ -51,7 +51,7 @@ class PrintService {
         throw new Error('Sale not found');
       }
 
-      const items = db.prepare(`
+      const items = await db.prepare(`
         SELECT product_name, quantity, unit_price, line_total
         FROM sale_items
         WHERE sale_id = ?
@@ -78,7 +78,7 @@ class PrintService {
         return {
           success: false,
           fallback: 'browser',
-          receiptData: this.formatReceiptForBrowser({
+          receiptData: await this.formatReceiptForBrowser({
             sale,
             items,
             storeName,
@@ -91,7 +91,7 @@ class PrintService {
       }
 
       // Mark receipt as printed
-      db.prepare(`
+      await db.prepare(`
         UPDATE sales SET receipt_printed = 1, updated_at = datetime('now'), sync_status = 'pending'
         WHERE id = ?
       `).run(saleId);
@@ -104,9 +104,18 @@ class PrintService {
   }
 
   async printThermalReceipt(data) {
+    const { sale, items, storeName, storeAddress, storePhone, storeTin } = data;
+    let customerPoints = null;
+    if (sale.customer_id) {
+      const customer = await db.prepare(`
+            SELECT loyalty_points FROM customers WHERE id = ?
+          `).get(sale.customer_id);
+      customerPoints = customer?.loyalty_points;
+    }
+    const receiptFooter = await this.getReceiptFooter();
+
     return new Promise((resolve, reject) => {
       try {
-        const { sale, items, storeName, storeAddress, storePhone, storeTin } = data;
         
         this.printer.font('a')
           .align('ct')
@@ -167,19 +176,12 @@ class PrintService {
         const loyaltyPoints = Math.round(sale.total_amount * 0.01); // 1% loyalty rate
         this.printer.text(`Loyalty Points: +${loyaltyPoints} pts`);
         
-        // Get customer total points
-        if (sale.customer_id) {
-          const customer = db.prepare(`
-            SELECT loyalty_points FROM customers WHERE id = ?
-          `).get(sale.customer_id);
-          
-          if (customer) {
-            this.printer.text(`Total Points: ${customer.loyalty_points} pts`);
-          }
+        if (customerPoints != null) {
+          this.printer.text(`Total Points: ${customerPoints} pts`);
         }
 
         this.printer.hr()
-          .text(this.getReceiptFooter())
+          .text(receiptFooter)
           .text('     Come again!')
           .hr()
           .cut();
@@ -191,9 +193,16 @@ class PrintService {
     });
   }
 
-  formatReceiptForBrowser(data) {
+  async formatReceiptForBrowser(data) {
     const { sale, items, storeName, storeAddress, storePhone, storeTin } = data;
     const loyaltyPoints = Math.round(sale.total_amount * 0.01);
+    let customerPoints = null;
+    if (sale.customer_id) {
+      const customer = await db.prepare(`
+        SELECT loyalty_points FROM customers WHERE id = ?
+      `).get(sale.customer_id);
+      customerPoints = customer?.loyalty_points;
+    }
     
     let receiptHTML = `
       <div style="font-family: monospace; max-width: 400px; margin: 0 auto; padding: 20px;">
@@ -281,20 +290,14 @@ class PrintService {
           <p style="margin: 2px 0; font-size: 12px;">Loyalty Points: +${loyaltyPoints} pts</p>
     `;
 
-    if (sale.customer_id) {
-      const customer = db.prepare(`
-        SELECT loyalty_points FROM customers WHERE id = ?
-      `).get(sale.customer_id);
-      
-      if (customer) {
-        receiptHTML += `
-          <p style="margin: 2px 0; font-size: 12px;">Total Points: ${customer.loyalty_points} pts</p>
+    if (customerPoints != null) {
+      receiptHTML += `
+          <p style="margin: 2px 0; font-size: 12px;">Total Points: ${customerPoints} pts</p>
         `;
-      }
     }
 
     receiptHTML += `
-          <p style="margin: 5px 0; font-size: 12px;">${this.getReceiptFooter()}</p>
+          <p style="margin: 5px 0; font-size: 12px;">${await this.getReceiptFooter()}</p>
           <p style="margin: 2px 0; font-size: 12px; font-style: italic;">Come again!</p>
         </div>
       </div>
@@ -507,35 +510,35 @@ class PrintService {
 
   // Utility methods
   async getStoreName() {
-    const storeName = db.prepare(`
+    const storeName = await db.prepare(`
       SELECT value FROM settings WHERE key = 'store_name'
     `).get()?.value || 'My Supermarket';
     return storeName;
   }
 
   async getStoreAddress() {
-    const address = db.prepare(`
+    const address = await db.prepare(`
       SELECT value FROM settings WHERE key = 'store_address'
     `).get()?.value || 'Kampala, Uganda';
     return address;
   }
 
   async getStorePhone() {
-    const phone = db.prepare(`
+    const phone = await db.prepare(`
       SELECT value FROM settings WHERE key = 'store_phone'
     `).get()?.value || '+256700000000';
     return phone;
   }
 
   async getStoreTin() {
-    const tin = db.prepare(`
+    const tin = await db.prepare(`
       SELECT value FROM settings WHERE key = 'store_tin'
     `).get()?.value || '';
     return tin;
   }
 
   async getReceiptFooter() {
-    const footer = db.prepare(`
+    const footer = await db.prepare(`
       SELECT value FROM settings WHERE key = 'receipt_footer'
     `).get()?.value || 'Thank you for shopping with us!';
     return footer;

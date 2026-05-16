@@ -81,7 +81,7 @@ function staffNotificationWhereClause() {
   `;
 }
 
-router.get('/stream', authenticate, (req, res) => {
+router.get('/stream', authenticate, async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -125,7 +125,7 @@ router.post(
   authenticate,
   restrictToBusinessStaff,
   authorize('admin', 'manager'),
-  (req, res) => {
+  async (req, res) => {
     try {
       const { title, message, target_user_id, target_role } = req.body;
       if (!title || !message) {
@@ -179,7 +179,7 @@ router.post(
   }
 );
 
-router.get('/', authenticate, (req, res) => {
+router.get('/', authenticate, async (req, res) => {
   try {
     const { unread_only = false, page = 1, limit = 20 } = req.query;
     const offset = (page - 1) * limit;
@@ -190,11 +190,11 @@ router.get('/', authenticate, (req, res) => {
       if (unread_only === 'true') q += ` AND n.is_read = 0`;
       q += ` ORDER BY n.created_at DESC LIMIT ? OFFSET ?`;
       params.push(parseInt(limit, 10), offset);
-      const notifications = db.prepare(q).all(...params);
+      const notifications = await db.prepare(q).all(...params);
       let cq = `SELECT COUNT(*) as total FROM notifications n WHERE n.target_user_id = ?`;
       const cp = [req.user.id];
       if (unread_only === 'true') cq += ` AND n.is_read = 0`;
-      const { total } = db.prepare(cq).get(...cp);
+      const { total } = await db.prepare(cq).get(...cp);
       return res.json({
         notifications,
         pagination: {
@@ -226,7 +226,7 @@ router.get('/', authenticate, (req, res) => {
     query += ` ORDER BY n.created_at DESC LIMIT ? OFFSET ?`;
     params.push(parseInt(limit, 10), offset);
 
-    const notifications = db.prepare(query).all(...params);
+    const notifications = await db.prepare(query).all(...params);
 
     let countQuery = `SELECT COUNT(*) as total FROM notifications n WHERE ${staffNotificationWhereClause()}`;
     const countParams = baseParams;
@@ -235,7 +235,7 @@ router.get('/', authenticate, (req, res) => {
       countQuery += ` AND n.is_read = 0`;
     }
 
-    const { total } = db.prepare(countQuery).get(...countParams);
+    const { total } = await db.prepare(countQuery).get(...countParams);
 
     res.json({
       notifications,
@@ -252,7 +252,7 @@ router.get('/', authenticate, (req, res) => {
   }
 });
 
-router.post('/:id/read', authenticate, (req, res) => {
+router.post('/:id/read', authenticate, async (req, res) => {
   try {
     let notification;
     if (req.user.role === 'developer') {
@@ -273,7 +273,7 @@ router.post('/:id/read', authenticate, (req, res) => {
       return res.status(404).json({ error: 'Notification not found.' });
     }
 
-    db.prepare(`UPDATE notifications SET is_read = 1, sync_status = 'pending' WHERE id = ?`).run(
+    await db.prepare(`UPDATE notifications SET is_read = 1, sync_status = 'pending' WHERE id = ?`).run(
       req.params.id
     );
 
@@ -305,14 +305,14 @@ router.post('/:id/read', authenticate, (req, res) => {
   }
 });
 
-router.post('/read-all', authenticate, (req, res) => {
+router.post('/read-all', authenticate, async (req, res) => {
   try {
     if (req.user.role === 'developer') {
-      db.prepare(
+      await db.prepare(
         `UPDATE notifications SET is_read = 1, sync_status = 'pending' WHERE target_user_id = ? AND is_read = 0`
       ).run(req.user.id);
     } else {
-      db.prepare(
+      await db.prepare(
         `UPDATE notifications SET is_read = 1, sync_status = 'pending'
          WHERE id IN (
            SELECT n.id FROM notifications n
@@ -334,7 +334,7 @@ router.post('/read-all', authenticate, (req, res) => {
   }
 });
 
-router.get('/count', authenticate, (req, res) => {
+router.get('/count', authenticate, async (req, res) => {
   try {
     let count;
     if (req.user.role === 'developer') {
@@ -358,9 +358,9 @@ router.get('/count', authenticate, (req, res) => {
   }
 });
 
-const createNotification = (notificationData) => {
+const createNotification = async (notificationData) => {
   try {
-    const row = db
+    const row = await db
       .prepare(
         `
       INSERT INTO notifications (

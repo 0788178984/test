@@ -25,11 +25,11 @@ class SMSService {
   }
 
   async getSettings() {
-    const username = db.prepare(`
+    const username = await db.prepare(`
       SELECT value FROM settings WHERE key = 'africastalking_username'
     `).get()?.value || '';
 
-    const apiKey = db.prepare(`
+    const apiKey = await db.prepare(`
       SELECT value FROM settings WHERE key = 'africastalking_api_key'
     `).get()?.value || '';
 
@@ -192,7 +192,7 @@ class SMSService {
   }
 
   async getStoreName() {
-    const storeName = db.prepare(`
+    const storeName = await db.prepare(`
       SELECT value FROM settings WHERE key = 'store_name'
     `).get()?.value || 'My Supermarket';
     return storeName;

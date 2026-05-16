@@ -9,7 +9,7 @@ router.use(authenticate, restrictToBusinessStaff);
 
 const bid = (req) => req.user.business_id;
 
-router.get('/low-stock', checkPermission('view_inventory'), (req, res) => {
+router.get('/low-stock', checkPermission('view_inventory'), async (req, res) => {
   try {
     const lowStockItems = db
       .prepare(
@@ -33,7 +33,7 @@ router.get('/low-stock', checkPermission('view_inventory'), (req, res) => {
   }
 });
 
-router.get('/expiring', checkPermission('view_inventory'), (req, res) => {
+router.get('/expiring', checkPermission('view_inventory'), async (req, res) => {
   try {
     const { days = 30 } = req.query;
 
@@ -66,7 +66,7 @@ router.get('/expiring', checkPermission('view_inventory'), (req, res) => {
   }
 });
 
-router.get('/adjustments', checkPermission('view_inventory'), (req, res) => {
+router.get('/adjustments', checkPermission('view_inventory'), async (req, res) => {
   try {
     const { page = 1, limit = 50, product_id, adjustment_type, from, to } = req.query;
     const offset = (page - 1) * limit;
@@ -104,7 +104,7 @@ router.get('/adjustments', checkPermission('view_inventory'), (req, res) => {
     query += ` ORDER BY sa.created_at DESC LIMIT ? OFFSET ?`;
     params.push(parseInt(limit, 10), offset);
 
-    const adjustments = db.prepare(query).all(...params);
+    const adjustments = await db.prepare(query).all(...params);
 
     let countQuery = `
       SELECT COUNT(*) as total
@@ -134,7 +134,7 @@ router.get('/adjustments', checkPermission('view_inventory'), (req, res) => {
       countParams.push(to);
     }
 
-    const { total } = db.prepare(countQuery).get(...countParams);
+    const { total } = await db.prepare(countQuery).get(...countParams);
 
     res.json({
       adjustments,
@@ -151,7 +151,7 @@ router.get('/adjustments', checkPermission('view_inventory'), (req, res) => {
   }
 });
 
-router.post('/restock', checkPermission('adjust_stock'), (req, res) => {
+router.post('/restock', checkPermission('adjust_stock'), async (req, res) => {
   try {
     const { product_id, quantity, cost_per_unit, supplier_id, reason } = req.body;
 
@@ -170,8 +170,8 @@ router.post('/restock', checkPermission('adjust_stock'), (req, res) => {
     const quantityBefore = product.current_stock;
     const quantityAfter = quantityBefore + parseFloat(quantity);
 
-    db.transaction(() => {
-      db.prepare(
+    await db.transaction(async (tx) => {
+      await tx.prepare(
         `
         UPDATE products SET
           current_stock = ?,
@@ -181,7 +181,7 @@ router.post('/restock', checkPermission('adjust_stock'), (req, res) => {
       `
       ).run(quantityAfter, product_id, bid(req));
 
-      db.prepare(
+      await tx.prepare(
         `
         INSERT INTO stock_adjustments (
           product_id, user_id, adjustment_type, quantity_before, quantity_change,
@@ -199,7 +199,7 @@ router.post('/restock', checkPermission('adjust_stock'), (req, res) => {
         cost_per_unit,
         bid(req)
       );
-    })();
+    });
 
     res.json({
       message: 'Product restocked successfully.',
@@ -211,7 +211,7 @@ router.post('/restock', checkPermission('adjust_stock'), (req, res) => {
   }
 });
 
-router.get('/summary', checkPermission('view_inventory'), (req, res) => {
+router.get('/summary', checkPermission('view_inventory'), async (req, res) => {
   try {
     const summary = db
       .prepare(
@@ -255,7 +255,7 @@ router.get('/summary', checkPermission('view_inventory'), (req, res) => {
   }
 });
 
-router.get('/movements/:product_id', checkPermission('view_inventory'), (req, res) => {
+router.get('/movements/:product_id', checkPermission('view_inventory'), async (req, res) => {
   try {
     const { product_id } = req.params;
     const { page = 1, limit = 50 } = req.query;

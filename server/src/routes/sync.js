@@ -28,7 +28,7 @@ const SYNC_TABLES = [
 ];
 
 // Push local changes to cloud
-router.post('/push', authorize('admin'), (req, res) => {
+router.post('/push', authorize('admin'), async (req, res) => {
   try {
     const { table, records } = req.body;
 
@@ -79,7 +79,7 @@ router.post('/push', authorize('admin'), (req, res) => {
           const columns = Object.keys(record).join(',');
           const placeholders = Object.keys(record).map(() => '?').join(',');
           
-          db.prepare(`
+          await db.prepare(`
             INSERT OR REPLACE INTO ${table} (${columns}) VALUES (${placeholders})
           `).run(...Object.values(record));
           
@@ -94,7 +94,7 @@ router.post('/push', authorize('admin'), (req, res) => {
             const columns = Object.keys(record).join(',');
             const placeholders = Object.keys(record).map(() => '?').join(',');
             
-            db.prepare(`
+            await db.prepare(`
               INSERT OR REPLACE INTO ${table} (${columns}) VALUES (${placeholders})
             `).run(...Object.values(record));
             
@@ -134,7 +134,7 @@ router.post('/push', authorize('admin'), (req, res) => {
 });
 
 // Pull changes from cloud
-router.post('/pull', authorize('admin'), (req, res) => {
+router.post('/pull', authorize('admin'), async (req, res) => {
   try {
     const { table, last_sync_at } = req.body;
 
@@ -182,7 +182,7 @@ router.post('/pull', authorize('admin'), (req, res) => {
       query += ` AND sync_status IN ('pending', 'synced')`;
     }
 
-    const records = db.prepare(query).all(...params);
+    const records = await db.prepare(query).all(...params);
 
     res.json({
       records,
@@ -196,7 +196,7 @@ router.post('/pull', authorize('admin'), (req, res) => {
 });
 
 // Get sync status
-router.get('/status', authorize('admin', 'manager'), (req, res) => {
+router.get('/status', authorize('admin', 'manager'), async (req, res) => {
   try {
     const status = {};
     
@@ -337,7 +337,7 @@ router.get('/status', authorize('admin', 'manager'), (req, res) => {
 });
 
 // Force full sync
-router.post('/force', authorize('admin'), (req, res) => {
+router.post('/force', authorize('admin'), async (req, res) => {
   try {
     const { direction } = req.body; // 'push' or 'pull'
 
@@ -429,7 +429,7 @@ router.post('/force', authorize('admin'), (req, res) => {
 });
 
 // Resolve sync conflicts
-router.post('/resolve-conflict', authorize('admin'), (req, res) => {
+router.post('/resolve-conflict', authorize('admin'), async (req, res) => {
   try {
     const { table, record_id, resolution, data } = req.body;
 
@@ -446,7 +446,7 @@ router.post('/resolve-conflict', authorize('admin'), (req, res) => {
     }
 
     // Get current record
-    const current = db.prepare(`
+    const current = await db.prepare(`
       SELECT * FROM ${table} WHERE id = ? AND deleted_at IS NULL
     `).get(record_id);
 
@@ -477,7 +477,7 @@ router.post('/resolve-conflict', authorize('admin'), (req, res) => {
     const columns = Object.keys(updateData).join(',');
     const placeholders = Object.keys(updateData).map(() => '?').join(',');
     
-    db.prepare(`
+    await db.prepare(`
       INSERT OR REPLACE INTO ${table} (${columns}) VALUES (${placeholders})
     `).run(...Object.values(updateData));
 
@@ -493,7 +493,7 @@ router.post('/resolve-conflict', authorize('admin'), (req, res) => {
 });
 
 // Get sync conflicts
-router.get('/conflicts', authorize('admin'), (req, res) => {
+router.get('/conflicts', authorize('admin'), async (req, res) => {
   try {
     const conflicts = [];
     const b = req.user.business_id;

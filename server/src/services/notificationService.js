@@ -40,7 +40,7 @@ class NotificationService {
 
       // Update sent_via field
       const sentChannels = Object.keys(results).filter(ch => results[ch].success);
-      db.prepare(`
+      await db.prepare(`
         UPDATE notifications SET sent_via = ? WHERE id = ?
       `).run(JSON.stringify(sentChannels), notification.id);
 
@@ -77,7 +77,7 @@ class NotificationService {
     
     if (target_user_id) {
       // Send to specific user
-      const user = db.prepare(`
+      const user = await db.prepare(`
         SELECT phone FROM users WHERE id = ? AND deleted_at IS NULL
       `).get(target_user_id);
       
@@ -86,7 +86,7 @@ class NotificationService {
       }
     } else if (target_role) {
       // Send to all users with role
-      const users = db.prepare(`
+      const users = await db.prepare(`
         SELECT phone FROM users WHERE role = ? AND is_active = 1 AND deleted_at IS NULL
       `).all(target_role);
       
@@ -109,7 +109,7 @@ class NotificationService {
     
     if (target_user_id) {
       // Send to specific user
-      const user = db.prepare(`
+      const user = await db.prepare(`
         SELECT phone FROM users WHERE id = ? AND deleted_at IS NULL
       `).get(target_user_id);
       
@@ -118,7 +118,7 @@ class NotificationService {
       }
     } else if (target_role) {
       // Send to all users with role
-      const users = db.prepare(`
+      const users = await db.prepare(`
         SELECT phone FROM users WHERE role = ? AND is_active = 1 AND deleted_at IS NULL
       `).all(target_role);
       
@@ -145,7 +145,7 @@ class NotificationService {
   // Specific notification methods
   async sendSaleReceipt(saleId, channels = ['sms', 'whatsapp']) {
     try {
-      const sale = db.prepare(`
+      const sale = await db.prepare(`
         SELECT s.*, c.name as customer_name, c.phone as customer_phone
         FROM sales s
         LEFT JOIN customers c ON s.customer_id = c.id
@@ -156,7 +156,7 @@ class NotificationService {
         throw new Error('Sale not found');
       }
 
-      const items = db.prepare(`
+      const items = await db.prepare(`
         SELECT product_name, quantity, unit_price, line_total
         FROM sale_items
         WHERE sale_id = ?
@@ -193,7 +193,7 @@ class NotificationService {
 
   async sendDailySummary(date, channels = ['sms', 'whatsapp']) {
     try {
-      const summary = db.prepare(`
+      const summary = await db.prepare(`
         SELECT 
           COUNT(*) as count,
           SUM(total_amount) as revenue,
@@ -203,7 +203,7 @@ class NotificationService {
         WHERE date(s.created_at) = ? AND s.status = 'completed' AND s.deleted_at IS NULL
       `).get(date);
 
-      const topProduct = db.prepare(`
+      const topProduct = await db.prepare(`
         SELECT p.name, SUM(si.quantity) as qty
         FROM sale_items si
         JOIN products p ON p.id = si.product_id
@@ -223,7 +223,7 @@ class NotificationService {
       };
 
       // Get admin phone numbers
-      const admins = db.prepare(`
+      const admins = await db.prepare(`
         SELECT phone FROM users WHERE role = 'admin' AND is_active = 1 AND deleted_at IS NULL
       `).all();
 
@@ -265,7 +265,7 @@ class NotificationService {
 
   async sendLowStockAlerts() {
     try {
-      const lowStockProducts = db.prepare(`
+      const lowStockProducts = await db.prepare(`
         SELECT p.*, s.name as supplier_name
         FROM products p
         LEFT JOIN suppliers s ON p.supplier_id = s.id
@@ -275,7 +275,7 @@ class NotificationService {
       `).all();
 
       // Get managers and admins
-      const recipients = db.prepare(`
+      const recipients = await db.prepare(`
         SELECT phone, role FROM users 
         WHERE role IN ('admin', 'manager') AND is_active = 1 AND deleted_at IS NULL
       `).all();
@@ -284,7 +284,7 @@ class NotificationService {
 
       for (const product of lowStockProducts) {
         // Check if already notified in last 24h
-        const recent = db.prepare(`
+        const recent = await db.prepare(`
           SELECT id FROM notifications
           WHERE type = 'low_stock'
           AND json_extract(meta, '$.product_id') = ?
@@ -335,7 +335,7 @@ class NotificationService {
 
   async sendExpiryWarnings() {
     try {
-      const expiringProducts = db.prepare(`
+      const expiringProducts = await db.prepare(`
         SELECT p.*, s.name as supplier_name
         FROM products p
         LEFT JOIN suppliers s ON p.supplier_id = s.id
@@ -346,7 +346,7 @@ class NotificationService {
       `).all();
 
       // Get managers and admins
-      const recipients = db.prepare(`
+      const recipients = await db.prepare(`
         SELECT phone, role FROM users 
         WHERE role IN ('admin', 'manager') AND is_active = 1 AND deleted_at IS NULL
       `).all();
@@ -395,7 +395,7 @@ class NotificationService {
   }
 
   async getStoreName() {
-    const storeName = db.prepare(`
+    const storeName = await db.prepare(`
       SELECT value FROM settings WHERE key = 'store_name'
     `).get()?.value || 'My Supermarket';
     return storeName;

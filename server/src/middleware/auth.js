@@ -47,7 +47,7 @@ function getBearerOrQueryToken(req) {
 }
 
 // Authentication middleware
-const authenticate = (req, res, next) => {
+const authenticate = async (req, res, next) => {
   try {
     const token = getBearerOrQueryToken(req);
 
@@ -57,7 +57,7 @@ const authenticate = (req, res, next) => {
 
     const decoded = jwt.verify(token, JWT_SECRET);
 
-    const user = db
+    const user = await db
       .prepare(
         `
       SELECT u.id, u.name, u.email, u.phone, u.role, u.is_active, u.business_id,
@@ -80,7 +80,7 @@ const authenticate = (req, res, next) => {
     const pc = user.payment_config;
     delete user.payment_config;
     user.payment_methods = user.business_id
-      ? paymentMethodsAvailability(pc)
+      ? await paymentMethodsAvailability(pc)
       : { cash: true, mtn_momo: false, airtel_money: false };
 
     const path = req.originalUrl.split('?')[0];

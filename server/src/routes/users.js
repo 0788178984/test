@@ -11,7 +11,7 @@ router.use(authenticate, restrictToBusinessStaff);
 const bid = (req) => req.user.business_id;
 
 // Get all users (admin only)
-router.get('/', authorize('admin'), (req, res) => {
+router.get('/', authorize('admin'), async (req, res) => {
   try {
     const { page = 1, limit = 50, search } = req.query;
     const offset = (page - 1) * limit;
@@ -32,7 +32,7 @@ router.get('/', authorize('admin'), (req, res) => {
     listQuery += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
     listParams.push(parseInt(limit, 10), offset);
 
-    const users = db.prepare(listQuery).all(...listParams);
+    const users = await db.prepare(listQuery).all(...listParams);
 
     let countQuery = `SELECT COUNT(*) as total FROM users WHERE deleted_at IS NULL AND business_id = ?`;
     const countParams = [bid(req)];
@@ -42,7 +42,7 @@ router.get('/', authorize('admin'), (req, res) => {
       countParams.push(q, q, q);
     }
 
-    const { total } = db.prepare(countQuery).get(...countParams);
+    const { total } = await db.prepare(countQuery).get(...countParams);
 
     res.json({
       users,
@@ -59,7 +59,7 @@ router.get('/', authorize('admin'), (req, res) => {
   }
 });
 
-router.get('/stats/overview', authorize('admin'), (req, res) => {
+router.get('/stats/overview', authorize('admin'), async (req, res) => {
   try {
     const stats = db
       .prepare(
@@ -85,7 +85,7 @@ router.get('/stats/overview', authorize('admin'), (req, res) => {
 });
 
 // Minimal directory for in-app team messages (managers cannot access full /users list)
-router.get('/directory', authorize('admin', 'manager'), (req, res) => {
+router.get('/directory', authorize('admin', 'manager'), async (req, res) => {
   try {
     const users = db
       .prepare(
@@ -105,7 +105,7 @@ router.get('/directory', authorize('admin', 'manager'), (req, res) => {
   }
 });
 
-router.get('/:id', authorize('admin'), (req, res) => {
+router.get('/:id', authorize('admin'), async (req, res) => {
   try {
     const user = db
       .prepare(
@@ -159,7 +159,7 @@ router.post('/', authorize('admin'), async (req, res) => {
 
     const userId = `usr-${crypto.randomBytes(12).toString('hex')}`;
 
-    db.prepare(
+    await db.prepare(
       `
       INSERT INTO users (
         id, name, email, phone, pin, password_hash, role, business_id, is_active, created_at, updated_at, sync_status
@@ -213,7 +213,7 @@ router.put('/:id', authorize('admin'), async (req, res) => {
       hashedPassword = await bcrypt.hash(password, 12);
     }
 
-    db.prepare(
+    await db.prepare(
       `
       UPDATE users SET
         name = ?, email = ?, phone = ?, role = ?, is_active = ?,
@@ -244,7 +244,7 @@ router.put('/:id', authorize('admin'), async (req, res) => {
   }
 });
 
-router.delete('/:id', authorize('admin'), (req, res) => {
+router.delete('/:id', authorize('admin'), async (req, res) => {
   try {
     const existingUser = db
       .prepare(`SELECT id FROM users WHERE id = ? AND deleted_at IS NULL AND business_id = ?`)
@@ -258,7 +258,7 @@ router.delete('/:id', authorize('admin'), (req, res) => {
       return res.status(400).json({ error: 'Cannot delete your own account.' });
     }
 
-    db.prepare(
+    await db.prepare(
       `UPDATE users SET deleted_at = datetime('now'), sync_status = 'pending' WHERE id = ? AND business_id = ?`
     ).run(req.params.id, bid(req));
 
@@ -287,7 +287,7 @@ router.post('/:id/reset-pin', authorize('admin'), async (req, res) => {
 
     const hashedPin = await bcrypt.hash(newPin, 12);
 
-    db.prepare(
+    await db.prepare(
       `
       UPDATE users SET
         pin = ?,

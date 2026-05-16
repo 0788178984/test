@@ -16,21 +16,21 @@ function parsePaymentConfig(raw) {
   }
 }
 
-function getGlobalMtnUrl() {
-  const row = db.prepare(`SELECT value FROM settings WHERE key = 'mtn_momo_url'`).get();
-  return row?.value || DEFAULT_MTN_URL;
+async function getGlobalMtnUrl() {
+  const row = await db.prepare(`SELECT value FROM settings WHERE key = 'mtn_momo_url'`).get();
+  return row?.value || process.env.MTN_MOMO_URL || DEFAULT_MTN_URL;
 }
 
-function getGlobalAirtelUrl() {
-  const row = db.prepare(`SELECT value FROM settings WHERE key = 'airtel_momo_url'`).get();
-  return row?.value || DEFAULT_AIRTEL_URL;
+async function getGlobalAirtelUrl() {
+  const row = await db.prepare(`SELECT value FROM settings WHERE key = 'airtel_momo_url'`).get();
+  return row?.value || process.env.AIRTEL_MOMO_URL || DEFAULT_AIRTEL_URL;
 }
 
 /** MTN Collection API runtime config, or null if not usable for this business */
-function resolveMtnRuntime(paymentConfigJson) {
+async function resolveMtnRuntime(paymentConfigJson) {
   const { mtn } = parsePaymentConfig(paymentConfigJson);
   if (!mtn.enabled) return null;
-  const url = (mtn.baseUrl && String(mtn.baseUrl).trim()) || getGlobalMtnUrl();
+  const url = (mtn.baseUrl && String(mtn.baseUrl).trim()) || (await getGlobalMtnUrl());
   const primaryKey = String(mtn.primaryKey || '').trim();
   const secondaryKey = String(mtn.secondaryKey || '').trim();
   const userId = String(mtn.apiUser || mtn.userId || '').trim();
@@ -46,10 +46,10 @@ function resolveMtnRuntime(paymentConfigJson) {
   };
 }
 
-function resolveAirtelRuntime(paymentConfigJson) {
+async function resolveAirtelRuntime(paymentConfigJson) {
   const { airtel } = parsePaymentConfig(paymentConfigJson);
   if (!airtel.enabled) return null;
-  const url = (airtel.baseUrl && String(airtel.baseUrl).trim()) || getGlobalAirtelUrl();
+  const url = (airtel.baseUrl && String(airtel.baseUrl).trim()) || (await getGlobalAirtelUrl());
   const clientId = String(airtel.clientId || '').trim();
   const clientSecret = String(airtel.clientSecret || '').trim();
   if (!clientId || !clientSecret) return null;
@@ -61,11 +61,11 @@ function resolveAirtelRuntime(paymentConfigJson) {
 }
 
 /** Booleans for POS / auth (no secrets) */
-function paymentMethodsAvailability(paymentConfigJson) {
+async function paymentMethodsAvailability(paymentConfigJson) {
   return {
     cash: true,
-    mtn_momo: !!resolveMtnRuntime(paymentConfigJson),
-    airtel_money: !!resolveAirtelRuntime(paymentConfigJson),
+    mtn_momo: !!(await resolveMtnRuntime(paymentConfigJson)),
+    airtel_money: !!(await resolveAirtelRuntime(paymentConfigJson)),
   };
 }
 
