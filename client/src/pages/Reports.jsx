@@ -7,6 +7,7 @@ import { formatCurrency, formatDate } from '../api/client';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Card from '../components/ui/Card';
+import Modal from '../components/ui/Modal';
 
 const Reports = () => {
   const { hasRole } = useAuthStore();
@@ -17,6 +18,9 @@ const Reports = () => {
   });
   const [reports, setReports] = useState({});
   const [loading, setLoading] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewPdfUrl, setPreviewPdfUrl] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   const tabs = [
     { id: 'daily', name: 'Daily Sales', icon: Calendar },
@@ -68,7 +72,18 @@ const Reports = () => {
           return;
       }
       
-      setReports(response.data || {});
+      const data = response.data || {};
+      if (activeTab === 'profit' && data.totals) {
+        const rev = Number(data.totals.total_revenue) || 0;
+        const profit = Number(data.totals.total_profit) || 0;
+        data.profitLoss = {
+          totalRevenue: rev,
+          totalCost: Number(data.totals.total_cost) || 0,
+          grossProfit: profit,
+          profitMargin: rev > 0 ? ((profit / rev) * 100).toFixed(1) : '0.0',
+        };
+      }
+      setReports(data);
     } catch (error) {
       console.error('Fetch report error:', error);
     } finally {
@@ -93,6 +108,35 @@ const Reports = () => {
       return { from: `${year}-01-01`, to: `${year}-12-31` };
     }
     return { ...dateRange };
+  };
+
+  const handlePreview = async () => {
+    setPreviewLoading(true);
+    setPreviewPdfUrl(null);
+    setPreviewOpen(true);
+    try {
+      const exportRange = getExportDateRange();
+      const response = await reportsAPI.getExportData(
+        { ...exportRange, report_type: activeTab, format: 'pdf' },
+        { responseType: 'blob' }
+      );
+      const blob =
+        response.data instanceof Blob
+          ? response.data
+          : new Blob([response.data], { type: 'application/pdf' });
+      setPreviewPdfUrl(URL.createObjectURL(blob));
+    } catch (error) {
+      console.error('Preview error:', error);
+      toast.error('Could not load PDF preview. Check the on-screen report or try download.');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const closePreview = () => {
+    if (previewPdfUrl) URL.revokeObjectURL(previewPdfUrl);
+    setPreviewPdfUrl(null);
+    setPreviewOpen(false);
   };
 
   const handleExport = async (format) => {
@@ -206,6 +250,9 @@ const Reports = () => {
             {tabs.find(t => t.id === activeTab)?.name}
           </h2>
           <div className="flex items-center space-x-2">
+            <Button onClick={handlePreview} variant="secondary" size="sm" disabled={loading}>
+              Preview PDF
+            </Button>
             <Button
               onClick={() => handleExport('pdf')}
               variant="secondary"
@@ -428,6 +475,26 @@ const Reports = () => {
           </div>
         )}
       </Card>
+
+      <Modal isOpen={previewOpen} onClose={closePreview} title="Report preview" size="xl">
+        {previewLoading ? (
+          <p className="py-12 text-center text-gray-500">Generating preview…</p>
+        ) : previewPdfUrl ? (
+          <iframe title="Report PDF preview" src={previewPdfUrl} className="h-[70vh] w-full rounded border border-gray-200" />
+        ) : (
+          <p className="py-8 text-center text-sm text-gray-600">
+            On-screen data above matches this period. Use Download PDF when preview is unavailable.
+          </p>
+        )}
+        <div className="mt-4 flex justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={closePreview}>
+            Close
+          </Button>
+          <Button type="button" variant="primary" onClick={() => { handleExport('pdf'); closePreview(); }}>
+            Download PDF
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 };

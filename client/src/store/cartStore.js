@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { roundUgx, computeSaleTotals } from '../utils/money';
 
 const useCartStore = create((set, get) => ({
   // State
@@ -19,7 +20,7 @@ const useCartStore = create((set, get) => ({
       const newQty = existingItem.quantity + quantity;
       const updatedItems = items.map((item) =>
         item.id === product.id
-          ? { ...item, quantity: newQty, line_total: item.unit_price * newQty }
+          ? { ...item, quantity: newQty, line_total: roundUgx(item.unit_price * newQty) }
           : item
       );
       set({ items: updatedItems });
@@ -35,7 +36,7 @@ const useCartStore = create((set, get) => ({
         unit_price: product.selling_price,
         buying_price: product.buying_price,
         quantity,
-        line_total: product.selling_price * quantity
+        line_total: roundUgx(product.selling_price * quantity)
       };
       set({ items: [...items, newItem] });
     }
@@ -54,7 +55,7 @@ const useCartStore = create((set, get) => ({
 
     const items = get().items.map(item =>
       item.id === productId
-        ? { ...item, quantity, line_total: item.unit_price * quantity }
+        ? { ...item, quantity, line_total: roundUgx(item.unit_price * quantity) }
         : item
     );
     set({ items });
@@ -63,7 +64,7 @@ const useCartStore = create((set, get) => ({
   setQuantity: (productId, quantity) => {
     const items = get().items.map(item =>
       item.id === productId
-        ? { ...item, quantity, line_total: item.unit_price * quantity }
+        ? { ...item, quantity, line_total: roundUgx(item.unit_price * quantity) }
         : item
     );
     set({ items });
@@ -118,21 +119,17 @@ const useCartStore = create((set, get) => ({
   // Getters
   getSubtotal: () => {
     const items = get().items;
-    return items.reduce((sum, item) => sum + item.line_total, 0);
+    return roundUgx(items.reduce((sum, item) => sum + item.line_total, 0));
   },
 
   getTaxAmount: () => {
-    const subtotal = get().getSubtotal();
-    const discountAmount = get().discountAmount;
-    const taxableAmount = Math.max(0, subtotal - discountAmount);
-    return taxableAmount * 0.18; // 18% VAT
+    const { taxAmount } = computeSaleTotals(get().getSubtotal(), get().discountAmount);
+    return taxAmount;
   },
 
   getTotal: () => {
-    const subtotal = get().getSubtotal();
-    const discountAmount = get().discountAmount;
-    const taxAmount = get().getTaxAmount();
-    return Math.max(0, subtotal - discountAmount + taxAmount);
+    const { total } = computeSaleTotals(get().getSubtotal(), get().discountAmount);
+    return total;
   },
 
   getItemCount: () => {
@@ -204,10 +201,11 @@ const useCartStore = create((set, get) => ({
   // Get cart summary for receipt
   getCartSummary: () => {
     const items = get().items;
-    const subtotal = get().getSubtotal();
-    const discountAmount = get().discountAmount;
-    const taxAmount = get().getTaxAmount();
-    const total = get().getTotal();
+    const discountAmount = roundUgx(get().discountAmount);
+    const { subtotal, taxAmount, total } = computeSaleTotals(
+      items.reduce((s, i) => s + i.line_total, 0),
+      discountAmount
+    );
     const itemCount = get().getItemCount();
     const totalProfit = get().getTotalProfit();
     

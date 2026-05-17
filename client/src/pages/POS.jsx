@@ -11,6 +11,7 @@ import ProductSearch from '../components/pos/ProductSearch';
 import Cart from '../components/pos/Cart';
 import PaymentModal from '../components/pos/PaymentModal';
 import ReceiptModal from '../components/pos/ReceiptModal';
+import MoMoAgentSection from '../components/pos/MoMoAgentSection';
 import { isSoldByWeight, unitLabel } from '../components/pos/AddQuantityModal';
 
 const POS = () => {
@@ -155,8 +156,8 @@ const POS = () => {
         saleId: data.saleId,
         saleNumber: data.saleNumber,
         totalAmount: data.totalAmount ?? summary.total,
-        subtotal: summary.subtotal,
-        taxAmount: summary.taxAmount,
+        subtotal: data.subtotal ?? summary.subtotal,
+        taxAmount: data.taxAmount ?? summary.taxAmount,
         discountAmount: summary.discountAmount,
         discountReason: summary.discountReason,
         amountPaid: data.amountPaid ?? paymentData.amountPaid ?? summary.total,
@@ -407,6 +408,8 @@ const POS = () => {
           </div>
         </section>
       </div>
+
+      <MoMoAgentSection />
 
       <Modal isOpen={showPaymentModal} onClose={() => setShowPaymentModal(false)} title="" size="lg" showCloseButton={false}>
         <PaymentModal

@@ -180,6 +180,7 @@ app.use('/api/developer', developerRoutes);
 app.use('/api/support-requests', supportRequestRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/expenses', expenseRoutes);
+app.use('/api/agent-float', require('./routes/agentFloat'));
 
 // Static files for client (in production)
 if (process.env.NODE_ENV === 'production') {

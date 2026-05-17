@@ -5,6 +5,7 @@ const { checkPermission } = require('../middleware/roleCheck');
 const db = require('../db/connection');
 const { newId } = require('../db/ids');
 const { getStoreToday, saleLocalDate } = require('../utils/storeTime');
+const { roundUgx, computeSaleTotals } = require('../utils/money');
 const router = express.Router();
 
 router.use(authenticate, restrictToBusinessStaff);
@@ -73,7 +74,7 @@ router.post('/', checkPermission('make_sale'), async (req, res) => {
         return res.status(400).json({ error: `Insufficient stock for ${product.name}. Available: ${product.current_stock}, Requested: ${item.quantity}` });
       }
 
-      const lineTotal = item.quantity * product.selling_price;
+      const lineTotal = roundUgx(item.quantity * product.selling_price);
       subtotal += lineTotal;
 
       validatedItems.push({
@@ -85,19 +86,21 @@ router.post('/', checkPermission('make_sale'), async (req, res) => {
       });
     }
 
+    subtotal = roundUgx(subtotal);
+    const discount_amount_r = roundUgx(discount_amount);
+
     // Apply discount limits for cashiers
-    if (req.user.role === 'cashier' && discount_amount > 0) {
-      const maxDiscount = subtotal * 0.05; // 5% max for cashiers
-      if (discount_amount > maxDiscount) {
+    if (req.user.role === 'cashier' && discount_amount_r > 0) {
+      const maxDiscount = roundUgx(subtotal * 0.05); // 5% max for cashiers
+      if (discount_amount_r > maxDiscount) {
         return res.status(400).json({ error: 'Cashiers can only apply discounts up to 5%.' });
       }
     }
 
-    const taxAmount = (subtotal - discount_amount) * 0.18; // 18% VAT
-    const totalAmount = subtotal - discount_amount + taxAmount;
+    const { taxAmount, totalAmount } = computeSaleTotals(subtotal, discount_amount_r);
 
-    let paid = amount_paid !== undefined && amount_paid !== null ? Number(amount_paid) : totalAmount;
-    let change = change_given !== undefined && change_given !== null ? Number(change_given) : 0;
+    let paid = amount_paid !== undefined && amount_paid !== null ? roundUgx(amount_paid) : totalAmount;
+    let change = change_given !== undefined && change_given !== null ? roundUgx(change_given) : 0;
     if (Number.isNaN(paid)) paid = totalAmount;
     if (Number.isNaN(change)) change = 0;
     if (payment_method === 'cash') {
@@ -123,7 +126,7 @@ router.post('/', checkPermission('make_sale'), async (req, res) => {
           payment_method, payment_reference, notes, business_id, created_at, updated_at, sync_status
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 'pending')
       `).run(
-        saleId, saleNumber, req.user.id, customer_id || null, subtotal, discount_amount,
+        saleId, saleNumber, req.user.id, customer_id || null, subtotal, discount_amount_r,
         discount_reason, taxAmount, totalAmount, paid, change,
         payment_method, payment_reference || null, notes || null, req.user.business_id
       );
@@ -187,6 +190,9 @@ router.post('/', checkPermission('make_sale'), async (req, res) => {
       message: 'Sale completed successfully.',
       saleId,
       saleNumber,
+      subtotal,
+      discountAmount: discount_amount_r,
+      taxAmount,
       totalAmount,
       amountPaid: paid,
       changeGiven: change

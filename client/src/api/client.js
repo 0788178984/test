@@ -149,6 +149,15 @@ export const inventoryAPI = {
   getMovements: (productId, params = {}) => api.get(`/api/inventory/movements/${productId}`, { params }),
 };
 
+export const agentFloatAPI = {
+  getTodaySession: (params = {}) => api.get('/api/agent-float/session/today', { params }),
+  openSession: (data) => api.post('/api/agent-float/session/open', data),
+  recordTransaction: (data) => api.post('/api/agent-float/transactions', data),
+  closeSession: (data) => api.post('/api/agent-float/session/close', data),
+  voidTransaction: (id) => api.delete(`/api/agent-float/transactions/${id}`),
+  getReport: (params = {}) => api.get('/api/agent-float/report', { params }),
+};
+
 export const reportsAPI = {
   getDaily: (params = {}) => api.get('/api/reports/daily', { params }),
   getMonthly: (params = {}) => api.get('/api/reports/monthly', { params }),
