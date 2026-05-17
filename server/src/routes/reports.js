@@ -6,6 +6,7 @@ const { restrictToBusinessStaff } = require('../middleware/tenantContext');
 const { checkPermission } = require('../middleware/roleCheck');
 const db = require('../db/connection');
 const { getStoreToday, saleLocalDate, STORE_TZ } = require('../utils/storeTime');
+const { SALE_LINE_COST } = require('../utils/saleSql');
 const pdfService = require('../services/pdfService');
 
 const LD = saleLocalDate('s.created_at');
@@ -320,12 +321,11 @@ router.get('/profit', checkPermission('view_reports'), async (req, res) => {
         s.sale_number,
         s.created_at,
         s.total_amount as revenue,
-        SUM(si.quantity * si.buying_price) as cost,
-        (s.total_amount - SUM(si.quantity * si.buying_price)) as profit,
+        ${SALE_LINE_COST} as cost,
+        (s.total_amount - ${SALE_LINE_COST}) as profit,
         u.name as cashier_name,
         c.name as customer_name
       FROM sales s
-      JOIN sale_items si ON s.id = si.sale_id
       LEFT JOIN users u ON s.cashier_id = u.id
       LEFT JOIN customers c ON s.customer_id = c.id
       WHERE ${LD} >= ? 
@@ -343,7 +343,7 @@ router.get('/profit', checkPermission('view_reports'), async (req, res) => {
       params.push(req.user.id);
     }
 
-    query += ` GROUP BY s.id ORDER BY s.created_at DESC`;
+    query += ` ORDER BY s.created_at DESC`;
 
     const sales = await db.prepare(query).all(...params);
 
@@ -476,7 +476,7 @@ router.get('/cashier', checkPermission('view_reports'), async (req, res) => {
       params.push(req.user.id);
     }
 
-    query += ` GROUP BY u.id ORDER BY total_revenue DESC`;
+    query += ` GROUP BY u.id, u.name, u.role ORDER BY total_revenue DESC`;
 
     const cashierStats = await db.prepare(query).all(...params);
 
@@ -602,7 +602,7 @@ router.get('/export-data', checkPermission('export_reports'), async (req, res) =
           AND s.business_id = ?
         `;
 
-        const dailyParams = [from, to, req.user.business_id];
+        const dailyParams = [exportFrom, exportTo, req.user.business_id];
 
         dailyQuery += ` GROUP BY ${LOCAL_DAY} ORDER BY date`;
 
@@ -626,7 +626,7 @@ router.get('/export-data', checkPermission('export_reports'), async (req, res) =
           AND s.deleted_at IS NULL
           AND s.business_id = ?
         `;
-        const monthlyParams = [from, to, req.user.business_id];
+        const monthlyParams = [exportFrom, exportTo, req.user.business_id];
         monthlyQuery += ` GROUP BY ${monthLabel} ORDER BY month`;
         const rows = await db.prepare(monthlyQuery).all(...monthlyParams);
         data.monthlySales = rows.map((r) => {
@@ -650,12 +650,11 @@ router.get('/export-data', checkPermission('export_reports'), async (req, res) =
             s.sale_number,
             s.created_at,
             s.total_amount as revenue,
-            SUM(si.quantity * si.buying_price) as cost,
-            (s.total_amount - SUM(si.quantity * si.buying_price)) as profit,
+            ${SALE_LINE_COST} as cost,
+            (s.total_amount - ${SALE_LINE_COST}) as profit,
             u.name as cashier_name,
             c.name as customer_name
           FROM sales s
-          JOIN sale_items si ON s.id = si.sale_id
           LEFT JOIN users u ON s.cashier_id = u.id
           LEFT JOIN customers c ON s.customer_id = c.id
           WHERE ${LD} >= ? 
@@ -664,12 +663,12 @@ router.get('/export-data', checkPermission('export_reports'), async (req, res) =
           AND s.deleted_at IS NULL
           AND s.business_id = ?
         `;
-        const profitParams = [from, to, req.user.business_id];
+        const profitParams = [exportFrom, exportTo, req.user.business_id];
         if (req.user.role === 'cashier') {
           profitQuery += ` AND s.cashier_id = ?`;
           profitParams.push(req.user.id);
         }
-        profitQuery += ` GROUP BY s.id ORDER BY s.created_at DESC`;
+        profitQuery += ` ORDER BY s.created_at DESC`;
         const sales = await db.prepare(profitQuery).all(...profitParams);
         const totals = sales.reduce(
           (acc, sale) => ({
@@ -711,7 +710,7 @@ router.get('/export-data', checkPermission('export_reports'), async (req, res) =
           AND ${LD} >= ?
           AND ${LD} <= ?
         `;
-        const bestParams = [req.user.business_id, from, to];
+        const bestParams = [req.user.business_id, exportFrom, exportTo];
         if (req.user.role === 'cashier') {
           bestQuery += ` AND s.cashier_id = ?`;
           bestParams.push(req.user.id);
@@ -758,12 +757,12 @@ router.get('/export-data', checkPermission('export_reports'), async (req, res) =
             AND ${LD} <= ?
           WHERE u.role = 'cashier' AND u.deleted_at IS NULL AND u.business_id = ?
         `;
-        const cashParams = [req.user.business_id, from, to, req.user.business_id];
+        const cashParams = [req.user.business_id, exportFrom, exportTo, req.user.business_id];
         if (req.user.role === 'cashier') {
           cashQuery += ` AND u.id = ?`;
           cashParams.push(req.user.id);
         }
-        cashQuery += ` GROUP BY u.id ORDER BY total_revenue DESC`;
+        cashQuery += ` GROUP BY u.id, u.name, u.role ORDER BY total_revenue DESC`;
         const cashierStats = await db.prepare(cashQuery).all(...cashParams);
         data.cashierPerformance = cashierStats.map((c) => {
           const rev = Number(c.total_revenue) || 0;
@@ -803,7 +802,7 @@ router.get('/export-data', checkPermission('export_reports'), async (req, res) =
           AND s.business_id = ?
         `;
 
-        const salesParams = [from, to, req.user.business_id];
+        const salesParams = [exportFrom, exportTo, req.user.business_id];
 
         if (req.user.role === 'cashier') {
           salesQuery += ` AND s.cashier_id = ?`;
@@ -845,14 +844,14 @@ router.get('/export-data', checkPermission('export_reports'), async (req, res) =
           WHERE p.deleted_at IS NULL AND p.business_id = ?
         `;
 
-        const productParams = [req.user.business_id, from, to, req.user.business_id];
+        const productParams = [req.user.business_id, exportFrom, exportTo, req.user.business_id];
 
         if (req.user.role === 'cashier') {
           productQuery += ` AND (s.id IS NULL OR s.cashier_id = ?)`;
           productParams.push(req.user.id);
         }
 
-        productQuery += ` GROUP BY p.id ORDER BY total_revenue DESC`;
+        productQuery += ` GROUP BY p.id, p.name, p.category, p.current_stock, p.buying_price, p.selling_price ORDER BY total_revenue DESC`;
 
         data.products = await db.prepare(productQuery).all(...productParams);
         break;

@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const db = require('../db/connection');
 const { saleLocalDate } = require('../utils/storeTime');
+const { SALE_LINE_COST } = require('../utils/saleSql');
 
 const LD = saleLocalDate('s.created_at');
 
@@ -466,12 +467,11 @@ class ExcelService {
         s.subtotal, s.discount_amount, s.tax_amount,
         u.name as cashier_name,
         c.name as customer_name,
-        SUM(si.quantity * si.buying_price) as cost,
-        (s.total_amount - SUM(si.quantity * si.buying_price)) as profit
+        ${SALE_LINE_COST} as cost,
+        (s.total_amount - ${SALE_LINE_COST}) as profit
       FROM sales s
       LEFT JOIN users u ON s.cashier_id = u.id
       LEFT JOIN customers c ON s.customer_id = c.id
-      LEFT JOIN sale_items si ON s.id = si.sale_id
       WHERE ${LD} >= ?
       AND ${LD} <= ?
       AND s.status = 'completed' 
@@ -488,7 +488,7 @@ class ExcelService {
       params.push(options.cashier_id);
     }
 
-    query += ` GROUP BY s.id ORDER BY s.created_at DESC`;
+    query += ` ORDER BY s.created_at DESC`;
 
     return await db.prepare(query).all(...params);
   }
@@ -570,7 +570,7 @@ class ExcelService {
     }
 
     query += `
-      GROUP BY si.product_id 
+      GROUP BY si.product_id, p.id, p.name, p.category
       ORDER BY total_quantity DESC
     `;
 
