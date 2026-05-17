@@ -29,6 +29,17 @@ const EXPORT_REPORT_TYPES = new Set([
   'products',
 ]);
 
+/** Full calendar month containing `from` (YYYY-MM-DD). */
+function monthExportRange(from) {
+  const [y, m] = String(from).slice(0, 7).split('-').map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  const mm = String(m).padStart(2, '0');
+  return {
+    from: `${y}-${mm}-01`,
+    to: `${y}-${mm}-${String(lastDay).padStart(2, '0')}`,
+  };
+}
+
 function sendGeneratedExportFile(res, result) {
   if (!result.success) return false;
   const buf = fs.readFileSync(result.filepath);
@@ -492,6 +503,17 @@ router.get('/export-data', checkPermission('export_reports'), async (req, res) =
     if (!from || !to) {
       return res.status(400).json({ error: 'From and to dates are required.' });
     }
+
+    let exportFrom = from;
+    let exportTo = to;
+    if (reportType === 'monthly') {
+      ({ from: exportFrom, to: exportTo } = monthExportRange(from));
+    } else if (reportType === 'annual') {
+      const year = String(from).slice(0, 4);
+      exportFrom = `${year}-01-01`;
+      exportTo = `${year}-12-31`;
+    }
+
     if (!EXPORT_REPORT_TYPES.has(reportType)) {
       return res.status(400).json({
         error: `Invalid report type. Use one of: ${[...EXPORT_REPORT_TYPES].join(', ')}.`,
@@ -512,45 +534,45 @@ router.get('/export-data', checkPermission('export_reports'), async (req, res) =
         switch (reportType) {
           case 'daily':
             result =
-              from === to
-                ? await excelService.generateDailyReport(from, exportOptions)
-                : await excelService.generateSalesReport(from, to, exportOptions);
+              exportFrom === exportTo
+                ? await excelService.generateDailyReport(exportFrom, exportOptions)
+                : await excelService.generateSalesReport(exportFrom, exportTo, exportOptions);
             break;
           case 'monthly':
           case 'cashier':
           case 'sales':
           case 'products':
-            result = await excelService.generateSalesReport(from, to, exportOptions);
+            result = await excelService.generateSalesReport(exportFrom, exportTo, exportOptions);
             break;
           case 'profit':
-            result = await excelService.generateProfitReport(from, to, exportOptions);
+            result = await excelService.generateProfitReport(exportFrom, exportTo, exportOptions);
             break;
           case 'best-sellers':
-            result = await excelService.generateBestSellersReport(from, to, exportOptions);
+            result = await excelService.generateBestSellersReport(exportFrom, exportTo, exportOptions);
             break;
           default:
-            result = await excelService.generateSalesReport(from, to, exportOptions);
+            result = await excelService.generateSalesReport(exportFrom, exportTo, exportOptions);
         }
       } else {
         switch (reportType) {
           case 'daily':
             result =
-              from === to
-                ? await pdfService.generateDailyReport(from, exportOptions)
-                : await pdfService.generateSalesReport(from, to, exportOptions);
+              exportFrom === exportTo
+                ? await pdfService.generateDailyReport(exportFrom, exportOptions)
+                : await pdfService.generateSalesReport(exportFrom, exportTo, exportOptions);
             break;
           case 'monthly':
           case 'cashier':
           case 'sales':
           case 'products':
           case 'best-sellers':
-            result = await pdfService.generateSalesReport(from, to, exportOptions);
+            result = await pdfService.generateSalesReport(exportFrom, exportTo, exportOptions);
             break;
           case 'profit':
-            result = await pdfService.generateProfitReport(from, to, exportOptions);
+            result = await pdfService.generateProfitReport(exportFrom, exportTo, exportOptions);
             break;
           default:
-            result = await pdfService.generateSalesReport(from, to, exportOptions);
+            result = await pdfService.generateSalesReport(exportFrom, exportTo, exportOptions);
         }
       }
 

@@ -76,12 +76,32 @@ const Reports = () => {
     }
   };
 
+  const getExportDateRange = () => {
+    if (activeTab === 'monthly') {
+      const d = new Date(`${dateRange.from}T12:00:00`);
+      const y = d.getFullYear();
+      const m = d.getMonth();
+      const mm = String(m + 1).padStart(2, '0');
+      const lastDay = new Date(y, m + 1, 0).getDate();
+      return {
+        from: `${y}-${mm}-01`,
+        to: `${y}-${mm}-${String(lastDay).padStart(2, '0')}`,
+      };
+    }
+    if (activeTab === 'annual') {
+      const year = dateRange.from.slice(0, 4);
+      return { from: `${year}-01-01`, to: `${year}-12-31` };
+    }
+    return { ...dateRange };
+  };
+
   const handleExport = async (format) => {
     const ext = format === 'pdf' ? 'pdf' : 'xlsx';
+    const exportRange = getExportDateRange();
     try {
       const response = await reportsAPI.getExportData(
         {
-          ...dateRange,
+          ...exportRange,
           report_type: activeTab,
           format,
         },
@@ -96,7 +116,7 @@ const Reports = () => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${activeTab}-report-${dateRange.from}_to_${dateRange.to}.${ext}`;
+      link.download = `${activeTab}-report-${exportRange.from}_to_${exportRange.to}.${ext}`;
       link.click();
       window.URL.revokeObjectURL(url);
       toast.success(`Download started (${ext.toUpperCase()})`);

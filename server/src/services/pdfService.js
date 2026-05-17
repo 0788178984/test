@@ -2,6 +2,9 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 const db = require('../db/connection');
+const { saleLocalDate } = require('../utils/storeTime');
+
+const LD = saleLocalDate('s.created_at');
 
 class PDFService {
   constructor() {
@@ -546,8 +549,8 @@ class PDFService {
       LEFT JOIN users u ON s.cashier_id = u.id
       LEFT JOIN customers c ON s.customer_id = c.id
       LEFT JOIN sale_items si ON s.id = si.sale_id
-      WHERE date(s.created_at) >= date(?)
-      AND date(s.created_at) <= date(?)
+      WHERE ${LD} >= ?
+      AND ${LD} <= ?
       AND s.status = 'completed'
       AND s.deleted_at IS NULL
       AND s.business_id = ?
@@ -576,26 +579,26 @@ class PDFService {
         SUM(total_amount - (SELECT SUM(si.quantity * si.buying_price)
                            FROM sale_items si WHERE si.sale_id = s.id)) as profit
       FROM sales s
-      WHERE date(s.created_at) = ? AND s.status = 'completed' AND s.deleted_at IS NULL
+      WHERE ${LD} = ? AND s.status = 'completed' AND s.deleted_at IS NULL
       AND s.business_id = ?
     `).get(date, bid);
 
     const hourlySales = await db.prepare(`
       SELECT
-        strftime('%H', created_at) as hour,
+        strftime('%H', s.created_at) as hour,
         COUNT(*) as sales_count,
         SUM(total_amount) as revenue
       FROM sales s
-      WHERE date(s.created_at) = ? AND s.status = 'completed' AND s.deleted_at IS NULL
+      WHERE ${LD} = ? AND s.status = 'completed' AND s.deleted_at IS NULL
       AND s.business_id = ?
-      GROUP BY strftime('%H', created_at)
+      GROUP BY strftime('%H', s.created_at)
       ORDER BY hour
     `).all(date, bid);
 
     const paymentMethods = await db.prepare(`
       SELECT payment_method, COUNT(*) as count, SUM(total_amount) as amount
       FROM sales s
-      WHERE date(s.created_at) = ? AND s.status = 'completed' AND s.deleted_at IS NULL
+      WHERE ${LD} = ? AND s.status = 'completed' AND s.deleted_at IS NULL
       AND s.business_id = ?
       GROUP BY payment_method
     `).all(date, bid);

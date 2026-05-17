@@ -42,6 +42,9 @@ function translateSql(sql) {
   let n = 0;
   s = s.replace(/\?/g, () => `$${++n}`);
 
+  // date($1) from date(?) placeholders — SQLite date(?) is invalid on PostgreSQL
+  s = s.replace(/date\s*\(\s*(\$\d+)\s*\)/gi, '($1)::date');
+
   // Cast date parameters after placeholders are numbered
   s = s.replace(/DATE\(\$(\d+)\)/g, '($$$1)::date');
 
