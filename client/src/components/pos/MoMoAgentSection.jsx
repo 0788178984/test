@@ -156,7 +156,7 @@ const MoMoAgentSection = () => {
       const { data } = await agentFloatAPI.recordTransaction({
         ...txForm,
         amount: Number(txForm.amount),
-        commission: Number(txForm.commission) || 0,
+        commission: canManageSession ? Number(txForm.commission) || 0 : 0,
         ...(isSupervisor ? { cashier_id: String(selectedCashierId).trim() } : {}),
       });
       setBalances(data.balances);
@@ -303,9 +303,15 @@ const MoMoAgentSection = () => {
             <span className="font-medium text-gray-800">{session.cashier_name || '—'}</span>
             {' · '}
             Opening: cash {formatCurrency(balances?.opening_cash)} · float{' '}
-            {formatCurrency(balances?.opening_float)} · Commission{' '}
-            {formatCurrency(balances?.total_commission)} · Session{' '}
-            <span className="font-medium capitalize">{session.status}</span>
+            {formatCurrency(balances?.opening_float)}
+            {canManageSession && (
+              <>
+                {' · '}
+                Commission {formatCurrency(balances?.total_commission)}
+              </>
+            )}
+            {' · '}
+            Session <span className="font-medium capitalize">{session.status}</span>
           </p>
 
           {isOpen && canRecordTx && (
@@ -346,14 +352,16 @@ const MoMoAgentSection = () => {
                   onChange={(e) => setTxForm((f) => ({ ...f, amount: e.target.value }))}
                   required
                 />
-                <Input
-                  label="Commission (UGX)"
-                  name="commission"
-                  type="number"
-                  min="0"
-                  value={txForm.commission}
-                  onChange={(e) => setTxForm((f) => ({ ...f, commission: e.target.value }))}
-                />
+                {canManageSession && (
+                  <Input
+                    label="Commission earned (UGX)"
+                    name="commission"
+                    type="number"
+                    min="0"
+                    value={txForm.commission}
+                    onChange={(e) => setTxForm((f) => ({ ...f, commission: e.target.value }))}
+                  />
+                )}
                 <Input
                   label="Customer name"
                   name="customer_name"
