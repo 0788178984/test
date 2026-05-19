@@ -15,9 +15,10 @@ const MobileMoney = () => {
           Mobile money balancing
         </h1>
         <p className="mt-1 max-w-3xl text-sm text-gray-600">
-          Open and close daily float, record agent transactions (withdrawals, deposits, airtime,
-          bills, send money), and reconcile cash vs mobile money float. This is separate from
-          customer MoMo payments at checkout.
+          <strong>Admin or manager</strong> chooses which cashier receives the opening cash and MoMo
+          float, opens the day, and runs end-of-day reconciliation. <strong>Cashiers</strong> record
+          agent transactions (withdrawals, deposits, airtime, bills, send money) once float is open.
+          This is separate from customer MoMo payments at checkout.
         </p>
       </div>
       <MoMoAgentSection />

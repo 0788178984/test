@@ -217,12 +217,15 @@ const useAuthStore = create(
             'view_sales', 'make_sale', 'apply_discount', 'void_sale',
             'view_reports', 'export_reports', 'view_products', 'add_edit_products',
             'adjust_stock', 'view_customers', 'manage_customers', 'view_suppliers',
-            'manage_suppliers', 'view_notifications', 'view_inventory'
+            'manage_suppliers', 'view_notifications', 'view_inventory',
+            'view_expenses', 'manage_expenses',
+            'view_agent_float', 'manage_agent_float', 'record_agent_float',
           ],
           cashier: [
             'make_sale', 'apply_small_discount', 'view_own_sales',
             'view_products', 'view_notifications', 'view_inventory',
-            'manage_customers'
+            'manage_customers', 'view_expenses', 'manage_expenses',
+            'view_agent_float', 'record_agent_float',
           ]
         };
         

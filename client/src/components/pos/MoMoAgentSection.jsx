@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Smartphone, RefreshCw } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { agentFloatAPI, formatCurrency, formatDate, handleApiError } from '../../api/client';
+import { agentFloatAPI, formatCurrency, formatDate, handleApiError, usersAPI } from '../../api/client';
 import { useAuthStore } from '../../store/authStore';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
@@ -15,6 +15,8 @@ const TX_TYPES = [
   { id: 'send_money', label: 'Send money', hint: 'Float ↓ · Cash ↑' },
 ];
 
+const MOMO_FLOAT_CASHIER_STORAGE_KEY = 'momo-agent-float-cashier-id';
+
 const defaultTxForm = () => ({
   transaction_type: 'withdrawal',
   network: 'mtn',
@@ -27,24 +29,76 @@ const defaultTxForm = () => ({
 });
 
 const MoMoAgentSection = () => {
-  const { hasRole } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
+  const hasRole = useAuthStore((s) => s.hasRole);
+  const isSupervisor = user && ['admin', 'manager'].includes(user.role);
+  const canViewSection = hasRole('admin', 'manager', 'cashier');
+  const canManageSession = hasRole('admin', 'manager');
+  const canRecordTx = hasRole('admin', 'manager', 'cashier');
+
   const [loading, setLoading] = useState(false);
   const [session, setSession] = useState(null);
   const [balances, setBalances] = useState(null);
   const [transactions, setTransactions] = useState([]);
+  const [cashiers, setCashiers] = useState([]);
+  const [selectedCashierId, setSelectedCashierId] = useState(null);
   const [openModal, setOpenModal] = useState(false);
   const [closeModal, setCloseModal] = useState(false);
   const [openForm, setOpenForm] = useState({ opening_cash: '', opening_float: '' });
   const [txForm, setTxForm] = useState(defaultTxForm);
   const [closeForm, setCloseForm] = useState({ closing_cash_actual: '', closing_float_actual: '', notes: '' });
 
-  const canManage = hasRole('admin', 'manager', 'cashier');
+  useEffect(() => {
+    if (!isSupervisor) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await usersAPI.getDirectory();
+        if (cancelled) return;
+        const list = (data.users || []).filter((u) => u.role === 'cashier');
+        setCashiers(list);
+        setSelectedCashierId((prev) => {
+          if (prev && list.some((u) => u.id === prev)) return prev;
+          try {
+            const saved = localStorage.getItem(MOMO_FLOAT_CASHIER_STORAGE_KEY);
+            if (saved && list.some((u) => u.id === saved)) return saved;
+          } catch (_) {
+            /* ignore */
+          }
+          return list[0]?.id || null;
+        });
+      } catch (error) {
+        const { message } = handleApiError(error);
+        toast.error(message);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isSupervisor]);
+
+  const persistCashierChoice = (id) => {
+    setSelectedCashierId(id);
+    try {
+      localStorage.setItem(MOMO_FLOAT_CASHIER_STORAGE_KEY, id);
+    } catch (_) {
+      /* ignore */
+    }
+  };
 
   const load = useCallback(async () => {
-    if (!canManage) return;
+    if (!canViewSection) return;
+    if (isSupervisor && !selectedCashierId) {
+      setSession(null);
+      setBalances(null);
+      setTransactions([]);
+      return;
+    }
     setLoading(true);
     try {
-      const { data } = await agentFloatAPI.getTodaySession();
+      const params = {};
+      if (isSupervisor && selectedCashierId) params.cashier_id = selectedCashierId;
+      const { data } = await agentFloatAPI.getTodaySession(params);
       setSession(data.session);
       setBalances(data.balances);
       setTransactions(data.transactions || []);
@@ -54,7 +108,7 @@ const MoMoAgentSection = () => {
     } finally {
       setLoading(false);
     }
-  }, [canManage]);
+  }, [canViewSection, isSupervisor, selectedCashierId]);
 
   useEffect(() => {
     load();
@@ -62,10 +116,15 @@ const MoMoAgentSection = () => {
 
   const handleOpenSession = async (e) => {
     e.preventDefault();
+    if (!selectedCashierId) {
+      toast.error('Select which cashier is receiving this float.');
+      return;
+    }
     try {
       await agentFloatAPI.openSession({
         opening_cash: Number(openForm.opening_cash),
         opening_float: Number(openForm.opening_float),
+        cashier_id: selectedCashierId,
       });
       toast.success('Float opened for today');
       setOpenModal(false);
@@ -80,7 +139,11 @@ const MoMoAgentSection = () => {
   const handleRecordTx = async (e) => {
     e.preventDefault();
     if (!session || session.status !== 'open') {
-      toast.error('Open today’s float first');
+      toast.error('Supervisor must open today’s float for this counter first.');
+      return;
+    }
+    if (isSupervisor && !selectedCashierId) {
+      toast.error('Select a cashier.');
       return;
     }
     try {
@@ -88,6 +151,7 @@ const MoMoAgentSection = () => {
         ...txForm,
         amount: Number(txForm.amount),
         commission: Number(txForm.commission) || 0,
+        ...(isSupervisor ? { cashier_id: selectedCashierId } : {}),
       });
       setBalances(data.balances);
       setTxForm(defaultTxForm());
@@ -101,11 +165,16 @@ const MoMoAgentSection = () => {
 
   const handleClose = async (e) => {
     e.preventDefault();
+    if (!selectedCashierId) {
+      toast.error('Select which cashier’s session you are closing.');
+      return;
+    }
     try {
       await agentFloatAPI.closeSession({
         closing_cash_actual: Number(closeForm.closing_cash_actual),
         closing_float_actual: Number(closeForm.closing_float_actual),
         notes: closeForm.notes,
+        cashier_id: selectedCashierId,
       });
       toast.success('Day reconciled');
       setCloseModal(false);
@@ -116,7 +185,7 @@ const MoMoAgentSection = () => {
     }
   };
 
-  if (!canManage) return null;
+  if (!canViewSection) return null;
 
   const isOpen = session?.status === 'open';
 
@@ -129,7 +198,8 @@ const MoMoAgentSection = () => {
             Mobile money agent — float & balancing
           </h2>
           <p className="text-sm text-gray-600">
-            Separate from POS sales. Withdrawals add cash; deposits use cash and add float.
+            Separate from POS checkout MoMo. Only an admin or manager can open or close the day’s
+            float; cashiers record agent transactions once float is open.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -137,30 +207,82 @@ const MoMoAgentSection = () => {
             <RefreshCw className={`mr-1 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
-          {!session && (
-            <Button type="button" variant="primary" size="sm" onClick={() => setOpenModal(true)}>
+          {!session && canManageSession && (
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              disabled={isSupervisor && (!selectedCashierId || cashiers.length === 0)}
+              title={
+                isSupervisor && !cashiers.length
+                  ? 'Add an active cashier under Users first'
+                  : undefined
+              }
+              onClick={() => setOpenModal(true)}
+            >
               Open today&apos;s float
             </Button>
           )}
-          {isOpen && (
-            <Button type="button" variant="secondary" size="sm" onClick={() => {
-              setCloseForm({
-                closing_cash_actual: String(balances?.current_cash ?? ''),
-                closing_float_actual: String(balances?.current_float ?? ''),
-                notes: '',
-              });
-              setCloseModal(true);
-            }}>
+          {isOpen && canManageSession && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={isSupervisor && !selectedCashierId}
+              onClick={() => {
+                setCloseForm({
+                  closing_cash_actual: String(balances?.current_cash ?? ''),
+                  closing_float_actual: String(balances?.current_float ?? ''),
+                  notes: '',
+                });
+                setCloseModal(true);
+              }}
+            >
               End-of-day reconcile
             </Button>
           )}
         </div>
       </div>
 
+      {isSupervisor && (
+        <div className="mb-4 max-w-xl rounded-lg border border-amber-100 bg-white/80 p-3">
+          <label className="block text-sm font-medium text-gray-800">Which cashier is this float for?</label>
+          <select
+            className="form-input mt-1 w-full"
+            value={selectedCashierId || ''}
+            onChange={(e) => persistCashierChoice(e.target.value)}
+          >
+            {cashiers.length === 0 ? (
+              <option value="">No active cashiers — add staff in Users</option>
+            ) : (
+              cashiers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))
+            )}
+          </select>
+          <p className="mt-2 text-xs text-gray-600">
+            Open and reconcile always apply to the cashier selected here. Choose the counter staff
+            who receives the physical cash and MoMo float for the shift.
+          </p>
+        </div>
+      )}
+
       {!session ? (
         <p className="rounded-lg border border-dashed border-amber-300 bg-white p-4 text-sm text-gray-700">
-          Start the day by recording cash float and mobile money float given to the counter (e.g. UGX
-          500,000 each).
+          {canManageSession ? (
+            <>
+              As a supervisor, choose the cashier above, then use <strong>Open today&apos;s float</strong>{' '}
+              to record how much cash and mobile money float they received (for example UGX 500,000
+              each).
+            </>
+          ) : (
+            <>
+              Your supervisor must open today&apos;s cash and mobile money float for you before you
+              can record agent transactions (withdrawals, deposits, etc.).
+            </>
+          )}
         </p>
       ) : (
         <>
@@ -171,13 +293,16 @@ const MoMoAgentSection = () => {
             <BalanceCard label="Deposits" value={balances?.total_deposits} muted />
           </div>
           <p className="mb-3 text-xs text-gray-500">
+            Cashier:{' '}
+            <span className="font-medium text-gray-800">{session.cashier_name || '—'}</span>
+            {' · '}
             Opening: cash {formatCurrency(balances?.opening_cash)} · float{' '}
             {formatCurrency(balances?.opening_float)} · Commission{' '}
             {formatCurrency(balances?.total_commission)} · Session{' '}
             <span className="font-medium capitalize">{session.status}</span>
           </p>
 
-          {isOpen && (
+          {isOpen && canRecordTx && (
             <form onSubmit={handleRecordTx} className="mb-4 rounded-lg border border-gray-200 bg-white p-4">
               <h3 className="mb-3 text-sm font-semibold text-gray-900">Record transaction</h3>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -305,6 +430,14 @@ const MoMoAgentSection = () => {
 
       <Modal isOpen={openModal} onClose={() => setOpenModal(false)} title="Open float — today" size="md">
         <form onSubmit={handleOpenSession} className="space-y-4">
+          {isSupervisor && (
+            <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-gray-800">
+              Opening for:{' '}
+              <span className="font-semibold">
+                {cashiers.find((c) => c.id === selectedCashierId)?.name || '—'}
+              </span>
+            </p>
+          )}
           <Input
             label="Cash float given (UGX)"
             name="opening_cash"

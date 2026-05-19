@@ -3,20 +3,46 @@ const { authenticate } = require('../middleware/auth');
 const { restrictToBusinessStaff } = require('../middleware/tenantContext');
 const { checkPermission } = require('../middleware/roleCheck');
 const db = require('../db/connection');
-const { getStoreToday, saleLocalDate } = require('../utils/storeTime');
+const { getStoreToday } = require('../utils/storeTime');
 const agentFloat = require('../services/agentFloatService');
 
 const router = express.Router();
 router.use(authenticate, restrictToBusinessStaff);
 
 const bid = (req) => req.user.business_id;
-const LD = saleLocalDate('t.created_at');
+
+/** Cashier who may hold an agent float for this business. */
+async function assertActiveStoreCashier(req, cashierId) {
+  if (!cashierId) return null;
+  const row = await db
+    .prepare(
+      `SELECT id FROM users
+       WHERE id = ? AND business_id = ? AND deleted_at IS NULL
+         AND is_active = 1 AND role = 'cashier'`
+    )
+    .get(String(cashierId), bid(req));
+  return row?.id || null;
+}
 
 router.get('/session/today', checkPermission('view_agent_float'), async (req, res) => {
   try {
     const date = req.query.date || getStoreToday();
-    const cashierId =
-      req.user.role === 'cashier' ? req.user.id : req.query.cashier_id || req.user.id;
+    let cashierId;
+    if (req.user.role === 'cashier') {
+      cashierId = req.user.id;
+    } else {
+      cashierId = req.query.cashier_id;
+      if (!cashierId) {
+        return res.status(400).json({
+          error: 'Supervisors must pass cashier_id (query) to load that cashier’s float session.',
+        });
+      }
+      const ok = await assertActiveStoreCashier(req, cashierId);
+      if (!ok) {
+        return res.status(400).json({ error: 'Invalid or inactive cashier for this store.' });
+      }
+      cashierId = ok;
+    }
 
     const session = await agentFloat.getOpenSession(bid(req), cashierId, date);
     if (!session) {
@@ -35,12 +61,21 @@ router.get('/session/today', checkPermission('view_agent_float'), async (req, re
 
 router.post('/session/open', checkPermission('manage_agent_float'), async (req, res) => {
   try {
-    const { opening_cash, opening_float, session_date } = req.body;
+    const { opening_cash, opening_float, session_date, cashier_id } = req.body;
     if (opening_cash === undefined || opening_float === undefined) {
       return res.status(400).json({ error: 'Opening cash and mobile money float are required.' });
     }
+    if (!cashier_id) {
+      return res.status(400).json({
+        error: 'cashier_id is required — choose which cashier is receiving this opening float.',
+      });
+    }
+    const targetCashier = await assertActiveStoreCashier(req, cashier_id);
+    if (!targetCashier) {
+      return res.status(400).json({ error: 'Invalid or inactive cashier for this store.' });
+    }
 
-    const session = await agentFloat.openSession(bid(req), req.user.id, {
+    const session = await agentFloat.openSession(bid(req), targetCashier, {
       opening_cash,
       opening_float,
       session_date,
@@ -55,13 +90,28 @@ router.post('/session/open', checkPermission('manage_agent_float'), async (req, 
   }
 });
 
-router.post('/transactions', checkPermission('manage_agent_float'), async (req, res) => {
+router.post('/transactions', checkPermission('record_agent_float'), async (req, res) => {
   try {
     const date = req.body.session_date || getStoreToday();
-    let session = await agentFloat.getOpenSession(bid(req), req.user.id, date);
+    let sessionCashierId = req.user.id;
+    if (req.user.role === 'admin' || req.user.role === 'manager') {
+      sessionCashierId = req.body.cashier_id;
+      if (!sessionCashierId) {
+        return res.status(400).json({
+          error: 'Include cashier_id (whose float this is) when recording as a supervisor.',
+        });
+      }
+      const ok = await assertActiveStoreCashier(req, sessionCashierId);
+      if (!ok) {
+        return res.status(400).json({ error: 'Invalid or inactive cashier for this store.' });
+      }
+      sessionCashierId = ok;
+    }
+
+    let session = await agentFloat.getOpenSession(bid(req), sessionCashierId, date);
     if (!session) {
       return res.status(400).json({
-        error: 'Open today’s float first (cash + mobile money opening balances).',
+        error: 'No open float for this cashier today. A supervisor must open cash + MoMo float first.',
       });
     }
 
@@ -77,8 +127,21 @@ router.post('/transactions', checkPermission('manage_agent_float'), async (req, 
 
 router.post('/session/close', checkPermission('manage_agent_float'), async (req, res) => {
   try {
-    const { closing_cash_actual, closing_float_actual, notes, session_date } = req.body;
-    const session = await agentFloat.getOpenSession(bid(req), req.user.id, session_date || getStoreToday());
+    const { closing_cash_actual, closing_float_actual, notes, session_date, cashier_id } = req.body;
+    if (!cashier_id) {
+      return res.status(400).json({
+        error: 'cashier_id is required — select whose float session you are closing.',
+      });
+    }
+    const targetCashier = await assertActiveStoreCashier(req, cashier_id);
+    if (!targetCashier) {
+      return res.status(400).json({ error: 'Invalid or inactive cashier for this store.' });
+    }
+    const session = await agentFloat.getOpenSession(
+      bid(req),
+      targetCashier,
+      session_date || getStoreToday()
+    );
     if (!session) {
       return res.status(404).json({ error: 'No open session found for this date.' });
     }

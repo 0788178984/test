@@ -20,7 +20,7 @@ const checkPermission = (requiredPermission) => {
         'adjust_stock', 'view_customers', 'manage_customers', 'view_suppliers',
         'manage_suppliers', 'view_notifications', 'view_inventory',
         'view_expenses', 'manage_expenses',
-        'view_agent_float', 'manage_agent_float'
+        'view_agent_float', 'manage_agent_float', 'record_agent_float'
       ];
       
       if (managerPermissions.includes(requiredPermission)) {
@@ -34,7 +34,7 @@ const checkPermission = (requiredPermission) => {
         'make_sale', 'apply_small_discount', 'view_own_sales',
         'view_products', 'view_notifications', 'view_inventory',
         'manage_customers', 'view_expenses', 'manage_expenses',
-        'view_agent_float', 'manage_agent_float'
+        'view_agent_float', 'record_agent_float'
       ];
       
       // Special case: cashiers can apply small discounts only
