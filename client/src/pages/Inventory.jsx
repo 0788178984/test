@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Package, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
+import { Package, AlertTriangle, TrendingUp, TrendingDown, Boxes, Layers } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
-import { inventoryAPI, productsAPI } from '../api/client';
+import { inventoryAPI } from '../api/client';
 import { formatCurrency, formatDate } from '../api/client';
 import Card from '../components/ui/Card';
 import Table from '../components/ui/Table';
@@ -12,6 +12,7 @@ const Inventory = () => {
   const [lowStockItems, setLowStockItems] = useState([]);
   const [expiringProducts, setExpiringProducts] = useState([]);
   const [adjustments, setAdjustments] = useState([]);
+  const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
 
@@ -19,7 +20,7 @@ const Inventory = () => {
     { id: 'overview', name: 'Overview', icon: Package },
     { id: 'low-stock', name: 'Low Stock', icon: AlertTriangle },
     { id: 'expiring', name: 'Expiring', icon: TrendingDown },
-    { id: 'adjustments', name: 'Adjustments', icon: TrendingUp }
+    { id: 'adjustments', name: 'Adjustments', icon: TrendingUp },
   ];
 
   useEffect(() => {
@@ -33,9 +34,26 @@ const Inventory = () => {
   }, [activeTab]);
 
   useEffect(() => {
-    fetchLowStock();
-    fetchExpiring();
+    fetchOverview();
   }, []);
+
+  const fetchOverview = async () => {
+    setLoading(true);
+    try {
+      const [summaryRes, lowRes, expRes] = await Promise.all([
+        inventoryAPI.getSummary(),
+        inventoryAPI.getLowStock(),
+        inventoryAPI.getExpiring(),
+      ]);
+      setSummary(summaryRes.data.summary || null);
+      setLowStockItems(lowRes.data.lowStockItems || []);
+      setExpiringProducts(expRes.data.expiringProducts || []);
+    } catch (error) {
+      console.error('Fetch inventory overview error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchLowStock = async () => {
     try {
@@ -64,46 +82,67 @@ const Inventory = () => {
     }
   };
 
+  const handleRefresh = () => {
+    if (activeTab === 'overview') fetchOverview();
+    else if (activeTab === 'low-stock') fetchLowStock();
+    else if (activeTab === 'expiring') fetchExpiring();
+    else fetchAdjustments();
+  };
+
   const lowStockColumns = [
     { header: 'Product', accessor: 'name' },
     { header: 'Current Stock', accessor: 'current_stock', cellClassName: 'text-center' },
     { header: 'Min Stock', accessor: 'minimum_stock', cellClassName: 'text-center' },
     { header: 'Unit', accessor: 'unit' },
     { header: 'Category', accessor: 'category' },
-    { header: 'Last Updated', accessor: 'updated_at', render: (row) => formatDate(row.updated_at) }
+    { header: 'Last Updated', accessor: 'updated_at', render: (row) => formatDate(row.updated_at) },
   ];
 
   const expiringColumns = [
     { header: 'Product', accessor: 'name' },
     { header: 'Expiry Date', accessor: 'expiry_date', render: (row) => formatDate(row.expiry_date) },
     { header: 'Current Stock', accessor: 'current_stock', cellClassName: 'text-center' },
-    { header: 'Status', accessor: 'expiry_status', render: (row) => (
-      <span className={`badge badge-${row.expiry_status === 'expired' ? 'danger' : row.expiry_status === 'critical' ? 'warning' : 'warning'}`}>
-        {row.expiry_status?.charAt(0).toUpperCase() + row.expiry_status?.slice(1)}
-      </span>
-    )}
+    {
+      header: 'Status',
+      accessor: 'expiry_status',
+      render: (row) => (
+        <span
+          className={`badge badge-${
+            row.expiry_status === 'expired' ? 'danger' : 'warning'
+          }`}
+        >
+          {row.expiry_status?.charAt(0).toUpperCase() + row.expiry_status?.slice(1)}
+        </span>
+      ),
+    },
   ];
 
   const adjustmentsColumns = [
     { header: 'Product', accessor: 'product_name' },
     { header: 'Type', accessor: 'adjustment_type' },
-    { header: 'Quantity Change', accessor: 'quantity_change', cellClassName: 'text-center', render: (row) => (
-      <span className={row.quantity_change > 0 ? 'text-green-600' : 'text-red-600'}>
-        {row.quantity_change > 0 ? '+' : ''}{row.quantity_change}
-      </span>
-    )},
+    {
+      header: 'Quantity Change',
+      accessor: 'quantity_change',
+      cellClassName: 'text-center',
+      render: (row) => (
+        <span className={row.quantity_change > 0 ? 'text-green-600' : 'text-red-600'}>
+          {row.quantity_change > 0 ? '+' : ''}
+          {row.quantity_change}
+        </span>
+      ),
+    },
     { header: 'Reason', accessor: 'reason' },
     { header: 'User', accessor: 'user_name' },
-    { header: 'Date', accessor: 'created_at', render: (row) => formatDate(row.created_at) }
+    { header: 'Date', accessor: 'created_at', render: (row) => formatDate(row.created_at) },
   ];
 
   if (!hasRole('admin', 'manager', 'cashier')) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center">
         <div className="text-center">
-          <AlertTriangle className="w-12 h-12 text-yellow-600 mx-auto mb-4" />
+          <AlertTriangle className="mx-auto mb-4 h-12 w-12 text-yellow-600" />
           <h2 className="text-xl font-semibold text-gray-900">Access Denied</h2>
-          <p className="text-gray-600">You don't have permission to access this page.</p>
+          <p className="text-gray-600">You don&apos;t have permission to access this page.</p>
         </div>
       </div>
     );
@@ -111,86 +150,134 @@ const Inventory = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Inventory Management</h1>
-        <Button
-          onClick={() => window.location.reload()}
-          variant="secondary"
-          size="sm"
-        >
+        <Button onClick={handleRefresh} variant="secondary" size="sm">
           Refresh
         </Button>
       </div>
 
-      {/* Tab Navigation */}
-      <div className="bg-white rounded-xl shadow-sm p-2">
+      <div className="rounded-xl bg-white p-2 shadow-sm">
         <div className="flex space-x-1">
           {tabs.map((tab) => (
             <button
               key={tab.id}
+              type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+              className={`flex items-center space-x-2 rounded-lg px-4 py-2 transition-colors ${
                 activeTab === tab.id
                   ? 'bg-primary-600 text-white'
-                  : 'text-gray-600 hover:bg-gray-100'
+                  : 'text-gray-600 hover:bg-primary-50 hover:text-primary-800'
               }`}
             >
-              <tab.icon className="w-4 h-4" />
+              <tab.icon className="h-4 w-4" />
               <span className="font-medium">{tab.name}</span>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Tab Content */}
       {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card>
-            <div className="flex items-center space-x-3">
-              <Package className="w-8 h-8 text-blue-600" />
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{lowStockItems.length}</p>
-                <p className="text-sm text-gray-600">Low Stock Items</p>
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            <Card className="border-primary-100 bg-gradient-to-br from-primary-50/80 to-white sm:col-span-2">
+              <div className="flex items-center gap-3">
+                <div className="rounded-full bg-primary-100 p-3">
+                  <Boxes className="h-8 w-8 text-primary-700" aria-hidden />
+                </div>
+                <div>
+                  <p className="text-3xl font-bold tabular-nums text-gray-900">
+                    {loading ? '—' : Number(summary?.total_units ?? 0).toLocaleString()}
+                  </p>
+                  <p className="text-sm font-medium text-gray-900">Total stock available</p>
+                  <p className="text-xs text-gray-500">Sum of quantities on hand (active products)</p>
+                </div>
               </div>
-            </div>
-          </Card>
-          
-          <Card>
-            <div className="flex items-center space-x-3">
-              <AlertTriangle className="w-8 h-8 text-yellow-600" />
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{expiringProducts.filter(p => p.expiry_status === 'expired').length}</p>
-                <p className="text-sm text-gray-600">Expired Products</p>
+            </Card>
+
+            <Card>
+              <div className="flex items-center gap-3">
+                <Layers className="h-8 w-8 shrink-0 text-indigo-600" aria-hidden />
+                <div>
+                  <p className="text-2xl font-bold tabular-nums text-gray-900">
+                    {loading ? '—' : Number(summary?.in_stock_products ?? 0).toLocaleString()}
+                  </p>
+                  <p className="text-sm text-gray-600">Products with stock</p>
+                  <p className="text-xs text-gray-500">
+                    of {Number(summary?.active_products ?? summary?.total_products ?? 0)} active
+                  </p>
+                </div>
               </div>
-            </div>
-          </Card>
-          
-          <Card>
-            <div className="flex items-center space-x-3">
-              <TrendingUp className="w-8 h-8 text-green-600" />
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{expiringProducts.filter(p => p.expiry_status === 'warning' || p.expiry_status === 'critical').length}</p>
-                <p className="text-sm text-gray-600">Expiring Soon</p>
+            </Card>
+
+            <Card>
+              <div className="flex items-center gap-3">
+                <Package className="h-8 w-8 shrink-0 text-blue-600" aria-hidden />
+                <div>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {loading ? '—' : formatCurrency(summary?.stock_value_at_cost ?? 0)}
+                  </p>
+                  <p className="text-sm text-gray-600">Stock value (at cost)</p>
+                </div>
               </div>
-            </div>
-          </Card>
+            </Card>
+
+            <Card>
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="h-8 w-8 shrink-0 text-orange-600" aria-hidden />
+                <div>
+                  <p className="text-2xl font-bold tabular-nums text-gray-900">
+                    {loading ? '—' : Number(summary?.low_stock_count ?? lowStockItems.length)}
+                  </p>
+                  <p className="text-sm text-gray-600">Low stock items</p>
+                </div>
+              </div>
+            </Card>
+
+            <Card>
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="h-8 w-8 shrink-0 text-red-600" aria-hidden />
+                <div>
+                  <p className="text-2xl font-bold tabular-nums text-gray-900">
+                    {loading ? '—' : Number(summary?.expired_count ?? 0)}
+                  </p>
+                  <p className="text-sm text-gray-600">Expired (with stock)</p>
+                </div>
+              </div>
+            </Card>
+
+            <Card>
+              <div className="flex items-center gap-3">
+                <TrendingDown className="h-8 w-8 shrink-0 text-amber-600" aria-hidden />
+                <div>
+                  <p className="text-2xl font-bold tabular-nums text-gray-900">
+                    {loading ? '—' : Number(summary?.expiring_soon_count ?? 0)}
+                  </p>
+                  <p className="text-sm text-gray-600">Expiring soon (30 days)</p>
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          {!loading && Number(summary?.total_units ?? 0) === 0 && (
+            <Card className="border-amber-200 bg-amber-50/50">
+              <p className="text-sm text-amber-900">
+                No stock on hand yet. Add products under <strong>Products</strong>, or restock via
+                inventory adjustments — POS sales reduce stock automatically.
+              </p>
+            </Card>
+          )}
         </div>
       )}
 
       {activeTab === 'low-stock' && (
         <Card>
-          <div className="flex items-center justify-between mb-4">
+          <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">Low Stock Items</h2>
-            <Button
-              onClick={fetchLowStock}
-              variant="secondary"
-              size="sm"
-            >
+            <Button onClick={fetchLowStock} variant="secondary" size="sm">
               Refresh
             </Button>
           </div>
-          
           <Table
             columns={lowStockColumns}
             data={lowStockItems}
@@ -202,17 +289,12 @@ const Inventory = () => {
 
       {activeTab === 'expiring' && (
         <Card>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">Exiring Products</h2>
-            <Button
-              onClick={fetchExpiring}
-              variant="secondary"
-              size="sm"
-            >
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">Expiring Products</h2>
+            <Button onClick={fetchExpiring} variant="secondary" size="sm">
               Refresh
             </Button>
           </div>
-          
           <Table
             columns={expiringColumns}
             data={expiringProducts}
@@ -224,17 +306,12 @@ const Inventory = () => {
 
       {activeTab === 'adjustments' && (
         <Card>
-          <div className="flex items-center justify-between mb-4">
+          <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">Stock Adjustments</h2>
-            <Button
-              onClick={fetchAdjustments}
-              variant="secondary"
-              size="sm"
-            >
+            <Button onClick={fetchAdjustments} variant="secondary" size="sm">
               Refresh
             </Button>
           </div>
-          
           <Table
             columns={adjustmentsColumns}
             data={adjustments}

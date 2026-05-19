@@ -221,10 +221,12 @@ router.get('/summary', checkPermission('view_inventory'), async (req, res) => {
       SELECT
         COUNT(*) as total_products,
         COUNT(CASE WHEN is_active = 1 THEN 1 END) as active_products,
-        COUNT(CASE WHEN current_stock <= minimum_stock THEN 1 END) as low_stock_count,
-        COUNT(CASE WHEN expiry_date IS NOT NULL AND date(expiry_date) <= date('now', '+30 days') AND current_stock > 0 THEN 1 END) as expiring_count,
-        SUM(current_stock * buying_price) as total_value,
-        SUM(CASE WHEN current_stock <= minimum_stock THEN 1 ELSE 0 END) as out_of_stock_value
+        COUNT(CASE WHEN is_active = 1 AND current_stock > 0 THEN 1 END) as in_stock_products,
+        COALESCE(SUM(CASE WHEN is_active = 1 THEN current_stock ELSE 0 END), 0) as total_units,
+        COUNT(CASE WHEN is_active = 1 AND current_stock <= minimum_stock THEN 1 END) as low_stock_count,
+        COUNT(CASE WHEN expiry_date IS NOT NULL AND date(expiry_date) < date('now') AND current_stock > 0 THEN 1 END) as expired_count,
+        COUNT(CASE WHEN expiry_date IS NOT NULL AND date(expiry_date) <= date('now', '+30 days') AND date(expiry_date) >= date('now') AND current_stock > 0 THEN 1 END) as expiring_soon_count,
+        COALESCE(SUM(CASE WHEN is_active = 1 THEN current_stock * buying_price ELSE 0 END), 0) as stock_value_at_cost
       FROM products
       WHERE deleted_at IS NULL AND business_id = ?
     `
