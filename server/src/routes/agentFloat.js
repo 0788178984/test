@@ -31,10 +31,12 @@ router.get('/session/today', checkPermission('view_agent_float'), async (req, re
     if (req.user.role === 'cashier') {
       cashierId = req.user.id;
     } else {
-      cashierId = req.query.cashier_id;
+      const raw = req.query.cashier_id;
+      cashierId = raw == null || raw === '' ? '' : String(raw).trim();
       if (!cashierId) {
         return res.status(400).json({
-          error: 'Supervisors must pass cashier_id (query) to load that cashier’s float session.',
+          error: 'Pick which cashier to view, then refresh (use the Cashier dropdown on the Mobile money screen).',
+          code: 'need_cashier_id',
         });
       }
       const ok = await assertActiveStoreCashier(req, cashierId);
@@ -65,12 +67,15 @@ router.post('/session/open', checkPermission('manage_agent_float'), async (req, 
     if (opening_cash === undefined || opening_float === undefined) {
       return res.status(400).json({ error: 'Opening cash and mobile money float are required.' });
     }
-    if (!cashier_id) {
+    const openFor =
+      cashier_id == null || cashier_id === '' ? '' : String(cashier_id).trim();
+    if (!openFor) {
       return res.status(400).json({
-        error: 'cashier_id is required — choose which cashier is receiving this opening float.',
+        error: 'Choose which cashier receives this opening float (Cashier dropdown), then open again.',
+        code: 'need_cashier_id',
       });
     }
-    const targetCashier = await assertActiveStoreCashier(req, cashier_id);
+    const targetCashier = await assertActiveStoreCashier(req, openFor);
     if (!targetCashier) {
       return res.status(400).json({ error: 'Invalid or inactive cashier for this store.' });
     }
@@ -95,10 +100,12 @@ router.post('/transactions', checkPermission('record_agent_float'), async (req, 
     const date = req.body.session_date || getStoreToday();
     let sessionCashierId = req.user.id;
     if (req.user.role === 'admin' || req.user.role === 'manager') {
-      sessionCashierId = req.body.cashier_id;
+      const raw = req.body.cashier_id;
+      sessionCashierId = raw == null || raw === '' ? '' : String(raw).trim();
       if (!sessionCashierId) {
         return res.status(400).json({
-          error: 'Include cashier_id (whose float this is) when recording as a supervisor.',
+          error: 'Select the cashier whose float you are updating (same as the dropdown), then save again.',
+          code: 'need_cashier_id',
         });
       }
       const ok = await assertActiveStoreCashier(req, sessionCashierId);
@@ -128,12 +135,15 @@ router.post('/transactions', checkPermission('record_agent_float'), async (req, 
 router.post('/session/close', checkPermission('manage_agent_float'), async (req, res) => {
   try {
     const { closing_cash_actual, closing_float_actual, notes, session_date, cashier_id } = req.body;
-    if (!cashier_id) {
+    const closeFor =
+      cashier_id == null || cashier_id === '' ? '' : String(cashier_id).trim();
+    if (!closeFor) {
       return res.status(400).json({
-        error: 'cashier_id is required — select whose float session you are closing.',
+        error: 'Choose which cashier session you are closing (Cashier dropdown), then submit again.',
+        code: 'need_cashier_id',
       });
     }
-    const targetCashier = await assertActiveStoreCashier(req, cashier_id);
+    const targetCashier = await assertActiveStoreCashier(req, closeFor);
     if (!targetCashier) {
       return res.status(400).json({ error: 'Invalid or inactive cashier for this store.' });
     }

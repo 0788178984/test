@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Smartphone, RefreshCw } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { agentFloatAPI, formatCurrency, formatDate, handleApiError, usersAPI } from '../../api/client';
@@ -48,34 +48,8 @@ const MoMoAgentSection = () => {
   const [txForm, setTxForm] = useState(defaultTxForm);
   const [closeForm, setCloseForm] = useState({ closing_cash_actual: '', closing_float_actual: '', notes: '' });
 
-  useEffect(() => {
-    if (!isSupervisor) return undefined;
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data } = await usersAPI.getDirectory();
-        if (cancelled) return;
-        const list = (data.users || []).filter((u) => u.role === 'cashier');
-        setCashiers(list);
-        setSelectedCashierId((prev) => {
-          if (prev && list.some((u) => u.id === prev)) return prev;
-          try {
-            const saved = localStorage.getItem(MOMO_FLOAT_CASHIER_STORAGE_KEY);
-            if (saved && list.some((u) => u.id === saved)) return saved;
-          } catch (_) {
-            /* ignore */
-          }
-          return list[0]?.id || null;
-        });
-      } catch (error) {
-        const { message } = handleApiError(error);
-        toast.error(message);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [isSupervisor]);
+  const cashiersRef = useRef(cashiers);
+  cashiersRef.current = cashiers;
 
   const persistCashierChoice = (id) => {
     setSelectedCashierId(id);
@@ -88,17 +62,49 @@ const MoMoAgentSection = () => {
 
   const load = useCallback(async () => {
     if (!canViewSection) return;
-    if (isSupervisor && !selectedCashierId) {
-      setSession(null);
-      setBalances(null);
-      setTransactions([]);
-      return;
-    }
     setLoading(true);
     try {
-      const params = {};
-      if (isSupervisor && selectedCashierId) params.cashier_id = selectedCashierId;
-      const { data } = await agentFloatAPI.getTodaySession(params);
+      if (isSupervisor) {
+        let list = cashiersRef.current;
+        if (list.length === 0) {
+          const { data } = await usersAPI.getDirectory();
+          list = (data.users || []).filter((u) => u.role === 'cashier');
+          setCashiers(list);
+          cashiersRef.current = list;
+        }
+
+        let pick =
+          selectedCashierId && list.some((u) => u.id === selectedCashierId) ? selectedCashierId : null;
+        if (!pick) {
+          try {
+            const saved = localStorage.getItem(MOMO_FLOAT_CASHIER_STORAGE_KEY);
+            if (saved && list.some((u) => u.id === saved)) pick = saved;
+          } catch (_) {
+            /* ignore */
+          }
+        }
+        if (!pick && list[0]) pick = list[0].id;
+
+        if (pick && pick !== selectedCashierId) {
+          setSelectedCashierId(pick);
+        }
+
+        if (!pick) {
+          setSession(null);
+          setBalances(null);
+          setTransactions([]);
+          return;
+        }
+
+        const cid = String(pick).trim();
+        const { data } = await agentFloatAPI.getTodaySession({ cashier_id: cid });
+        setSession(data.session);
+        setBalances(data.balances);
+        setTransactions(data.transactions || []);
+        return;
+      }
+
+      const { data } = await agentFloatAPI.getTodaySession({});
       setSession(data.session);
       setBalances(data.balances);
       setTransactions(data.transactions || []);
@@ -124,7 +130,7 @@ const MoMoAgentSection = () => {
       await agentFloatAPI.openSession({
         opening_cash: Number(openForm.opening_cash),
         opening_float: Number(openForm.opening_float),
-        cashier_id: selectedCashierId,
+        cashier_id: String(selectedCashierId).trim(),
       });
       toast.success('Float opened for today');
       setOpenModal(false);
@@ -151,7 +157,7 @@ const MoMoAgentSection = () => {
         ...txForm,
         amount: Number(txForm.amount),
         commission: Number(txForm.commission) || 0,
-        ...(isSupervisor ? { cashier_id: selectedCashierId } : {}),
+        ...(isSupervisor ? { cashier_id: String(selectedCashierId).trim() } : {}),
       });
       setBalances(data.balances);
       setTxForm(defaultTxForm());
@@ -174,7 +180,7 @@ const MoMoAgentSection = () => {
         closing_cash_actual: Number(closeForm.closing_cash_actual),
         closing_float_actual: Number(closeForm.closing_float_actual),
         notes: closeForm.notes,
-        cashier_id: selectedCashierId,
+        cashier_id: String(selectedCashierId).trim(),
       });
       toast.success('Day reconciled');
       setCloseModal(false);
