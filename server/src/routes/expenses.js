@@ -107,7 +107,7 @@ router.get('/categories/list', checkPermission('view_expenses'), (req, res) => {
 
 router.get('/summary/today', checkPermission('view_expenses'), async (req, res) => {
   try {
-    const date = getStoreToday();
+    const date = req.query.date || getStoreToday();
     const row = await db
       .prepare(
         `

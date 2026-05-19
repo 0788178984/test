@@ -2,7 +2,7 @@ const smsService = require('./smsService');
 const whatsappService = require('./whatsappService');
 const db = require('../db/connection');
 const { dispatch } = require('../routes/notifications');
-const { saleLocalDate } = require('../utils/storeTime');
+const { getStoreToday, saleLocalDate } = require('../utils/storeTime');
 
 const LD = saleLocalDate('s.created_at');
 
@@ -146,14 +146,14 @@ class NotificationService {
   }
 
   // Specific notification methods
-  async sendSaleReceipt(saleId, channels = ['sms', 'whatsapp']) {
+  async sendSaleReceipt(saleId, businessId, channels = ['sms', 'whatsapp']) {
     try {
       const sale = await db.prepare(`
         SELECT s.*, c.name as customer_name, c.phone as customer_phone
         FROM sales s
         LEFT JOIN customers c ON s.customer_id = c.id
-        WHERE s.id = ? AND s.deleted_at IS NULL
-      `).get(saleId);
+        WHERE s.id = ? AND s.deleted_at IS NULL AND s.business_id = ?
+      `).get(saleId, businessId);
 
       if (!sale) {
         throw new Error('Sale not found');
@@ -194,8 +194,9 @@ class NotificationService {
     }
   }
 
-  async sendDailySummary(date, channels = ['sms', 'whatsapp']) {
+  async sendDailySummary(date, businessId, channels = ['sms', 'whatsapp']) {
     try {
+      const day = date || getStoreToday();
       const summary = await db.prepare(`
         SELECT 
           COUNT(*) as count,
@@ -204,7 +205,8 @@ class NotificationService {
                              FROM sale_items si WHERE si.sale_id = s.id)) as profit
         FROM sales s
         WHERE ${LD} = ? AND s.status = 'completed' AND s.deleted_at IS NULL
-      `).get(date);
+        AND s.business_id = ?
+      `).get(day, businessId);
 
       const topProduct = await db.prepare(`
         SELECT p.name, SUM(si.quantity) as qty
@@ -212,23 +214,24 @@ class NotificationService {
         JOIN products p ON p.id = si.product_id
         JOIN sales s ON s.id = si.sale_id
         WHERE ${LD} = ? AND s.status = 'completed' AND s.deleted_at IS NULL
+        AND s.business_id = ?
         GROUP BY si.product_id 
         ORDER BY qty DESC 
         LIMIT 1
-      `).get(date);
+      `).get(day, businessId);
 
       const summaryData = {
-        date,
+        date: day,
         count: summary.count || 0,
         total: (summary.revenue || 0).toLocaleString(),
         profit: (summary.profit || 0).toLocaleString(),
         top_product: topProduct?.name || 'N/A'
       };
 
-      // Get admin phone numbers
       const admins = await db.prepare(`
-        SELECT phone FROM users WHERE role = 'admin' AND is_active = 1 AND deleted_at IS NULL
-      `).all();
+        SELECT phone FROM users
+        WHERE role = 'admin' AND is_active = 1 AND deleted_at IS NULL AND business_id = ?
+      `).all(businessId);
 
       const results = {};
 
@@ -266,8 +269,15 @@ class NotificationService {
     }
   }
 
-  async sendLowStockAlerts() {
+  async sendLowStockAlerts(businessId) {
     try {
+      let bizFilter = '';
+      const bizParams = [];
+      if (businessId) {
+        bizFilter = ' AND p.business_id = ?';
+        bizParams.push(businessId);
+      }
+
       const lowStockProducts = await db.prepare(`
         SELECT p.*, s.name as supplier_name
         FROM products p
@@ -275,24 +285,25 @@ class NotificationService {
         WHERE p.current_stock <= p.minimum_stock 
         AND p.is_active = 1 
         AND p.deleted_at IS NULL
-      `).all();
-
-      // Get managers and admins
-      const recipients = await db.prepare(`
-        SELECT phone, role FROM users 
-        WHERE role IN ('admin', 'manager') AND is_active = 1 AND deleted_at IS NULL
-      `).all();
+        ${bizFilter}
+      `).all(...bizParams);
 
       const results = [];
 
       for (const product of lowStockProducts) {
-        // Check if already notified in last 24h
+        const recipients = await db.prepare(`
+          SELECT phone, role FROM users 
+          WHERE role IN ('admin', 'manager') AND is_active = 1 AND deleted_at IS NULL
+          AND business_id = ?
+        `).all(product.business_id);
+
         const recent = await db.prepare(`
           SELECT id FROM notifications
           WHERE type = 'low_stock'
-          AND json_extract(meta, '$.product_id') = ?
-          AND created_at > datetime('now', '-24 hours')
-        `).get(product.id);
+          AND (meta::jsonb->>'product_id') = ?
+          AND business_id = ?
+          AND created_at > (NOW() - INTERVAL '24 hours')
+        `).get(product.id, product.business_id);
 
         if (!recent) {
           for (const recipient of recipients) {
@@ -319,13 +330,12 @@ class NotificationService {
             });
           }
 
-          // Create notification record
-          await this.dispatch('LOW_STOCK', {
+          await dispatch('LOW_STOCK', {
             product_name: product.name,
             qty: product.current_stock,
             unit: product.unit,
             product_id: product.id
-          });
+          }, { business_id: product.business_id });
         }
       }
 
@@ -336,8 +346,15 @@ class NotificationService {
     }
   }
 
-  async sendExpiryWarnings() {
+  async sendExpiryWarnings(businessId) {
     try {
+      let bizFilter = '';
+      const bizParams = [];
+      if (businessId) {
+        bizFilter = ' AND p.business_id = ?';
+        bizParams.push(businessId);
+      }
+
       const expiringProducts = await db.prepare(`
         SELECT p.*, s.name as supplier_name
         FROM products p
@@ -346,19 +363,20 @@ class NotificationService {
         AND p.current_stock > 0
         AND date(p.expiry_date) <= date('now', '+7 days')
         AND p.deleted_at IS NULL
-      `).all();
-
-      // Get managers and admins
-      const recipients = await db.prepare(`
-        SELECT phone, role FROM users 
-        WHERE role IN ('admin', 'manager') AND is_active = 1 AND deleted_at IS NULL
-      `).all();
+        ${bizFilter}
+      `).all(...bizParams);
 
       const results = [];
 
       for (const product of expiringProducts) {
         const isExpired = new Date(product.expiry_date) < new Date();
         const eventType = isExpired ? 'EXPIRY_EXPIRED' : 'EXPIRY_WARNING';
+
+        const recipients = await db.prepare(`
+          SELECT phone, role FROM users 
+          WHERE role IN ('admin', 'manager') AND is_active = 1 AND deleted_at IS NULL
+          AND business_id = ?
+        `).all(product.business_id);
 
         for (const recipient of recipients) {
           const smsResult = await smsService.sendExpiryWarning(
@@ -382,12 +400,11 @@ class NotificationService {
           });
         }
 
-        // Create notification record
-        await this.dispatch(eventType, {
+        await dispatch(eventType, {
           product_name: product.name,
           date: product.expiry_date,
           product_id: product.id
-        });
+        }, { business_id: product.business_id });
       }
 
       return { success: true, results };

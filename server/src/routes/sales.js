@@ -207,6 +207,8 @@ router.post('/', checkPermission('make_sale'), async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const { from, to, cashier_id, status, page = 1, limit = 50 } = req.query;
+    // Date-filtered lists match dashboard/reports: completed sales only unless status is explicit
+    const effectiveStatus = status || (from || to ? 'completed' : undefined);
     const offset = (page - 1) * limit;
 
     let query = `
@@ -241,9 +243,9 @@ router.get('/', async (req, res) => {
       }
     }
 
-    if (status) {
+    if (effectiveStatus) {
       query += ` AND s.status = ?`;
-      params.push(status);
+      params.push(effectiveStatus);
     }
 
     query += ` ORDER BY s.created_at DESC LIMIT ? OFFSET ?`;
@@ -276,9 +278,9 @@ router.get('/', async (req, res) => {
       }
     }
 
-    if (status) {
+    if (effectiveStatus) {
       countQuery += ` AND s.status = ?`;
-      countParams.push(status);
+      countParams.push(effectiveStatus);
     }
 
     const { total } = await db.prepare(countQuery).get(...countParams);

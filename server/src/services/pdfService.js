@@ -2,7 +2,7 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 const db = require('../db/connection');
-const { saleLocalDate } = require('../utils/storeTime');
+const { getStoreToday, saleLocalDate } = require('../utils/storeTime');
 const { SALE_LINE_COST } = require('../utils/saleSql');
 
 const LD = saleLocalDate('s.created_at');
@@ -160,7 +160,7 @@ class PDFService {
   async generateInventoryReport(options = {}) {
     try {
       const data = await this.getInventoryData(options);
-      const filename = `inventory_report_${new Date().toISOString().split('T')[0]}.pdf`;
+      const filename = `inventory_report_${getStoreToday()}.pdf`;
       const filepath = path.join(this.tempDir, filename);
 
       return new Promise((resolve, reject) => {

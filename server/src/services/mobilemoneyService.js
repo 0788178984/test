@@ -542,11 +542,19 @@ class MobileMoneyService {
   // Get transaction history
   async getTransactionHistory(filters = {}) {
     try {
+      const { saleLocalDate } = require('../utils/storeTime');
+      const localDate = saleLocalDate('created_at');
+
       let query = `
         SELECT * FROM mobile_money_transactions 
         WHERE 1=1
       `;
       const params = [];
+
+      if (filters.business_id) {
+        query += ` AND business_id = ?`;
+        params.push(filters.business_id);
+      }
 
       if (filters.method) {
         query += ` AND method = ?`;
@@ -559,12 +567,12 @@ class MobileMoneyService {
       }
 
       if (filters.from) {
-        query += ` AND date(created_at) >= date(?)`;
+        query += ` AND ${localDate} >= ?`;
         params.push(filters.from);
       }
 
       if (filters.to) {
-        query += ` AND date(created_at) <= date(?)`;
+        query += ` AND ${localDate} <= ?`;
         params.push(filters.to);
       }
 

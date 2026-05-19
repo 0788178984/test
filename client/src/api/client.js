@@ -122,7 +122,7 @@ export const expensesAPI = {
   getAll: (params = {}) => api.get('/api/expenses', { params }),
   getById: (id) => api.get(`/api/expenses/${id}`),
   getCategories: () => api.get('/api/expenses/categories/list'),
-  getTodaySummary: () => api.get('/api/expenses/summary/today'),
+  getTodaySummary: (params = {}) => api.get('/api/expenses/summary/today', { params }),
   getSummary: (params = {}) => api.get('/api/expenses/summary', { params }),
   create: (data) => api.post('/api/expenses', data),
   update: (id, data) => api.put(`/api/expenses/${id}`, data),

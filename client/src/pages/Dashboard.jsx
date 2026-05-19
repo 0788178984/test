@@ -57,7 +57,7 @@ const Dashboard = () => {
       let todayExpenses = 0;
       if (hasRole('admin', 'manager', 'cashier')) {
         try {
-          const expRes = await expensesAPI.getTodaySummary();
+          const expRes = await expensesAPI.getTodaySummary({ date: today });
           todayExpenses = expRes.data.total || 0;
         } catch {
           todayExpenses = 0;

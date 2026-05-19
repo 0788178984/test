@@ -2,7 +2,7 @@ const ExcelJS = require('exceljs');
 const fs = require('fs');
 const path = require('path');
 const db = require('../db/connection');
-const { saleLocalDate } = require('../utils/storeTime');
+const { getStoreToday, saleLocalDate } = require('../utils/storeTime');
 const { SALE_LINE_COST } = require('../utils/saleSql');
 
 const LD = saleLocalDate('s.created_at');
@@ -251,7 +251,7 @@ class ExcelService {
   async generateInventoryReport(options = {}) {
     try {
       const data = await this.getInventoryData(options);
-      const filename = `inventory_report_${new Date().toISOString().split('T')[0]}.xlsx`;
+      const filename = `inventory_report_${getStoreToday()}.xlsx`;
       const filepath = path.join(this.tempDir, filename);
 
       const workbook = new ExcelJS.Workbook();

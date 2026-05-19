@@ -3,6 +3,7 @@ import { Bell } from 'lucide-react';
 import { useNotificationStore } from '../store/notificationStore';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
+import { formatDateTime } from '../api/client';
 
 export default function NotificationsPage() {
   const fetchNotifications = useNotificationStore((s) => s.fetchNotifications);
@@ -56,7 +57,7 @@ export default function NotificationsPage() {
                   <div className="flex justify-between gap-2">
                     <span className="font-medium text-gray-900">{n.title}</span>
                     <span className="text-xs text-gray-500 shrink-0">
-                      {n.created_at ? new Date(n.created_at).toLocaleString() : ''}
+                      {n.created_at ? formatDateTime(n.created_at) : ''}
                     </span>
                   </div>
                   <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{n.message}</p>

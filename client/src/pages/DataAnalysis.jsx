@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { LineChart as LineChartIcon, Calendar } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
-import { reportsAPI, formatCurrency, formatDate, getStoreToday } from '../api/client';
+import { reportsAPI, formatCurrency, formatDate, getStoreToday, addStoreDays } from '../api/client';
 import Card from '../components/ui/Card';
 import Input from '../components/ui/Input';
 
@@ -16,8 +16,8 @@ function formatPaymentLabel(method) {
 const DataAnalysis = () => {
   const { hasRole, user } = useAuthStore();
   const [analysisDate, setAnalysisDate] = useState(() => getStoreToday());
-  const [year, setYear] = useState(() => new Date().getFullYear());
-  const [month, setMonth] = useState(() => new Date().getMonth() + 1);
+  const [year, setYear] = useState(() => Number(getStoreToday().slice(0, 4)));
+  const [month, setMonth] = useState(() => Number(getStoreToday().slice(5, 7)));
   const [loading, setLoading] = useState(true);
   const [daily, setDaily] = useState(null);
   const [monthly, setMonthly] = useState(null);
@@ -112,6 +112,22 @@ const DataAnalysis = () => {
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
+          <div className="flex gap-2 pb-1">
+            <button
+              type="button"
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              onClick={() => setAnalysisDate(getStoreToday())}
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              onClick={() => setAnalysisDate(addStoreDays(getStoreToday(), -1))}
+            >
+              Yesterday
+            </button>
+          </div>
           <div className="w-44">
             <Input
               type="date"
