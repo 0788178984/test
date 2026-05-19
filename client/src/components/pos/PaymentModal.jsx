@@ -148,7 +148,7 @@ const PaymentModal = ({ totalAmount, customer, paymentMethods, onPayment, onCanc
       <div className="rounded-lg bg-gray-50 p-6">
         <div className="text-center">
           <p className="text-sm text-gray-600">Total due (incl. VAT)</p>
-          <p className="text-3xl font-bold text-primary-600">{formatCurrency(totalAmount)}</p>
+          <p className="stat-value-currency text-primary-600">{formatCurrency(totalAmount)}</p>
         </div>
       </div>
 

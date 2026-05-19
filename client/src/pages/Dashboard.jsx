@@ -163,20 +163,28 @@ const Dashboard = () => {
       </header>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+      <div className="stat-grid gap-6">
         {statCards.map((stat) => {
           const iconStyle = STAT_ICON_STYLES[stat.color] || STAT_ICON_STYLES.blue;
           return (
             <Card
               key={stat.title}
-              className="transition-shadow duration-200 hover:shadow-lg hover:ring-1 hover:ring-primary-100"
+              className="stat-card min-w-0 transition-shadow duration-200 hover:shadow-lg hover:ring-1 hover:ring-primary-100"
             >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                  <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+              <div className="stat-card__inner items-center justify-between">
+                <div className="stat-card__content">
+                  <p className="stat-label">{stat.title}</p>
+                  <p
+                    className={
+                      stat.title.includes('Revenue') || stat.title.includes('Expenses')
+                        ? 'stat-value-currency'
+                        : 'stat-value'
+                    }
+                  >
+                    {stat.value}
+                  </p>
                 </div>
-                <div className={`rounded-full p-3 ${iconStyle.wrap}`}>
+                <div className={`stat-card__icon rounded-full p-3 ${iconStyle.wrap}`}>
                   <stat.icon className={`h-6 w-6 ${iconStyle.icon}`} aria-hidden />
                 </div>
               </div>

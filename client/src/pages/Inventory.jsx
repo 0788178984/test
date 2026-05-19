@@ -4,6 +4,7 @@ import { useAuthStore } from '../store/authStore';
 import { inventoryAPI } from '../api/client';
 import { formatCurrency, formatDate } from '../api/client';
 import Card from '../components/ui/Card';
+import StatCard from '../components/ui/StatCard';
 import Table from '../components/ui/Table';
 import Button from '../components/ui/Button';
 
@@ -179,84 +180,53 @@ const Inventory = () => {
 
       {activeTab === 'overview' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-            <Card className="border-primary-100 bg-gradient-to-br from-primary-50/80 to-white sm:col-span-2">
-              <div className="flex items-center gap-3">
-                <div className="rounded-full bg-primary-100 p-3">
-                  <Boxes className="h-8 w-8 text-primary-700" aria-hidden />
-                </div>
-                <div>
-                  <p className="text-3xl font-bold tabular-nums text-gray-900">
-                    {loading ? '—' : Number(summary?.total_units ?? 0).toLocaleString()}
-                  </p>
-                  <p className="text-sm font-medium text-gray-900">Total stock available</p>
-                  <p className="text-xs text-gray-500">Sum of quantities on hand (active products)</p>
-                </div>
-              </div>
-            </Card>
-
-            <Card>
-              <div className="flex items-center gap-3">
-                <Layers className="h-8 w-8 shrink-0 text-indigo-600" aria-hidden />
-                <div>
-                  <p className="text-2xl font-bold tabular-nums text-gray-900">
-                    {loading ? '—' : Number(summary?.in_stock_products ?? 0).toLocaleString()}
-                  </p>
-                  <p className="text-sm text-gray-600">Products with stock</p>
-                  <p className="text-xs text-gray-500">
-                    of {Number(summary?.active_products ?? summary?.total_products ?? 0)} active
-                  </p>
-                </div>
-              </div>
-            </Card>
-
-            <Card>
-              <div className="flex items-center gap-3">
-                <Package className="h-8 w-8 shrink-0 text-blue-600" aria-hidden />
-                <div>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {loading ? '—' : formatCurrency(summary?.stock_value_at_cost ?? 0)}
-                  </p>
-                  <p className="text-sm text-gray-600">Stock value (at cost)</p>
-                </div>
-              </div>
-            </Card>
-
-            <Card>
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="h-8 w-8 shrink-0 text-orange-600" aria-hidden />
-                <div>
-                  <p className="text-2xl font-bold tabular-nums text-gray-900">
-                    {loading ? '—' : Number(summary?.low_stock_count ?? lowStockItems.length)}
-                  </p>
-                  <p className="text-sm text-gray-600">Low stock items</p>
-                </div>
-              </div>
-            </Card>
-
-            <Card>
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="h-8 w-8 shrink-0 text-red-600" aria-hidden />
-                <div>
-                  <p className="text-2xl font-bold tabular-nums text-gray-900">
-                    {loading ? '—' : Number(summary?.expired_count ?? 0)}
-                  </p>
-                  <p className="text-sm text-gray-600">Expired (with stock)</p>
-                </div>
-              </div>
-            </Card>
-
-            <Card>
-              <div className="flex items-center gap-3">
-                <TrendingDown className="h-8 w-8 shrink-0 text-amber-600" aria-hidden />
-                <div>
-                  <p className="text-2xl font-bold tabular-nums text-gray-900">
-                    {loading ? '—' : Number(summary?.expiring_soon_count ?? 0)}
-                  </p>
-                  <p className="text-sm text-gray-600">Expiring soon (30 days)</p>
-                </div>
-              </div>
-            </Card>
+          <div className="stat-grid">
+            <StatCard
+              featured
+              icon={Boxes}
+              iconWrapClassName="rounded-full bg-primary-100 p-3"
+              iconClassName="h-8 w-8 text-primary-700"
+              value={loading ? '—' : Number(summary?.total_units ?? 0).toLocaleString()}
+              label="Total stock available"
+              hint="Sum of quantities on hand (active products)"
+            />
+            <StatCard
+              icon={Layers}
+              iconWrapClassName="p-0 bg-transparent"
+              iconClassName="h-8 w-8 text-indigo-600"
+              value={loading ? '—' : Number(summary?.in_stock_products ?? 0).toLocaleString()}
+              label="Products with stock"
+              hint={`of ${Number(summary?.active_products ?? summary?.total_products ?? 0)} active`}
+            />
+            <StatCard
+              icon={Package}
+              iconWrapClassName="p-0 bg-transparent"
+              iconClassName="h-8 w-8 text-blue-600"
+              currency
+              value={loading ? '—' : formatCurrency(summary?.stock_value_at_cost ?? 0)}
+              label="Stock value (at cost)"
+            />
+            <StatCard
+              icon={AlertTriangle}
+              iconWrapClassName="p-0 bg-transparent"
+              iconClassName="h-8 w-8 text-orange-600"
+              value={loading ? '—' : Number(summary?.low_stock_count ?? lowStockItems.length)}
+              label="Low stock items"
+            />
+            <StatCard
+              icon={AlertTriangle}
+              iconWrapClassName="p-0 bg-transparent"
+              iconClassName="h-8 w-8 text-red-600"
+              value={loading ? '—' : Number(summary?.expired_count ?? 0)}
+              label="Expired (with stock)"
+            />
+            <StatCard
+              icon={TrendingDown}
+              iconWrapClassName="p-0 bg-transparent"
+              iconClassName="h-8 w-8 text-amber-600"
+              value={loading ? '—' : Number(summary?.expiring_soon_count ?? 0)}
+              label="Expiring soon (30 days)"
+            />
           </div>
 
           {!loading && Number(summary?.total_units ?? 0) === 0 && (

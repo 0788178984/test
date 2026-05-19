@@ -123,7 +123,7 @@ const AddQuantityModal = ({ product, onConfirm, onCancel }) => {
 
         <div className="mb-6 rounded-lg bg-gray-50 p-3 text-center">
           <p className="text-xs text-gray-600">Line total</p>
-          <p className="text-2xl font-bold leading-tight text-primary-600 tabular-nums">{formatCurrency(lineTotal)}</p>
+          <p className="stat-value-currency text-primary-600">{formatCurrency(lineTotal)}</p>
         </div>
 
         <div className="flex gap-3">

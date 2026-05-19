@@ -349,30 +349,28 @@ const Reports = () => {
           <div className="space-y-6">
             {/* Daily Sales Report */}
             {activeTab === 'daily' && reports.dailySales && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="text-center">
-                  <p className="text-3xl font-bold text-primary-600">
-                    {reports.dailySales.salesCount || 0}
-                  </p>
-                  <p className="text-sm text-gray-600">Total Sales</p>
+              <div className="stat-grid gap-6">
+                <div className="stat-panel text-center">
+                  <p className="stat-value text-primary-600">{reports.dailySales.salesCount || 0}</p>
+                  <p className="stat-label mt-1">Total Sales</p>
                 </div>
-                <div className="text-center">
-                  <p className="text-3xl font-bold text-green-600">
+                <div className="stat-panel text-center">
+                  <p className="stat-value-currency text-green-600">
                     {formatCurrency(reports.dailySales.revenue || 0)}
                   </p>
-                  <p className="text-sm text-gray-600">Total Revenue</p>
+                  <p className="stat-label mt-1">Total Revenue</p>
                 </div>
-                <div className="text-center">
-                  <p className="text-3xl font-bold text-blue-600">
+                <div className="stat-panel text-center">
+                  <p className="stat-value-currency text-blue-600">
                     {formatCurrency(reports.dailySales.profit || 0)}
                   </p>
-                  <p className="text-sm text-gray-600">Total Profit</p>
+                  <p className="stat-label mt-1">Total Profit</p>
                 </div>
-                <div className="text-center">
-                  <p className="text-3xl font-bold text-orange-600">
+                <div className="stat-panel text-center">
+                  <p className="stat-value-currency text-orange-600">
                     {formatCurrency(reports.dailySales.averageSale || 0)}
                   </p>
-                  <p className="text-sm text-gray-600">Average Sale</p>
+                  <p className="stat-label mt-1">Average Sale</p>
                 </div>
               </div>
             )}
@@ -381,43 +379,43 @@ const Reports = () => {
             {monthlyReportFresh && (
               <div className="space-y-6">
                 {reports.summary && (
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <div className="rounded-xl border border-gray-200 bg-gradient-to-br from-primary-50 to-white p-5 shadow-sm">
+                  <div className="stat-grid">
+                    <div className="stat-panel bg-gradient-to-br from-primary-50 to-white">
                       <p className="text-xs font-medium uppercase tracking-wide text-primary-800">
                         Transactions
                       </p>
-                      <p className="mt-2 text-3xl font-bold text-primary-700">
+                      <p className="stat-value mt-2 text-primary-700">
                         {reports.summary.sales_count ?? 0}
                       </p>
                       <p className="mt-1 text-sm text-gray-600">Completed sales (month)</p>
                     </div>
-                    <div className="rounded-xl border border-gray-200 bg-gradient-to-br from-green-50 to-white p-5 shadow-sm">
+                    <div className="stat-panel bg-gradient-to-br from-green-50 to-white">
                       <p className="text-xs font-medium uppercase tracking-wide text-green-800">
                         Revenue
                       </p>
-                      <p className="mt-2 text-3xl font-bold text-green-700">
+                      <p className="stat-value-currency mt-2 text-green-700">
                         {formatCurrency(reports.summary.revenue ?? 0)}
                       </p>
-                      <p className="mt-1 text-sm text-gray-600">Total takings</p>
+                      <p className="stat-hint mt-1">Total takings</p>
                     </div>
-                    <div className="rounded-xl border border-gray-200 bg-gradient-to-br from-blue-50 to-white p-5 shadow-sm">
+                    <div className="stat-panel bg-gradient-to-br from-blue-50 to-white">
                       <p className="text-xs font-medium uppercase tracking-wide text-blue-800">
                         Profit
                       </p>
-                      <p className="mt-2 text-3xl font-bold text-blue-700">
+                      <p className="stat-value-currency mt-2 text-blue-700">
                         {formatCurrency(reports.summary.profit ?? 0)}
                       </p>
-                      <p className="mt-1 text-sm text-gray-600">After cost of goods</p>
+                      <p className="stat-hint mt-1">After cost of goods</p>
                     </div>
-                    <div className="rounded-xl border border-gray-200 bg-gradient-to-br from-amber-50 to-white p-5 shadow-sm">
+                    <div className="stat-panel bg-gradient-to-br from-amber-50 to-white">
                       <p className="text-xs font-medium uppercase tracking-wide text-amber-900">
                         Discounts & tax
                       </p>
-                      <p className="mt-2 text-lg font-semibold text-gray-900">
+                      <p className="stat-value-currency mt-2 text-gray-900">
                         {formatCurrency(reports.summary.total_discount ?? 0)}
                         <span className="text-gray-500"> disc</span>
                       </p>
-                      <p className="mt-1 text-sm text-gray-600">
+                      <p className="stat-hint mt-1">
                         Tax {formatCurrency(reports.summary.total_tax ?? 0)}
                       </p>
                     </div>
@@ -464,18 +462,24 @@ const Reports = () => {
 
             {activeTab === 'annual' && reports.summary && (
               <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="text-center p-4 bg-gray-50 rounded-lg">
-                    <p className="text-2xl font-bold text-green-600">{formatCurrency(reports.summary.revenue || 0)}</p>
-                    <p className="text-sm text-gray-600">Year revenue</p>
+                <div className="stat-grid">
+                  <div className="stat-panel text-center">
+                    <p className="stat-value-currency text-green-600">
+                      {formatCurrency(reports.summary.revenue || 0)}
+                    </p>
+                    <p className="stat-label mt-1">Year revenue</p>
                   </div>
-                  <div className="text-center p-4 bg-gray-50 rounded-lg">
-                    <p className="text-2xl font-bold text-red-600">{formatCurrency(reports.summary.expenses_total || 0)}</p>
-                    <p className="text-sm text-gray-600">Year expenses</p>
+                  <div className="stat-panel text-center">
+                    <p className="stat-value-currency text-red-600">
+                      {formatCurrency(reports.summary.expenses_total || 0)}
+                    </p>
+                    <p className="stat-label mt-1">Year expenses</p>
                   </div>
-                  <div className="text-center p-4 bg-gray-50 rounded-lg">
-                    <p className="text-2xl font-bold text-blue-600">{formatCurrency(reports.summary.net_cash ?? reports.summary.revenue)}</p>
-                    <p className="text-sm text-gray-600">Net (after expenses)</p>
+                  <div className="stat-panel text-center">
+                    <p className="stat-value-currency text-blue-600">
+                      {formatCurrency(reports.summary.net_cash ?? reports.summary.revenue)}
+                    </p>
+                    <p className="stat-label mt-1">Net (after expenses)</p>
                   </div>
                 </div>
                 {reports.monthlyBreakdown?.length > 0 && (

@@ -176,11 +176,11 @@ const Expenses = () => {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Card>
-          <p className="text-sm text-gray-600">Total for selected day</p>
-          <p className="text-2xl font-bold text-red-600">{formatCurrency(summary.total)}</p>
-          <p className="text-xs text-gray-500 mt-1">{summary.count} expense{summary.count === 1 ? '' : 's'}</p>
+      <div className="stat-grid sm:grid-cols-2">
+        <Card className="stat-card min-w-0">
+          <p className="stat-label">Total for selected day</p>
+          <p className="stat-value-currency text-red-600">{formatCurrency(summary.total)}</p>
+          <p className="stat-hint mt-1">{summary.count} expense{summary.count === 1 ? '' : 's'}</p>
         </Card>
         <Card>
           <p className="text-sm text-gray-600">Selected date</p>

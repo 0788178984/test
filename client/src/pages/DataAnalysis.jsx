@@ -169,27 +169,27 @@ const DataAnalysis = () => {
         <div className="flex justify-center py-16 text-gray-500">Loading analytics…</div>
       ) : (
         <>
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card className="p-4">
+          <div className="stat-grid">
+            <Card className="stat-card min-w-0 p-4">
               <p className="text-xs font-medium uppercase text-gray-500">Selected day revenue</p>
-              <p className="text-2xl font-bold text-primary-700 mt-1">
+              <p className="stat-value-currency mt-1 text-primary-700">
                 {formatCurrency(daily?.summary?.revenue ?? 0)}
               </p>
-              <p className="text-sm text-gray-600 mt-1">{daily?.summary?.sales_count ?? 0} completed sales</p>
+              <p className="stat-hint mt-1">{daily?.summary?.sales_count ?? 0} completed sales</p>
             </Card>
-            <Card className="p-4">
+            <Card className="stat-card min-w-0 p-4">
               <p className="text-xs font-medium uppercase text-gray-500">Month revenue</p>
-              <p className="text-2xl font-bold text-primary-700 mt-1">
+              <p className="stat-value-currency mt-1 text-primary-700">
                 {formatCurrency(monthly?.summary?.revenue ?? 0)}
               </p>
-              <p className="text-sm text-gray-600 mt-1">{monthly?.summary?.sales_count ?? 0} sales this month</p>
+              <p className="stat-hint mt-1">{monthly?.summary?.sales_count ?? 0} sales this month</p>
             </Card>
-            <Card className="p-4">
+            <Card className="stat-card min-w-0 p-4">
               <p className="text-xs font-medium uppercase text-gray-500">Month profit (est.)</p>
-              <p className="text-2xl font-bold text-emerald-700 mt-1">
+              <p className="stat-value-currency mt-1 text-emerald-700">
                 {formatCurrency(monthly?.summary?.profit ?? 0)}
               </p>
-              <p className="text-sm text-gray-600 mt-1">From completed sales in range</p>
+              <p className="stat-hint mt-1">From completed sales in range</p>
             </Card>
           </div>
 
