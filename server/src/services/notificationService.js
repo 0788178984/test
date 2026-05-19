@@ -2,6 +2,9 @@ const smsService = require('./smsService');
 const whatsappService = require('./whatsappService');
 const db = require('../db/connection');
 const { dispatch } = require('../routes/notifications');
+const { saleLocalDate } = require('../utils/storeTime');
+
+const LD = saleLocalDate('s.created_at');
 
 class NotificationService {
   constructor() {
@@ -200,7 +203,7 @@ class NotificationService {
           SUM(total_amount - (SELECT SUM(si.quantity * si.buying_price) 
                              FROM sale_items si WHERE si.sale_id = s.id)) as profit
         FROM sales s
-        WHERE date(s.created_at) = ? AND s.status = 'completed' AND s.deleted_at IS NULL
+        WHERE ${LD} = ? AND s.status = 'completed' AND s.deleted_at IS NULL
       `).get(date);
 
       const topProduct = await db.prepare(`
@@ -208,7 +211,7 @@ class NotificationService {
         FROM sale_items si
         JOIN products p ON p.id = si.product_id
         JOIN sales s ON s.id = si.sale_id
-        WHERE date(s.created_at) = ? AND s.status = 'completed' AND s.deleted_at IS NULL
+        WHERE ${LD} = ? AND s.status = 'completed' AND s.deleted_at IS NULL
         GROUP BY si.product_id 
         ORDER BY qty DESC 
         LIMIT 1

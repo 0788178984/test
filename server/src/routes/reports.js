@@ -63,7 +63,7 @@ function sendGeneratedExportFile(res, result) {
 // Daily report
 router.get('/daily', checkPermission('view_reports'), async (req, res) => {
   try {
-    const { date = getStoreToday() } = req.query;
+    const date = req.query.date || req.query.from || getStoreToday();
 
     let query = `
       SELECT 

@@ -4,7 +4,7 @@ const { restrictToBusinessStaff } = require('../middleware/tenantContext');
 const { checkPermission } = require('../middleware/roleCheck');
 const db = require('../db/connection');
 const { newId } = require('../db/ids');
-const { getStoreToday, saleLocalDate } = require('../utils/storeTime');
+const { getStoreToday, saleLocalDate, STORE_TZ } = require('../utils/storeTime');
 const { roundUgx, computeSaleTotals } = require('../utils/money');
 const router = express.Router();
 
@@ -346,6 +346,7 @@ router.get('/today-summary', async (req, res) => {
 
     res.json({
       date: today,
+      timezone: STORE_TZ,
       sales_count: summary.sales_count || 0,
       revenue: summary.revenue || 0,
       profit: summary.profit || 0,

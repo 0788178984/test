@@ -4,6 +4,7 @@ const { restrictToBusinessStaff } = require('../middleware/tenantContext');
 const { checkPermission } = require('../middleware/roleCheck');
 const db = require('../db/connection');
 const { newId } = require('../db/ids');
+const { getStoreToday, STORE_TZ } = require('../utils/storeTime');
 
 const router = express.Router();
 
@@ -24,10 +25,6 @@ const EXPENSE_CATEGORIES = [
 ];
 
 const PAYMENT_METHODS = ['cash', 'mobile_money', 'bank', 'other'];
-
-function todayDateStr() {
-  return new Date().toISOString().split('T')[0];
-}
 
 // List expenses (filters: date, from, to, category, page, limit)
 router.get('/', checkPermission('view_expenses'), async (req, res) => {
@@ -110,7 +107,7 @@ router.get('/categories/list', checkPermission('view_expenses'), (req, res) => {
 
 router.get('/summary/today', checkPermission('view_expenses'), async (req, res) => {
   try {
-    const date = todayDateStr();
+    const date = getStoreToday();
     const row = await db
       .prepare(
         `
@@ -123,6 +120,7 @@ router.get('/summary/today', checkPermission('view_expenses'), async (req, res) 
 
     res.json({
       date,
+      timezone: STORE_TZ,
       count: Number(row?.count ?? 0),
       total: Number(row?.total ?? 0),
     });
@@ -134,7 +132,7 @@ router.get('/summary/today', checkPermission('view_expenses'), async (req, res) 
 
 router.get('/summary', checkPermission('view_expenses'), async (req, res) => {
   try {
-    const from = req.query.from || todayDateStr();
+    const from = req.query.from || getStoreToday();
     const to = req.query.to || from;
 
     const totals = await db
@@ -243,7 +241,7 @@ router.post('/', checkPermission('manage_expenses'), async (req, res) => {
 
     const cat = EXPENSE_CATEGORIES.includes(category) ? category : 'other';
     const pay = PAYMENT_METHODS.includes(payment_method) ? payment_method : 'cash';
-    const dateStr = expense_date || todayDateStr();
+    const dateStr = expense_date || getStoreToday();
 
     const expenseId = newId('exp');
     await db

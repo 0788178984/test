@@ -231,6 +231,27 @@ export const formatCurrency = (amount) => {
 /** Store calendar (matches server STORE_TIMEZONE / Africa/Kampala). */
 export const STORE_TIMEZONE = import.meta.env.VITE_STORE_TIMEZONE || 'Africa/Kampala';
 
+const storeDateFormatter = new Intl.DateTimeFormat('en-CA', {
+  timeZone: STORE_TIMEZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+/** YYYY-MM-DD in store timezone — same rule as server getStoreToday(). */
+export const getStoreToday = () => storeDateFormatter.format(new Date());
+
+/** Add calendar days to a store date (YYYY-MM-DD). */
+export const addStoreDays = (dateStr, days) => {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const base = new Date(Date.UTC(y, m - 1, d + days, 12, 0, 0));
+  return storeDateFormatter.format(base);
+};
+
+export const storeAPI = {
+  getCalendar: () => api.get('/api/store/calendar'),
+};
+
 export const formatDate = (date, options = {}) => {
   const dateObj = new Date(date);
   return new Intl.DateTimeFormat('en-UG', {
@@ -271,7 +292,7 @@ export const formatPhoneNumber = (phone) => {
 };
 
 export const generateReceiptNumber = () => {
-  const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const today = getStoreToday().replace(/-/g, '');
   const random = Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
   return `INV-${today}-${random}`;
 };

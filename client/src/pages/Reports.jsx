@@ -3,7 +3,7 @@ import { toast } from 'react-hot-toast';
 import { Download, Calendar, TrendingUp, DollarSign, BarChart3, Users, Package } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { reportsAPI } from '../api/client';
-import { formatCurrency, formatDate } from '../api/client';
+import { formatCurrency, formatDate, getStoreToday, addStoreDays } from '../api/client';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Card from '../components/ui/Card';
@@ -12,9 +12,10 @@ import Modal from '../components/ui/Modal';
 const Reports = () => {
   const { hasRole } = useAuthStore();
   const [activeTab, setActiveTab] = useState('daily');
+  const storeToday = getStoreToday();
   const [dateRange, setDateRange] = useState({
-    from: new Date().toISOString().split('T')[0],
-    to: new Date().toISOString().split('T')[0]
+    from: storeToday,
+    to: storeToday,
   });
   const [reports, setReports] = useState({});
   const [loading, setLoading] = useState(false);
@@ -44,7 +45,7 @@ const Reports = () => {
       
       switch (activeTab) {
         case 'daily':
-          response = await reportsAPI.getDaily(dateRange);
+          response = await reportsAPI.getDaily({ date: dateRange.from });
           break;
         case 'monthly': {
           const d = new Date(dateRange.from);
@@ -228,14 +229,46 @@ const Reports = () => {
           )}
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          {activeTab === 'daily' && (
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  const d = getStoreToday();
+                  setDateRange({ from: d, to: d });
+                }}
+              >
+                Today
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  const d = addStoreDays(getStoreToday(), -1);
+                  setDateRange({ from: d, to: d });
+                }}
+              >
+                Yesterday
+              </Button>
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <Input
               type="date"
               value={dateRange.from}
-              onChange={(e) => setDateRange((prev) => ({ ...prev, from: e.target.value }))}
+              onChange={(e) => {
+                const v = e.target.value;
+                setDateRange((prev) => ({
+                  from: v,
+                  to: activeTab === 'daily' ? v : prev.to,
+                }));
+              }}
               className="form-input"
             />
-            {activeTab !== 'monthly' && activeTab !== 'annual' && (
+            {activeTab !== 'monthly' && activeTab !== 'annual' && activeTab !== 'daily' && (
               <>
                 <span className="text-gray-500">to</span>
                 <Input

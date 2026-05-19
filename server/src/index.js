@@ -34,6 +34,8 @@ const developerRoutes = require('./routes/developer');
 const supportRequestRoutes = require('./routes/supportRequests');
 const paymentRoutes = require('./routes/payments');
 const expenseRoutes = require('./routes/expenses');
+const storeRoutes = require('./routes/store');
+const { getStoreToday, saleLocalDate } = require('./utils/storeTime');
 
 // Import services
 const { dispatch, createNotification } = require('./routes/notifications');
@@ -180,6 +182,7 @@ app.use('/api/developer', developerRoutes);
 app.use('/api/support-requests', supportRequestRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/expenses', expenseRoutes);
+app.use('/api/store', storeRoutes);
 app.use('/api/agent-float', require('./routes/agentFloat'));
 
 // Static files for client (in production)
@@ -261,7 +264,8 @@ cron.schedule('0 21 * * *', async () => {
   logger.info('Running daily summary job...');
 
   try {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getStoreToday();
+    const localDate = saleLocalDate('s.created_at');
     const businesses = await db.prepare(`SELECT id FROM businesses`).all();
 
     for (const b of businesses) {
@@ -271,7 +275,7 @@ cron.schedule('0 21 * * *', async () => {
              SUM(total_amount - (SELECT SUM(si.quantity * si.buying_price)
                                 FROM sale_items si WHERE si.sale_id = s.id)) as profit
       FROM sales s
-      WHERE date(created_at) = ? AND status = 'completed' AND business_id = ?
+      WHERE ${localDate} = ? AND status = 'completed' AND business_id = ?
     `).get(today, b.id);
 
       const topProduct = await db.prepare(`
@@ -279,7 +283,7 @@ cron.schedule('0 21 * * *', async () => {
       FROM sale_items si
       JOIN products p ON p.id = si.product_id
       JOIN sales s ON s.id = si.sale_id
-      WHERE date(s.created_at) = ? AND s.status = 'completed' AND s.business_id = ?
+      WHERE ${localDate} = ? AND s.status = 'completed' AND s.business_id = ?
       GROUP BY si.product_id
       ORDER BY qty DESC
       LIMIT 1

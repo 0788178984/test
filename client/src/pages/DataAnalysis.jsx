@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { LineChart as LineChartIcon, Calendar } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
-import { reportsAPI, formatCurrency, formatDate } from '../api/client';
+import { reportsAPI, formatCurrency, formatDate, getStoreToday } from '../api/client';
 import Card from '../components/ui/Card';
 import Input from '../components/ui/Input';
 
@@ -15,7 +15,7 @@ function formatPaymentLabel(method) {
 
 const DataAnalysis = () => {
   const { hasRole, user } = useAuthStore();
-  const [analysisDate, setAnalysisDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [analysisDate, setAnalysisDate] = useState(() => getStoreToday());
   const [year, setYear] = useState(() => new Date().getFullYear());
   const [month, setMonth] = useState(() => new Date().getMonth() + 1);
   const [loading, setLoading] = useState(true);

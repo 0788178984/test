@@ -111,6 +111,18 @@ There is **no** `docker-compose.yml` or `npm run test` in this repo root as of n
 
 ---
 
+## Multi-store isolation (store codes)
+
+Each **store code** (business code) is a separate tenant in the database:
+
+- Login (PIN or web) resolves the code to one `business_id`.
+- Sales, products, customers, expenses, reports, MoMo float, and dashboard totals always filter by that `business_id` from your session — never mixed with another store.
+- Receipt numbers (e.g. `INV-20260519-000001`) are numbered **per store, per day**; two stores can share the same receipt pattern without conflict.
+
+Staff must enter the correct **store code** at login when more than one store exists on the platform.
+
+---
+
 ## Mobile money agent — float & balancing (reference)
 
 This guide is kept in documentation only so the POS and **Mobile money** screens stay uncluttered.

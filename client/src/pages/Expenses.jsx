@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Wallet, Plus, Edit, Trash2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { expensesAPI } from '../api/client';
-import { formatCurrency, formatDate, handleApiError } from '../api/client';
+import { formatCurrency, formatDate, getStoreToday, handleApiError } from '../api/client';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Modal from '../components/ui/Modal';
@@ -33,7 +33,7 @@ const defaultForm = () => ({
   category: 'other',
   amount: '',
   payment_method: 'cash',
-  expense_date: new Date().toISOString().split('T')[0],
+  expense_date: getStoreToday(),
   notes: '',
   receipt_ref: '',
 });
@@ -44,7 +44,7 @@ const Expenses = () => {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [formData, setFormData] = useState(defaultForm());
-  const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]);
+  const [filterDate, setFilterDate] = useState(() => getStoreToday());
   const [filterCategory, setFilterCategory] = useState('');
   const [summary, setSummary] = useState({ count: 0, total: 0 });
   const [categories, setCategories] = useState([]);

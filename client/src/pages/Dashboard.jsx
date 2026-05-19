@@ -14,11 +14,14 @@ import { useAuthStore } from '../store/authStore';
 import { salesAPI, productsAPI, inventoryAPI, customersAPI, expensesAPI } from '../api/client';
 import { formatCurrency, formatDate } from '../api/client';
 import Card from '../components/ui/Card';
+import { storeReceiptBranding } from '../utils/storeBrand';
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user, hasRole } = useAuthStore();
+  const { name: storeName, code: storeCode } = storeReceiptBranding(user);
   const [loading, setLoading] = useState(true);
+  const [storeDate, setStoreDate] = useState('');
   const [stats, setStats] = useState({
     todaySales: 0,
     todayRevenue: 0,
@@ -40,6 +43,7 @@ const Dashboard = () => {
       // Fetch today's sales summary
       const salesResponse = await salesAPI.getTodaySummary();
       const today = salesResponse.data.date;
+      setStoreDate(today);
       const productsResponse = await productsAPI.getAll({ limit: 1 });
       const lowStockResponse = await inventoryAPI.getLowStock();
       const customersResponse = await customersAPI.getAll({ limit: 1 });
@@ -134,9 +138,19 @@ const Dashboard = () => {
         <p className="text-sm leading-relaxed text-gray-600 sm:text-base">
           Welcome back,{' '}
           <span className="font-medium text-gray-900">{user?.name || 'there'}</span>
-          {". Here's what's happening today."}
+          {storeDate
+            ? `. Figures below are for ${formatDate(`${storeDate}T12:00:00`)} (store day).`
+            : ". Here's what's happening today."}
         </p>
         <h1 className="text-xl font-bold tracking-tight text-gray-900 sm:text-2xl">Dashboard</h1>
+        {storeCode && (
+          <p className="text-xs text-gray-500">
+            {storeName}
+            {' · '}
+            <span className="font-mono font-medium text-gray-700">{storeCode}</span>
+            {' — sales and totals below are only for this store.'}
+          </p>
+        )}
       </header>
 
       {/* Stats Grid */}
