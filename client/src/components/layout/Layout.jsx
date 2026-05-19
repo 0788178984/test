@@ -20,6 +20,7 @@ import {
   PieChart,
   Award,
   Wallet,
+  Smartphone,
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../../store/authStore';
@@ -107,6 +108,12 @@ const Layout = () => {
       title: 'POS',
       icon: ShoppingCart,
       path: '/pos',
+      roles: ['admin', 'manager', 'cashier'],
+    },
+    {
+      title: 'Mobile money',
+      icon: Smartphone,
+      path: '/mobile-money',
       roles: ['admin', 'manager', 'cashier'],
     },
     {

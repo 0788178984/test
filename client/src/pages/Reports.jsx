@@ -184,6 +184,17 @@ const Reports = () => {
     }
   };
 
+  const monthViewDate = dateRange.from ? new Date(`${dateRange.from}T12:00:00`) : null;
+  const ry = Number(reports.year);
+  const rm = Number(reports.month);
+  const monthlyReportFresh =
+    activeTab === 'monthly' &&
+    monthViewDate != null &&
+    Number.isFinite(ry) &&
+    Number.isFinite(rm) &&
+    ry === monthViewDate.getFullYear() &&
+    rm === monthViewDate.getMonth() + 1;
+
   if (!hasRole('admin', 'manager')) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -199,23 +210,48 @@ const Reports = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
+          {activeTab === 'monthly' && dateRange.from && (
+            <p className="mt-1 text-sm text-gray-600">
+              Showing{' '}
+              <span className="font-medium text-gray-900">
+                {new Date(`${dateRange.from}T12:00:00`).toLocaleString(undefined, {
+                  month: 'long',
+                  year: 'numeric',
+                })}
+              </span>
+              {' — '}
+              use the first date to pick the month (range end is ignored for this tab).
+            </p>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <Input
               type="date"
               value={dateRange.from}
-              onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))}
+              onChange={(e) => setDateRange((prev) => ({ ...prev, from: e.target.value }))}
               className="form-input"
             />
-            <span className="text-gray-500">to</span>
-            <Input
-              type="date"
-              value={dateRange.to}
-              onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))}
-              className="form-input"
-            />
+            {activeTab !== 'monthly' && activeTab !== 'annual' && (
+              <>
+                <span className="text-gray-500">to</span>
+                <Input
+                  type="date"
+                  value={dateRange.to}
+                  onChange={(e) => setDateRange((prev) => ({ ...prev, to: e.target.value }))}
+                  className="form-input"
+                />
+              </>
+            )}
+            {activeTab === 'annual' && (
+              <p className="text-sm text-gray-600">
+                Year from first date:{' '}
+                <span className="font-medium">{dateRange.from.slice(0, 4)}</span>
+              </p>
+            )}
           </div>
           <Button onClick={() => fetchReportData()} variant="secondary" size="sm">
             Generate Report
@@ -309,28 +345,87 @@ const Reports = () => {
             )}
 
             {/* Monthly Sales Report */}
-            {activeTab === 'monthly' && reports.dailyBreakdown && (
-              <div className="overflow-x-auto">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Day</th>
-                      <th>Sales</th>
-                      <th>Revenue</th>
-                      <th>Profit</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {reports.dailyBreakdown.map((row, index) => (
-                      <tr key={index}>
-                        <td>{formatDate(row.day)}</td>
-                        <td>{row.sales_count}</td>
-                        <td>{formatCurrency(row.revenue)}</td>
-                        <td>{formatCurrency(row.profit)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {monthlyReportFresh && (
+              <div className="space-y-6">
+                {reports.summary && (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="rounded-xl border border-gray-200 bg-gradient-to-br from-primary-50 to-white p-5 shadow-sm">
+                      <p className="text-xs font-medium uppercase tracking-wide text-primary-800">
+                        Transactions
+                      </p>
+                      <p className="mt-2 text-3xl font-bold text-primary-700">
+                        {reports.summary.sales_count ?? 0}
+                      </p>
+                      <p className="mt-1 text-sm text-gray-600">Completed sales (month)</p>
+                    </div>
+                    <div className="rounded-xl border border-gray-200 bg-gradient-to-br from-green-50 to-white p-5 shadow-sm">
+                      <p className="text-xs font-medium uppercase tracking-wide text-green-800">
+                        Revenue
+                      </p>
+                      <p className="mt-2 text-3xl font-bold text-green-700">
+                        {formatCurrency(reports.summary.revenue ?? 0)}
+                      </p>
+                      <p className="mt-1 text-sm text-gray-600">Total takings</p>
+                    </div>
+                    <div className="rounded-xl border border-gray-200 bg-gradient-to-br from-blue-50 to-white p-5 shadow-sm">
+                      <p className="text-xs font-medium uppercase tracking-wide text-blue-800">
+                        Profit
+                      </p>
+                      <p className="mt-2 text-3xl font-bold text-blue-700">
+                        {formatCurrency(reports.summary.profit ?? 0)}
+                      </p>
+                      <p className="mt-1 text-sm text-gray-600">After cost of goods</p>
+                    </div>
+                    <div className="rounded-xl border border-gray-200 bg-gradient-to-br from-amber-50 to-white p-5 shadow-sm">
+                      <p className="text-xs font-medium uppercase tracking-wide text-amber-900">
+                        Discounts & tax
+                      </p>
+                      <p className="mt-2 text-lg font-semibold text-gray-900">
+                        {formatCurrency(reports.summary.total_discount ?? 0)}
+                        <span className="text-gray-500"> disc</span>
+                      </p>
+                      <p className="mt-1 text-sm text-gray-600">
+                        Tax {formatCurrency(reports.summary.total_tax ?? 0)}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {reports.dailyBreakdown && reports.dailyBreakdown.length > 0 ? (
+                  <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th>Day</th>
+                          <th>Sales</th>
+                          <th>Revenue</th>
+                          <th>Profit</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {reports.dailyBreakdown.map((row, index) => (
+                          <tr
+                            key={index}
+                            className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50/80'}
+                          >
+                            <td className="font-medium">{formatDate(row.day)}</td>
+                            <td>{row.sales_count}</td>
+                            <td className="text-green-800">{formatCurrency(row.revenue)}</td>
+                            <td className="text-blue-800">{formatCurrency(row.profit)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50/50 px-6 py-14 text-center">
+                    <BarChart3 className="mx-auto mb-3 h-10 w-10 text-gray-400" />
+                    <p className="text-sm font-medium text-gray-800">No daily breakdown yet</p>
+                    <p className="mt-1 text-sm text-gray-600">
+                      There were no completed sales on any day in this month, or data is still
+                      loading.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -476,11 +571,20 @@ const Reports = () => {
         )}
       </Card>
 
-      <Modal isOpen={previewOpen} onClose={closePreview} title="Report preview" size="xl">
+      <Modal isOpen={previewOpen} onClose={closePreview} title="Report preview (PDF)" size="xl">
         {previewLoading ? (
-          <p className="py-12 text-center text-gray-500">Generating preview…</p>
+          <div className="space-y-3 py-10">
+            <div className="mx-auto h-12 w-12 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
+            <p className="text-center text-sm text-gray-600">Building PDF preview…</p>
+          </div>
         ) : previewPdfUrl ? (
-          <iframe title="Report PDF preview" src={previewPdfUrl} className="h-[70vh] w-full rounded border border-gray-200" />
+          <div className="overflow-hidden rounded-lg border border-gray-200 bg-gray-100 shadow-inner">
+            <iframe
+              title="Report PDF preview"
+              src={previewPdfUrl}
+              className="h-[min(85vh,920px)] min-h-[420px] w-full bg-white"
+            />
+          </div>
         ) : (
           <p className="py-8 text-center text-sm text-gray-600">
             On-screen data above matches this period. Use Download PDF when preview is unavailable.

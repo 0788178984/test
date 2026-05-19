@@ -22,6 +22,7 @@ import DeveloperConsole from './pages/DeveloperConsole';
 import NotificationsPage from './pages/NotificationsPage';
 import TeamMessages from './pages/TeamMessages';
 import Subscription from './pages/Subscription';
+import MobileMoney from './pages/MobileMoney';
 
 function App() {
   const checkAuth = useAuthStore((state) => state.checkAuth);
@@ -45,6 +46,7 @@ function App() {
                 <Route index element={<Navigate to="/dashboard" replace />} />
                 <Route path="dashboard" element={<Dashboard />} />
                 <Route path="pos" element={<POS />} />
+                <Route path="mobile-money" element={<MobileMoney />} />
                 <Route path="inventory" element={<Inventory />} />
                 <Route path="customers" element={<Customers />} />
                 <Route path="notifications" element={<NotificationsPage />} />
