@@ -228,9 +228,13 @@ export const formatCurrency = (amount) => {
   }).format(amount || 0);
 };
 
+/** Store calendar (matches server STORE_TIMEZONE / Africa/Kampala). */
+export const STORE_TIMEZONE = import.meta.env.VITE_STORE_TIMEZONE || 'Africa/Kampala';
+
 export const formatDate = (date, options = {}) => {
   const dateObj = new Date(date);
   return new Intl.DateTimeFormat('en-UG', {
+    timeZone: STORE_TIMEZONE,
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -239,13 +243,14 @@ export const formatDate = (date, options = {}) => {
 };
 
 export const formatDateTime = (date) => {
-  return new Date(date).toLocaleString('en-UG', {
+  return new Intl.DateTimeFormat('en-UG', {
+    timeZone: STORE_TIMEZONE,
     year: 'numeric',
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-  });
+  }).format(new Date(date));
 };
 
 export const formatPhoneNumber = (phone) => {

@@ -4,7 +4,6 @@ import {
   ShoppingCart,
   Users,
   Package,
-  TrendingUp,
   AlertTriangle,
   DollarSign,
   BarChart3,
@@ -44,7 +43,12 @@ const Dashboard = () => {
       const productsResponse = await productsAPI.getAll({ limit: 1 });
       const lowStockResponse = await inventoryAPI.getLowStock();
       const customersResponse = await customersAPI.getAll({ limit: 1 });
-      const recentSalesResponse = await salesAPI.getAll({ from: today, to: today, limit: 5 });
+      const recentSalesResponse = await salesAPI.getAll({
+        from: today,
+        to: today,
+        status: 'completed',
+        limit: 5,
+      });
 
       let todayExpenses = 0;
       if (hasRole('admin', 'manager', 'cashier')) {
@@ -78,16 +82,12 @@ const Dashboard = () => {
       value: stats.todaySales,
       icon: ShoppingCart,
       color: 'blue',
-      change: '+12%',
-      changeType: 'increase'
     },
     {
       title: "Today's Revenue",
       value: formatCurrency(stats.todayRevenue),
       icon: DollarSign,
       color: 'green',
-      change: '+8%',
-      changeType: 'increase'
     },
     ...(hasRole('admin', 'manager', 'cashier')
       ? [
@@ -96,8 +96,6 @@ const Dashboard = () => {
             value: formatCurrency(stats.todayExpenses),
             icon: Wallet,
             color: 'red',
-            change: '',
-            changeType: 'decrease',
           },
         ]
       : []),
@@ -106,25 +104,19 @@ const Dashboard = () => {
       value: stats.totalProducts,
       icon: Package,
       color: 'purple',
-      change: '+2',
-      changeType: 'increase'
     },
     {
       title: 'Low Stock Items',
       value: stats.lowStockItems,
       icon: AlertTriangle,
       color: 'orange',
-      change: '-3',
-      changeType: 'decrease'
     },
     {
       title: 'Total Customers',
       value: stats.totalCustomers,
       icon: Users,
       color: 'indigo',
-      change: '+15',
-      changeType: 'increase'
-    }
+    },
   ];
 
   if (loading) {
@@ -160,26 +152,25 @@ const Dashboard = () => {
                 <stat.icon className={`w-6 h-6 text-${stat.color}-600`} />
               </div>
             </div>
-            <div className="mt-4 flex items-center text-sm">
-              <TrendingUp className={`w-4 h-4 mr-1 ${
-                stat.changeType === 'increase' ? 'text-green-600' : 'text-red-600'
-              }`} />
-              <span className={`${
-                stat.changeType === 'increase' ? 'text-green-600' : 'text-red-600'
-              }`}>
-                {stat.change} from last week
-              </span>
-            </div>
           </Card>
         ))}
       </div>
 
       {/* Recent Sales Table */}
       <Card>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Today&apos;s Sales</h2>
-          <button className="text-primary-600 hover:text-primary-700 text-sm font-medium">
-            View All
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Today&apos;s Sales</h2>
+            {hasRole('admin', 'manager') && (
+              <p className="text-xs text-gray-500">All cashiers · completed sales only</p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/reports')}
+            className="text-sm font-medium text-primary-600 hover:text-primary-700"
+          >
+            View in Reports
           </button>
         </div>
         

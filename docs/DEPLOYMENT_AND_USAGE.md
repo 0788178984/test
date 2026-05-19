@@ -111,6 +111,24 @@ There is **no** `docker-compose.yml` or `npm run test` in this repo root as of n
 
 ---
 
+## Mobile money agent — float & balancing (reference)
+
+This guide is kept in documentation only so the POS and **Mobile money** screens stay uncluttered.
+
+**Roles**
+
+- **Admin or manager:** Choose which cashier receives the opening cash and MoMo float, open the business day, and run end-of-day reconciliation.
+- **Cashiers:** Record agent transactions (withdrawals, deposits, airtime, bills, send money) once the float is open.
+
+**Important:** Agent float and balancing are **separate** from customer MoMo payments at checkout (those are normal POS sales).
+
+**Where to use it in the app**
+
+- **Mobile money** in the sidebar — full float screen.
+- **POS** — the same float controls appear at the bottom for convenience during checkout.
+
+---
+
 ## POS checkout flow & keyboard shortcuts (reference)
 
 This text was removed from the in-app POS banner to keep the UI clean on phones; behaviour is unchanged.

@@ -201,12 +201,8 @@ const MoMoAgentSection = () => {
         <div>
           <h2 className="flex items-center gap-2 text-lg font-bold text-gray-900">
             <Smartphone className="h-5 w-5 text-amber-600" />
-            Mobile money agent — float & balancing
+            Mobile money agent
           </h2>
-          <p className="text-sm text-gray-600">
-            Separate from POS checkout MoMo. Only an admin or manager can open or close the day’s
-            float; cashiers record agent transactions once float is open.
-          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="secondary" size="sm" onClick={load} disabled={loading}>
