@@ -39,20 +39,21 @@ const useSyncStore = create((set, get) => ({
   checkSyncStatus: async () => {
     const role = useAuthStore.getState().user?.role;
     if (role === 'cashier') {
-      set({ syncStatus: null });
+      set({ syncStatus: null, lastSyncAt: null });
       return;
     }
 
     try {
       const response = await syncAPI.getStatus();
-      set({ 
+      const summary = response.data?.summary;
+      set({
         syncStatus: response.data,
-        lastSyncAt: response.data.summary?.last_sync_at ? new Date(response.data.summary.last_sync_at) : null
+        lastSyncAt: summary?.last_sync_at ? new Date(summary.last_sync_at) : null,
       });
     } catch (error) {
       const status = error?.response?.status;
       if (status === 403 || status === 401 || status === 500) {
-        set({ syncStatus: null });
+        set({ syncStatus: null, lastSyncAt: null });
         return;
       }
       console.error('Check sync status error:', error);
@@ -68,12 +69,14 @@ const useSyncStore = create((set, get) => ({
 
     try {
       const response = await syncAPI.force({ direction });
-      
-      set({ 
+
+      set({
         isSyncing: false,
         lastSyncAt: new Date(),
-        syncProgress: 100
+        syncProgress: 100,
       });
+
+      await get().checkSyncStatus();
 
       return response.data;
     } catch (error) {
@@ -109,33 +112,45 @@ const useSyncStore = create((set, get) => ({
 
   getSyncStatusText: () => {
     const { isOnline, isSyncing, syncStatus } = get();
-    
+    const summary = syncStatus?.summary;
+
+    if (summary && summary.sync_enabled === false) {
+      return 'Up to date';
+    }
+
     if (!isOnline) {
       return 'Offline';
     }
-    
+
     if (isSyncing) {
       return 'Syncing...';
     }
-    
-    if (syncStatus?.summary) {
-      const { total_pending, total_synced } = syncStatus.summary;
-      
+
+    if (summary) {
+      const { total_pending, total_synced } = summary;
+
       if (total_pending > 0) {
         return `${total_pending} pending changes`;
       }
-      
+
       if (total_synced > 0) {
         return `All synced (${total_synced} records)`;
       }
     }
-    
+
     return 'Up to date';
   },
 
   getLastSyncText: () => {
-    const lastSync = get().lastSyncAt;
-    
+    const { lastSyncAt, syncStatus } = get();
+    const summary = syncStatus?.summary;
+
+    if (summary && summary.sync_enabled === false) {
+      return 'Live database';
+    }
+
+    const lastSync = lastSyncAt;
+
     if (!lastSync) {
       return 'Never synced';
     }
@@ -161,7 +176,9 @@ const useSyncStore = create((set, get) => ({
 
   hasPendingChanges: () => {
     const status = get().syncStatus;
-    return status?.summary?.total_pending > 0;
+    const summary = status?.summary;
+    if (summary && summary.sync_enabled === false) return false;
+    return summary?.total_pending > 0;
   },
 
   getConflictsCount: () => {

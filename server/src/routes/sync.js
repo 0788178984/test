@@ -219,8 +219,26 @@ router.post('/pull', authorize('admin'), async (req, res) => {
 // Get sync status
 router.get('/status', authorize('admin', 'manager'), async (req, res) => {
   try {
+    const cloudRow = await db.prepare(`SELECT value FROM settings WHERE key = 'cloud_api_url'`).get();
+    const cloudUrl = String(cloudRow?.value ?? '').trim();
+
+    /** Hosted / single-database installs: nothing is queued for a remote cloud. */
+    if (!cloudUrl) {
+      return res.json({
+        status: {},
+        summary: {
+          total_pending: 0,
+          total_synced: 0,
+          sync_percentage: 100,
+          last_sync_at: new Date().toISOString(),
+          sync_enabled: false,
+        },
+      });
+    }
+
     const status = {};
-    
+    let latestLastSync = null;
+
     for (const table of SYNC_TABLES) {
       let pending;
       let synced;
@@ -353,10 +371,18 @@ router.get('/status', authorize('admin', 'manager'), async (req, res) => {
             .get())?.last_sync ?? null;
       }
 
+      const last = lastSync || null;
+      if (last) {
+        const t = new Date(last).getTime();
+        if (!Number.isNaN(t) && (latestLastSync === null || t > new Date(latestLastSync).getTime())) {
+          latestLastSync = last;
+        }
+      }
+
       status[table] = {
         pending,
         synced,
-        last_sync: lastSync || null,
+        last_sync: last,
       };
     }
 
@@ -375,8 +401,13 @@ router.get('/status', authorize('admin', 'manager'), async (req, res) => {
       summary: {
         total_pending: totalPending,
         total_synced: totalSynced,
-        sync_percentage: totalSynced > 0 ? Math.round((totalSynced / (totalPending + totalSynced)) * 100) : 0
-      }
+        sync_percentage:
+          totalSynced + totalPending > 0
+            ? Math.round((totalSynced / (totalPending + totalSynced)) * 100)
+            : 0,
+        last_sync_at: latestLastSync,
+        sync_enabled: true,
+      },
     });
   } catch (error) {
     console.error('Get sync status error:', error);

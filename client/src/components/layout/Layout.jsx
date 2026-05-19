@@ -53,6 +53,8 @@ const Layout = () => {
   const getLastSyncText = useSyncStore((s) => s.getLastSyncText);
   const hasPendingChanges = useSyncStore((s) => s.hasPendingChanges);
   const initializeSync = useSyncStore((s) => s.initializeSync);
+  const syncSummary = useSyncStore((s) => s.syncStatus?.summary);
+  const showHeaderSync = Boolean(syncSummary && syncSummary.sync_enabled !== false);
   const headerCode = storeHeaderLabel(user);
   const { name: storeName } = storeReceiptBranding(user);
 
@@ -470,6 +472,7 @@ const Layout = () => {
             </div>
 
             <div className="flex shrink-0 items-center gap-4 sm:gap-6">
+              {showHeaderSync && (
               <div className="hidden text-right sm:block">
                 <div className="flex items-center justify-end gap-2">
                   <RefreshCw
@@ -481,6 +484,7 @@ const Layout = () => {
                   </div>
                 </div>
               </div>
+              )}
 
               <NotificationBell />
 
@@ -503,6 +507,7 @@ const Layout = () => {
             </div>
           </div>
 
+          {showHeaderSync && (
           <div className="mt-2 flex items-center gap-2 border-t border-gray-100 pt-2 sm:hidden">
             <RefreshCw
               className={`h-4 w-4 shrink-0 ${hasPendingChanges() ? 'text-yellow-600' : 'text-gray-400'}`}
@@ -513,6 +518,7 @@ const Layout = () => {
               <span className="text-gray-500">{getLastSyncText()}</span>
             </div>
           </div>
+          )}
         </header>
 
         <main className="min-h-0 flex-1 overflow-y-auto bg-gray-50">
