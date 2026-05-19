@@ -16,6 +16,15 @@ import { formatCurrency, formatDate } from '../api/client';
 import Card from '../components/ui/Card';
 import { storeReceiptBranding } from '../utils/storeBrand';
 
+const STAT_ICON_STYLES = {
+  blue: { wrap: 'bg-blue-100', icon: 'text-blue-600' },
+  green: { wrap: 'bg-primary-100', icon: 'text-primary-600' },
+  red: { wrap: 'bg-red-100', icon: 'text-red-600' },
+  purple: { wrap: 'bg-purple-100', icon: 'text-purple-600' },
+  orange: { wrap: 'bg-orange-100', icon: 'text-orange-600' },
+  indigo: { wrap: 'bg-indigo-100', icon: 'text-indigo-600' },
+};
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user, hasRole } = useAuthStore();
@@ -155,19 +164,25 @@ const Dashboard = () => {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
-        {statCards.map((stat, index) => (
-          <Card key={index} className="hover:shadow-lg transition-shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+        {statCards.map((stat) => {
+          const iconStyle = STAT_ICON_STYLES[stat.color] || STAT_ICON_STYLES.blue;
+          return (
+            <Card
+              key={stat.title}
+              className="transition-shadow duration-200 hover:shadow-lg hover:ring-1 hover:ring-primary-100"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">{stat.title}</p>
+                  <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+                </div>
+                <div className={`rounded-full p-3 ${iconStyle.wrap}`}>
+                  <stat.icon className={`h-6 w-6 ${iconStyle.icon}`} aria-hidden />
+                </div>
               </div>
-              <div className={`p-3 rounded-full bg-${stat.color}-100`}>
-                <stat.icon className={`w-6 h-6 text-${stat.color}-600`} />
-              </div>
-            </div>
-          </Card>
-        ))}
+            </Card>
+          );
+        })}
       </div>
 
       {/* Recent Sales Table */}

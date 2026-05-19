@@ -300,7 +300,7 @@ class NotificationService {
         const recent = await db.prepare(`
           SELECT id FROM notifications
           WHERE type = 'low_stock'
-          AND (meta::jsonb->>'product_id') = ?
+          AND json_extract(meta, '$.product_id') = ?
           AND business_id = ?
           AND created_at > (NOW() - INTERVAL '24 hours')
         `).get(product.id, product.business_id);

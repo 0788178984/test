@@ -257,6 +257,23 @@ const Layout = () => {
     }
   };
 
+  const navItemClass = (isActive) =>
+    [
+      'group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200',
+      'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500',
+      isActive
+        ? 'bg-primary-600 text-white shadow-md shadow-primary-600/20'
+        : 'text-gray-700 hover:bg-primary-50 hover:text-primary-800 active:bg-primary-100',
+    ].join(' ');
+
+  const navIconClass = (isActive) =>
+    isActive
+      ? 'text-white'
+      : 'text-gray-500 transition-colors duration-200 group-hover:text-primary-600';
+
+  const iconButtonClass =
+    'rounded-lg p-2 text-gray-700 transition-colors duration-200 hover:bg-primary-50 hover:text-primary-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500 active:bg-primary-100';
+
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       <Modal
@@ -400,7 +417,7 @@ const Layout = () => {
           <button
             type="button"
             onClick={() => setSidebarOpen(false)}
-            className="rounded-lg p-2 text-gray-600 hover:bg-gray-100 lg:hidden"
+            className={`${iconButtonClass} text-gray-600 lg:hidden`}
             aria-label="Close menu"
           >
             <X className="h-5 w-5" />
@@ -417,11 +434,9 @@ const Layout = () => {
                 key={item.path}
                 to={item.path}
                 onClick={closeMobileNav}
-                className={`flex items-center space-x-3 rounded-lg px-3 py-2 transition-all duration-200 ${
-                  isActive ? 'bg-primary-600 text-white' : 'text-gray-700 hover:bg-gray-100'
-                }`}
+                className={navItemClass(isActive)}
               >
-                <Icon className="h-5 w-5 shrink-0" />
+                <Icon className={`h-5 w-5 shrink-0 ${navIconClass(isActive)}`} aria-hidden />
                 <span className="font-medium">{item.title}</span>
               </Link>
             );
@@ -442,7 +457,7 @@ const Layout = () => {
           <button
             type="button"
             onClick={handleLogout}
-            className="flex w-full items-center space-x-3 rounded-lg px-3 py-2 font-medium text-red-600 transition-colors hover:bg-red-50"
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-red-600 transition-colors duration-200 hover:bg-red-50 hover:text-red-700 active:bg-red-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-400"
           >
             <LogOut className="h-4 w-4 shrink-0" />
             <span>Logout</span>
@@ -457,7 +472,7 @@ const Layout = () => {
               <button
                 type="button"
                 onClick={() => setSidebarOpen((o) => !o)}
-                className="shrink-0 rounded-lg p-2 text-gray-700 hover:bg-gray-100"
+                className={`shrink-0 ${iconButtonClass}`}
                 aria-expanded={sidebarOpen}
                 aria-label={sidebarOpen ? 'Hide navigation menu' : 'Show navigation menu'}
               >
@@ -491,7 +506,7 @@ const Layout = () => {
               <button
                 type="button"
                 onClick={() => setHelpOpen(true)}
-                className="flex shrink-0 items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-50 sm:px-3"
+                className="flex shrink-0 items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm text-gray-700 transition-colors duration-200 hover:border-primary-200 hover:bg-primary-50 hover:text-primary-800 active:bg-primary-100 sm:px-3"
                 title="Contact platform support"
               >
                 <LifeBuoy className="h-4 w-4 text-primary-600" />
