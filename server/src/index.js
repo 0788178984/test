@@ -188,7 +188,17 @@ app.use('/api/agent-float', require('./routes/agentFloat'));
 // Static files for client (in production)
 if (process.env.NODE_ENV === 'production') {
   const distDir = path.join(__dirname, '../../client/dist');
-  app.use(express.static(distDir));
+  app.use(
+    express.static(distDir, {
+      setHeaders(res, filePath) {
+        if (filePath.endsWith('index.html')) {
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        } else if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+      },
+    })
+  );
 
   // SPA fallback — Express 5 / path-to-regexp rejects app.get('*', ...); use middleware instead.
   app.use((req, res, next) => {

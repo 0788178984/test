@@ -49,5 +49,17 @@ export default {
       }
     },
   },
+  safelist: [
+    // Sidebar / hamburger hovers (ensure production CSS always includes these)
+    'hover:bg-primary-100',
+    'hover:text-primary-900',
+    'hover:border-primary-500',
+    'hover:border-primary-300',
+    'hover:text-primary-800',
+    'group-hover:text-primary-700',
+    'border-primary-800',
+    'bg-primary-100',
+    'active:bg-primary-200',
+  ],
   plugins: [],
 }

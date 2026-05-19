@@ -258,21 +258,17 @@ const Layout = () => {
   };
 
   const navItemClass = (isActive) =>
-    [
-      'group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200',
-      'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500',
-      isActive
-        ? 'bg-primary-600 text-white shadow-md shadow-primary-600/20'
-        : 'text-gray-700 hover:bg-primary-50 hover:text-primary-800 active:bg-primary-100',
-    ].join(' ');
+    `nav-menu-link group focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500 ${
+      isActive ? 'nav-menu-link--active' : ''
+    }`;
 
   const navIconClass = (isActive) =>
     isActive
       ? 'text-white'
-      : 'text-gray-500 transition-colors duration-200 group-hover:text-primary-600';
+      : 'text-gray-500 transition-colors duration-200 group-hover:text-primary-700';
 
   const iconButtonClass =
-    'rounded-lg p-2 text-gray-700 transition-colors duration-200 hover:bg-primary-50 hover:text-primary-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500 active:bg-primary-100';
+    'nav-icon-btn focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500';
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">

@@ -43,7 +43,28 @@
   }
   
   .btn-secondary {
-    @apply border border-gray-200 bg-white text-gray-800 hover:border-primary-200 hover:bg-primary-50 hover:text-primary-800 focus:ring-primary-500;
+    @apply border border-gray-200 bg-white text-gray-800 hover:border-primary-400 hover:bg-primary-100 hover:text-primary-900 focus:ring-primary-500;
+  }
+
+  /* Sidebar nav — explicit hovers so production always shows green highlight */
+  .nav-menu-link {
+    @apply flex items-center gap-3 rounded-lg border-l-4 border-transparent px-3 py-2.5 text-sm font-medium text-gray-700 transition-all duration-200;
+  }
+
+  .nav-menu-link:hover {
+    @apply border-primary-500 bg-primary-100 text-primary-900 shadow-sm;
+  }
+
+  .nav-menu-link--active {
+    @apply border-primary-800 bg-primary-600 text-white shadow-md;
+  }
+
+  .nav-icon-btn {
+    @apply rounded-lg border border-transparent p-2 text-gray-700 transition-all duration-200;
+  }
+
+  .nav-icon-btn:hover {
+    @apply border-primary-300 bg-primary-100 text-primary-800 shadow-sm;
   }
   
   .btn-danger {
