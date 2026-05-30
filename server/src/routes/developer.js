@@ -12,7 +12,35 @@ const { normalizeBusinessType } = require('../db/businessTypes');
 
 const router = express.Router();
 
+const VALID_SUBSCRIPTION_STATUSES = ['active', 'trial', 'suspended', 'expired'];
+
+function parseSubscriptionExpiresAt(raw) {
+  if (raw === undefined || raw === null) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  const d = new Date(s.includes('T') ? s : `${s}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return { error: 'Expires at must be a valid date (e.g. 2026-12-31).' };
+  return d.toISOString();
+}
+
+function isUniqueViolation(err) {
+  return err?.code === '23505' || err?.code === 'SQLITE_CONSTRAINT_UNIQUE';
+}
+
 router.use(authenticate, authorize('developer'));
+
+router.use(async (req, res, next) => {
+  try {
+    await db.ensureSchema();
+    next();
+  } catch (e) {
+    console.error('Developer schema ensure failed:', e);
+    res.status(500).json({
+      error: 'Database schema update failed. Run migration 006 in Supabase SQL Editor or redeploy.',
+      detail: e.message,
+    });
+  }
+});
 
 // List all businesses / tenants
 router.get('/businesses', async (req, res) => {
@@ -51,6 +79,14 @@ router.post('/businesses', async (req, res) => {
     }
     const code = String(business_code).trim().toUpperCase();
     const storeType = normalizeBusinessType(business_type);
+    const subStatus = VALID_SUBSCRIPTION_STATUSES.includes(subscription_status)
+      ? subscription_status
+      : 'trial';
+    const expiresParsed = parseSubscriptionExpiresAt(subscription_expires_at);
+    if (expiresParsed && expiresParsed.error) {
+      return res.status(400).json({ error: expiresParsed.error });
+    }
+
     const id = `biz-${crypto.randomBytes(8).toString('hex')}`;
     await db.prepare(
       `
@@ -62,9 +98,9 @@ router.post('/businesses', async (req, res) => {
       String(name).trim(),
       code,
       storeType,
-      subscription_status,
-      subscription_expires_at || null,
-      notes || null
+      subStatus,
+      expiresParsed,
+      notes ? String(notes).trim() : null
     );
     res.status(201).json({
       id,
@@ -73,11 +109,15 @@ router.post('/businesses', async (req, res) => {
       message: 'Business created.',
     });
   } catch (e) {
-    if (e.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+    if (isUniqueViolation(e)) {
       return res.status(400).json({ error: 'Business code already in use.' });
     }
-    console.error(e);
-    res.status(500).json({ error: 'Failed to create business.' });
+    console.error('Create business error:', e);
+    res.status(500).json({
+      error: 'Failed to create business.',
+      detail: e.message,
+      code: e.code || undefined,
+    });
   }
 });
 

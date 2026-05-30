@@ -275,7 +275,9 @@ export default function DeveloperConsole() {
       await loadBusinesses();
       await loadLicenseAlerts();
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Could not create store');
+      const msg = err.response?.data?.error || 'Could not create store';
+      const detail = err.response?.data?.detail;
+      toast.error(detail ? `${msg}: ${detail}` : msg);
     } finally {
       setCreatingStore(false);
     }

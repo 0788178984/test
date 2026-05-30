@@ -66,6 +66,9 @@ const db = {
   close() {
     return ready.then((d) => d.close());
   },
+  ensureSchema() {
+    return ready.then((d) => (d.ensureSchema ? d.ensureSchema() : undefined));
+  },
 };
 
 module.exports = db;
