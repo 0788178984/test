@@ -8,6 +8,7 @@ const {
   paymentConfigForDeveloperGet,
   mergePaymentConfig,
 } = require('../services/paymentConfigService');
+const { normalizeBusinessType } = require('../db/businessTypes');
 
 const router = express.Router();
 
@@ -19,7 +20,7 @@ router.get('/businesses', async (req, res) => {
     const rows = await db
       .prepare(
         `
-      SELECT b.id, b.name, b.business_code, b.subscription_status, b.subscription_expires_at,
+      SELECT b.id, b.name, b.business_code, b.business_type, b.subscription_status, b.subscription_expires_at,
              b.notes, b.created_at, b.updated_at,
         (SELECT COUNT(*) FROM users u WHERE u.business_id = b.id AND u.deleted_at IS NULL) as user_count
       FROM businesses b
@@ -37,19 +38,40 @@ router.get('/businesses', async (req, res) => {
 // Create a new licensed business
 router.post('/businesses', async (req, res) => {
   try {
-    const { name, business_code, subscription_status = 'trial', subscription_expires_at, notes } = req.body;
+    const {
+      name,
+      business_code,
+      business_type,
+      subscription_status = 'trial',
+      subscription_expires_at,
+      notes,
+    } = req.body;
     if (!name || !business_code) {
       return res.status(400).json({ error: 'Name and business_code are required.' });
     }
     const code = String(business_code).trim().toUpperCase();
+    const storeType = normalizeBusinessType(business_type);
     const id = `biz-${crypto.randomBytes(8).toString('hex')}`;
     await db.prepare(
       `
-      INSERT INTO businesses (id, name, business_code, subscription_status, subscription_expires_at, notes, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      INSERT INTO businesses (id, name, business_code, business_type, subscription_status, subscription_expires_at, notes, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `
-    ).run(id, String(name).trim(), code, subscription_status, subscription_expires_at || null, notes || null);
-    res.status(201).json({ id, business_code: code, message: 'Business created.' });
+    ).run(
+      id,
+      String(name).trim(),
+      code,
+      storeType,
+      subscription_status,
+      subscription_expires_at || null,
+      notes || null
+    );
+    res.status(201).json({
+      id,
+      business_code: code,
+      business_type: storeType,
+      message: 'Business created.',
+    });
   } catch (e) {
     if (e.code === 'SQLITE_CONSTRAINT_UNIQUE') {
       return res.status(400).json({ error: 'Business code already in use.' });
@@ -62,7 +84,7 @@ router.post('/businesses', async (req, res) => {
 // Update license / subscription
 router.patch('/businesses/:id', async (req, res) => {
   try {
-    const { name, subscription_status, subscription_expires_at, notes } = req.body;
+    const { name, business_type, subscription_status, subscription_expires_at, notes } = req.body;
     const existing = await db.prepare(`SELECT id FROM businesses WHERE id = ?`).get(req.params.id);
     if (!existing) return res.status(404).json({ error: 'Business not found.' });
 
@@ -71,6 +93,10 @@ router.patch('/businesses/:id', async (req, res) => {
     if (name !== undefined) {
       fields.push('name = ?');
       vals.push(String(name).trim());
+    }
+    if (business_type !== undefined) {
+      fields.push('business_type = ?');
+      vals.push(normalizeBusinessType(business_type));
     }
     if (subscription_status !== undefined) {
       fields.push('subscription_status = ?');

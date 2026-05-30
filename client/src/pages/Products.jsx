@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Search, Filter, AlertTriangle } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
+import { isClinicStore } from '../constants/businessTypes';
 import { productsAPI, suppliersAPI } from '../api/client';
 import { formatCurrency, handleApiError } from '../api/client';
 import Button from '../components/ui/Button';
@@ -10,7 +11,8 @@ import Modal from '../components/ui/Modal';
 import Table from '../components/ui/Table';
 
 const Products = () => {
-  const { hasRole } = useAuthStore();
+  const { hasRole, user } = useAuthStore();
+  const clinicStore = isClinicStore(user);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -19,8 +21,24 @@ const Products = () => {
   const [editingProduct, setEditingProduct] = useState(null);
   const [formData, setFormData] = useState({});
   const [suppliers, setSuppliers] = useState([]);
+  const [categories, setCategories] = useState([]);
 
-  const categories = ['Food', 'Beverages', 'Bakery', 'Dairy', 'Cleaning', 'Electronics', 'Clothing'];
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await productsAPI.getCategories();
+        if (!cancelled) {
+          setCategories(res.data.categories || res.data.predefined || []);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.business_id, user?.business_type]);
 
   useEffect(() => {
     fetchProducts();
@@ -240,7 +258,9 @@ const Products = () => {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Products Management</h1>
+        <h1 className="text-2xl font-bold text-gray-900">
+          {clinicStore ? 'Medicines & supplies' : 'Products Management'}
+        </h1>
         {hasRole('admin', 'manager') && (
           <Button
             onClick={handleCreateProduct}
@@ -335,20 +355,20 @@ const Products = () => {
               <label className="form-label">
                 Category<span className="ml-1 text-red-500">*</span>
               </label>
-              <input
+              <select
                 name="category"
-                list="product-categories"
-                value={formData.category}
+                value={formData.category || ''}
                 onChange={handleInputChange}
                 className="form-input"
                 required
-                placeholder="e.g. Food"
-              />
-              <datalist id="product-categories">
+              >
+                <option value="">Select category…</option>
                 {categories.map((c) => (
-                  <option key={c} value={c} />
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
                 ))}
-              </datalist>
+              </select>
             </div>
 
             <div>
@@ -360,9 +380,13 @@ const Products = () => {
                 className="form-input"
               >
                 <option value="piece">Piece</option>
+                <option value="pack">Pack</option>
+                <option value="strip">Strip</option>
+                <option value="bottle">Bottle</option>
+                <option value="tube">Tube</option>
+                <option value="vial">Vial</option>
                 <option value="litre">Litre</option>
                 <option value="kg">Kg</option>
-                <option value="pack">Pack</option>
               </select>
             </div>
 

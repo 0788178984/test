@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const db = require('../db/connection');
 const { paymentMethodsAvailability } = require('../services/paymentConfigService');
+const { normalizeBusinessType } = require('../db/businessTypes');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
@@ -63,6 +64,7 @@ const authenticate = async (req, res, next) => {
       SELECT u.id, u.name, u.email, u.phone, u.role, u.is_active, u.business_id,
              b.name as business_name,
              b.business_code,
+             b.business_type,
              b.subscription_status,
              b.subscription_expires_at,
              b.payment_config as payment_config
@@ -75,6 +77,10 @@ const authenticate = async (req, res, next) => {
 
     if (!user || !user.is_active) {
       return res.status(401).json({ error: 'Invalid token or user inactive.' });
+    }
+
+    if (user.business_id) {
+      user.business_type = normalizeBusinessType(user.business_type);
     }
 
     const pc = user.payment_config;

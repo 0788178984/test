@@ -56,6 +56,12 @@ async function init() {
   );
   await pool.query(agentFloatMigration);
 
+  const businessTypeMigration = fs.readFileSync(
+    path.join(__dirname, 'migrations/006_business_type_postgres.sql'),
+    'utf8'
+  );
+  await pool.query(businessTypeMigration);
+
   const db = {
     dialect: 'postgres',
     name: 'postgresql (Supabase)',

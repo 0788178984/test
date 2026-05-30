@@ -18,6 +18,7 @@ import NotificationBell from '../components/notifications/NotificationBell';
 import { useAuthStore } from '../store/authStore';
 import { useNotificationStore } from '../store/notificationStore';
 import { toast } from 'react-hot-toast';
+import { BUSINESS_TYPES, businessTypeLabel } from '../constants/businessTypes';
 
 export default function DeveloperConsole() {
   const navigate = useNavigate();
@@ -41,6 +42,7 @@ export default function DeveloperConsole() {
   const [newStore, setNewStore] = useState({
     name: '',
     business_code: '',
+    business_type: BUSINESS_TYPES.SUPERMARKET,
     subscription_status: 'trial',
     expires: '',
     notes: '',
@@ -252,17 +254,20 @@ export default function DeveloperConsole() {
     }
     setCreatingStore(true);
     try {
-      await developerAPI.createBusiness({
+      const { data } = await developerAPI.createBusiness({
         name,
         business_code: code,
+        business_type: newStore.business_type,
         subscription_status: newStore.subscription_status,
         subscription_expires_at: newStore.expires.trim() || null,
         notes: newStore.notes.trim() || null,
       });
-      toast.success(`Supermarket created. Staff sign in with store code: ${code}`);
+      const typeLabel = businessTypeLabel(data.business_type || newStore.business_type);
+      toast.success(`${typeLabel} created. Staff sign in with store code: ${code}`);
       setNewStore({
         name: '',
         business_code: '',
+        business_type: BUSINESS_TYPES.SUPERMARKET,
         subscription_status: 'trial',
         expires: '',
         notes: '',
@@ -503,11 +508,12 @@ export default function DeveloperConsole() {
 
         <section className="bg-white rounded-xl shadow p-6 space-y-4">
           <h2 className="text-md font-semibold text-gray-800 flex items-center gap-2">
-            <PlusCircle className="h-4 w-4 text-primary-600" /> Add new supermarket
+            <PlusCircle className="h-4 w-4 text-primary-600" /> Add new store
           </h2>
           <p className="text-sm text-gray-600">
-            Each supermarket is a separate tenant with its own <strong>business code</strong> (e.g. <code className="text-gray-800">KAMPALA1</code>). Staff
-            enter that code on login. Codes must be unique.
+            Each store is a separate tenant with its own <strong>business code</strong> (e.g. <code className="text-gray-800">KAMPALA1</code> or{' '}
+            <code className="text-gray-800">CLINIC01</code>). Choose <strong>Supermarket</strong> or <strong>Clinic / drug shop</strong> — product
+            categories follow the store type. Staff enter the code on login. Codes must be unique.
           </p>
           <form onSubmit={createStore} className="grid gap-3 sm:grid-cols-2">
             <Input
@@ -524,6 +530,22 @@ export default function DeveloperConsole() {
               placeholder="e.g. KAMPALA1"
               required
             />
+            <div>
+              <label className="form-label">Store type</label>
+              <select
+                className="form-input"
+                value={newStore.business_type}
+                onChange={(e) => setNewStore((s) => ({ ...s, business_type: e.target.value }))}
+              >
+                <option value={BUSINESS_TYPES.SUPERMARKET}>Supermarket</option>
+                <option value={BUSINESS_TYPES.CLINIC}>Clinic / drug shop</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                {newStore.business_type === BUSINESS_TYPES.CLINIC
+                  ? 'Categories: Tablets, Capsules, Syrups, Cream, Injections, Other.'
+                  : 'Categories: Food, Beverages, Bakery, Dairy, Cleaning, Electronics, Clothing, Other.'}
+              </p>
+            </div>
             <div>
               <label className="form-label">Initial subscription</label>
               <select
@@ -554,7 +576,7 @@ export default function DeveloperConsole() {
             </div>
             <div className="sm:col-span-2">
               <Button type="submit" variant="primary" loading={creatingStore}>
-                Create supermarket
+                Create store
               </Button>
             </div>
           </form>
@@ -827,7 +849,7 @@ export default function DeveloperConsole() {
 
         <section className="bg-white rounded-xl shadow p-6">
           <h2 className="text-md font-semibold text-gray-800 mb-4 flex items-center gap-2">
-            <Bell className="h-4 w-4" /> Licensed supermarkets
+            <Bell className="h-4 w-4" /> Licensed stores
           </h2>
           {loading ? (
             <p className="text-gray-500">Loading…</p>
@@ -838,6 +860,7 @@ export default function DeveloperConsole() {
                   <tr className="text-left text-gray-500 border-b">
                     <th className="py-2 pr-4">Id</th>
                     <th className="py-2 pr-4">Code</th>
+                    <th className="py-2 pr-4">Type</th>
                     <th className="py-2 pr-4">Name</th>
                     <th className="py-2 pr-4">Status</th>
                     <th className="py-2 pr-4">Expires</th>
@@ -849,6 +872,7 @@ export default function DeveloperConsole() {
                     <tr key={b.id} className="border-b border-gray-100">
                       <td className="py-2 pr-4 font-mono text-xs">{b.id}</td>
                       <td className="py-2 pr-4 font-mono">{b.business_code}</td>
+                      <td className="py-2 pr-4 text-xs">{businessTypeLabel(b.business_type)}</td>
                       <td className="py-2 pr-4">{b.name}</td>
                       <td className="py-2 pr-4 capitalize">{b.subscription_status}</td>
                       <td className="py-2 pr-4">{b.subscription_expires_at || '—'}</td>

@@ -4,7 +4,18 @@ const { restrictToBusinessStaff } = require('../middleware/tenantContext');
 const { checkPermission } = require('../middleware/roleCheck');
 const db = require('../db/connection');
 const { newId } = require('../db/ids');
+const {
+  normalizeBusinessType,
+  getProductCategories,
+  normalizeProductCategory,
+} = require('../db/businessTypes');
 const router = express.Router();
+
+async function businessTypeForUser(user) {
+  if (!user?.business_id) return 'supermarket';
+  const row = await db.prepare(`SELECT business_type FROM businesses WHERE id = ?`).get(user.business_id);
+  return normalizeBusinessType(row?.business_type);
+}
 
 router.use(authenticate, restrictToBusinessStaff);
 
@@ -95,14 +106,26 @@ router.get('/', async (req, res) => {
 
 router.get('/categories/list', async (req, res) => {
   try {
-    const categories = await db.prepare(`
+    const businessType = await businessTypeForUser(req.user);
+    const predefined = getProductCategories(businessType);
+
+    const usedRows = await db.prepare(`
       SELECT DISTINCT category 
       FROM products 
       WHERE category IS NOT NULL AND deleted_at IS NULL AND business_id = ?
       ORDER BY category
     `).all(req.user.business_id);
 
-    res.json({ categories: categories.map((c) => c.category) });
+    const used = usedRows.map((c) => c.category).filter(Boolean);
+    const categories = [...new Set([...predefined, ...used])].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base' })
+    );
+
+    res.json({
+      categories,
+      predefined,
+      business_type: businessType,
+    });
   } catch (error) {
     console.error('Get categories error:', error);
     res.status(500).json({ error: 'Failed to fetch categories.' });
@@ -162,6 +185,14 @@ router.post('/', checkPermission('add_edit_products'), async (req, res) => {
       return res.status(400).json({ error: 'Name, buying price, and selling price are required.' });
     }
 
+    const businessType = await businessTypeForUser(req.user);
+    const normalizedCategory = normalizeProductCategory(category, businessType);
+    if (category !== undefined && category !== null && String(category).trim() && !normalizedCategory) {
+      return res.status(400).json({
+        error: `Invalid category. Use one of: ${getProductCategories(businessType).join(', ')}.`,
+      });
+    }
+
     const productId = newId('prod');
     const result = await db.prepare(`
       INSERT INTO products (
@@ -170,7 +201,7 @@ router.post('/', checkPermission('add_edit_products'), async (req, res) => {
         created_at, updated_at, sync_status
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 'pending')
     `).run(
-      productId, name, barcode, sku, category, unit || 'piece', buying_price, selling_price,
+      productId, name, barcode, sku, normalizedCategory, unit || 'piece', buying_price, selling_price,
       tax_rate || 0.18, current_stock || 0, minimum_stock || 5, supplier_id, expiry_date,
       req.user.business_id
     );
@@ -197,11 +228,23 @@ router.put('/:id', checkPermission('add_edit_products'), async (req, res) => {
     } = req.body;
 
     const existingProduct = await db.prepare(`
-      SELECT id FROM products WHERE id = ? AND business_id = ? AND deleted_at IS NULL
+      SELECT id, category FROM products WHERE id = ? AND business_id = ? AND deleted_at IS NULL
     `).get(req.params.id, req.user.business_id);
 
     if (!existingProduct) {
       return res.status(404).json({ error: 'Product not found.' });
+    }
+
+    const businessType = await businessTypeForUser(req.user);
+    let categoryToSave = existingProduct.category;
+    if (category !== undefined) {
+      const normalizedCategory = normalizeProductCategory(category, businessType);
+      if (category !== null && String(category).trim() && !normalizedCategory) {
+        return res.status(400).json({
+          error: `Invalid category. Use one of: ${getProductCategories(businessType).join(', ')}.`,
+        });
+      }
+      categoryToSave = normalizedCategory;
     }
 
     await db.prepare(`
@@ -212,10 +255,19 @@ router.put('/:id', checkPermission('add_edit_products'), async (req, res) => {
         is_active = ?, updated_at = datetime('now'), sync_status = 'pending'
       WHERE id = ? AND business_id = ?
     `).run(
-      name, barcode, sku, category, unit, buying_price, selling_price,
+      name,
+      barcode,
+      sku,
+      categoryToSave,
+      unit,
+      buying_price,
+      selling_price,
       tax_rate,
       current_stock !== undefined && current_stock !== null ? current_stock : 0,
-      minimum_stock, supplier_id, expiry_date, is_active ? 1 : 0,
+      minimum_stock,
+      supplier_id,
+      expiry_date,
+      is_active ? 1 : 0,
       req.params.id,
       req.user.business_id
     );

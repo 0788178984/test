@@ -25,7 +25,8 @@ import {
 import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../../store/authStore';
 import { useSyncStore } from '../../store/syncStore';
-import { storeHeaderLabel, storeReceiptBranding } from '../../utils/storeBrand';
+import { storeHeaderLabel, storeReceiptBranding, storeTypeBadge } from '../../utils/storeBrand';
+import { isClinicStore } from '../../constants/businessTypes';
 import { supportAPI } from '../../api/client';
 import NotificationBell from '../notifications/NotificationBell';
 import Modal from '../ui/Modal';
@@ -57,6 +58,8 @@ const Layout = () => {
   const showHeaderSync = Boolean(syncSummary && syncSummary.sync_enabled !== false);
   const headerCode = storeHeaderLabel(user);
   const { name: storeName } = storeReceiptBranding(user);
+  const typeBadge = storeTypeBadge(user);
+  const clinicStore = isClinicStore(user);
 
   useEffect(() => {
     const cleanup = initializeSync();
@@ -119,7 +122,7 @@ const Layout = () => {
       roles: ['admin', 'manager', 'cashier'],
     },
     {
-      title: 'Products',
+      title: clinicStore ? 'Medicines' : 'Products',
       icon: Package,
       path: '/products',
       roles: ['admin', 'manager'],
@@ -409,6 +412,9 @@ const Layout = () => {
             {storeName && storeName !== headerCode ? (
               <p className="truncate text-xs text-gray-500">{storeName}</p>
             ) : null}
+            {typeBadge ? (
+              <p className="truncate text-xs text-primary-700 font-medium">{typeBadge}</p>
+            ) : null}
           </div>
           <button
             type="button"
@@ -478,6 +484,9 @@ const Layout = () => {
                 <p className="truncate text-sm font-bold text-gray-800">{headerCode}</p>
                 {storeName && storeName !== headerCode ? (
                   <p className="truncate text-xs text-gray-500">{storeName}</p>
+                ) : null}
+                {typeBadge ? (
+                  <p className="truncate text-xs text-primary-700 font-medium">{typeBadge}</p>
                 ) : null}
               </div>
             </div>

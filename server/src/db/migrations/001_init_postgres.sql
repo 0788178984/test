@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS businesses (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   business_code TEXT NOT NULL UNIQUE,
+  business_type TEXT NOT NULL DEFAULT 'supermarket'
+    CHECK (business_type IN ('supermarket', 'clinic')),
   subscription_status TEXT NOT NULL DEFAULT 'trial'
     CHECK (subscription_status IN ('active', 'trial', 'suspended', 'expired')),
   subscription_expires_at TIMESTAMPTZ,

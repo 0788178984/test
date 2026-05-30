@@ -40,8 +40,8 @@ async function seedDatabase(options = {}) {
 
   await db.prepare(
     `
-    INSERT OR IGNORE INTO businesses (id, name, business_code, subscription_status, subscription_expires_at)
-    VALUES (?, 'Default Store', 'DEFAULT', 'active', NULL)
+    INSERT OR IGNORE INTO businesses (id, name, business_code, business_type, subscription_status, subscription_expires_at)
+    VALUES (?, 'Default Store', 'DEFAULT', 'supermarket', 'active', NULL)
   `
   ).run(DEFAULT_BUSINESS_ID);
 

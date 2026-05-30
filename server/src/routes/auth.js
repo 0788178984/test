@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const { authenticate, generateToken } = require('../middleware/auth');
 const db = require('../db/connection');
 const { paymentMethodsAvailability } = require('../services/paymentConfigService');
+const { normalizeBusinessType } = require('../db/businessTypes');
 const router = express.Router();
 
 async function resolveBusinessCode(raw) {
@@ -42,7 +43,7 @@ router.post('/login', async (req, res) => {
 
     const business = await db
       .prepare(
-        `SELECT id, business_code, name, subscription_status, subscription_expires_at, payment_config FROM businesses WHERE upper(trim(business_code)) = ?`
+        `SELECT id, business_code, name, business_type, subscription_status, subscription_expires_at, payment_config FROM businesses WHERE upper(trim(business_code)) = ?`
       )
       .get(code);
 
@@ -108,6 +109,7 @@ router.post('/login', async (req, res) => {
         business_id: userData.business_id,
         business_code: business.business_code,
         business_name: business.name,
+        business_type: normalizeBusinessType(business.business_type),
         subscription_status: business.subscription_status,
         subscription_expires_at: business.subscription_expires_at,
         payment_methods: await paymentMethodsAvailability(business.payment_config),
@@ -170,7 +172,7 @@ router.post('/login-web', async (req, res) => {
     if (code) {
       business = await db
         .prepare(
-          `SELECT id, business_code, name, subscription_status, subscription_expires_at, payment_config FROM businesses WHERE upper(trim(business_code)) = ?`
+          `SELECT id, business_code, name, business_type, subscription_status, subscription_expires_at, payment_config FROM businesses WHERE upper(trim(business_code)) = ?`
         )
         .get(code);
       if (!business) {
@@ -208,7 +210,7 @@ router.post('/login-web', async (req, res) => {
         user = matches[0];
         business = await db
           .prepare(
-            `SELECT id, business_code, name, subscription_status, subscription_expires_at, payment_config FROM businesses WHERE id = ?`
+            `SELECT id, business_code, name, business_type, subscription_status, subscription_expires_at, payment_config FROM businesses WHERE id = ?`
           )
           .get(user.business_id);
       } else if (matches.length > 1) {
@@ -259,6 +261,7 @@ router.post('/login-web', async (req, res) => {
         business_id: user.business_id,
         business_code: business?.business_code || user.business_code,
         business_name: business?.name || user.business_name,
+        business_type: normalizeBusinessType(business?.business_type ?? user.business_type),
         subscription_status: business?.subscription_status ?? user.subscription_status,
         subscription_expires_at: business?.subscription_expires_at ?? user.subscription_expires_at,
         payment_methods: business
@@ -285,6 +288,7 @@ router.get('/me', authenticate, async (req, res) => {
       business_id: u.business_id,
       business_name: u.business_name,
       business_code: u.business_code,
+      business_type: normalizeBusinessType(u.business_type),
       subscription_status: u.subscription_status,
       subscription_expires_at: u.subscription_expires_at,
       payment_methods: u.payment_methods,

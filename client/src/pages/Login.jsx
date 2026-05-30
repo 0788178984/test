@@ -89,7 +89,7 @@ const Login = () => {
             SuperMkt
           </h2>
           <p className="mt-2 text-sm text-gray-600">
-            Uganda Supermarket Management System
+            Uganda Store Management System
           </p>
         </div>
 
@@ -101,7 +101,7 @@ const Login = () => {
               {sessionUser.business_name ? ` (${sessionUser.business_name})` : ''}
             </p>
             <p className="mt-2 text-xs text-amber-800">
-              To open a different supermarket, sign out first — otherwise the app keeps your current store session.
+              To open a different store (supermarket or clinic), sign out first — otherwise the app keeps your current session.
             </p>
             <button
               type="button"
