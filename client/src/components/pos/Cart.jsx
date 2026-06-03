@@ -10,7 +10,6 @@ const Cart = ({ onCheckout }) => {
     customer,
     discountAmount,
     getSubtotal,
-    getTaxAmount,
     getTotal,
     getItemCount,
     removeItem,
@@ -46,7 +45,6 @@ const Cart = ({ onCheckout }) => {
   };
 
   const subtotal = getSubtotal();
-  const taxAmount = getTaxAmount();
   const total = getTotal();
   const itemCount = getItemCount();
 
@@ -180,12 +178,6 @@ const Cart = ({ onCheckout }) => {
               </span>
             </div>
           )}
-
-          {/* Tax */}
-          <div className="flex justify-between">
-            <span className="text-sm text-gray-600">Tax (18%):</span>
-            <span className="font-medium">{formatCurrency(taxAmount)}</span>
-          </div>
 
           {/* Total */}
           <div className="flex justify-between pt-2 border-t border-gray-300">

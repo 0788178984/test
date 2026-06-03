@@ -88,10 +88,6 @@ const ReceiptModal = ({ sale, onClose, onPrint, onSendSMS, onSendWhatsApp }) => 
                 <span>-{formatCurrency(sale.discountAmount)}</span>
               </div>
             )}
-            <div className="flex justify-between">
-              <span>VAT (18%)</span>
-              <span>{formatCurrency(sale.taxAmount ?? 0)}</span>
-            </div>
             <div className="receipt-total flex justify-between text-base font-bold">
               <span>TOTAL</span>
               <span>{formatCurrency(sale.totalAmount ?? 0)}</span>

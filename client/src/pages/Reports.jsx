@@ -409,15 +409,12 @@ const Reports = () => {
                     </div>
                     <div className="stat-panel bg-gradient-to-br from-amber-50 to-white">
                       <p className="text-xs font-medium uppercase tracking-wide text-amber-900">
-                        Discounts & tax
+                        Discounts
                       </p>
                       <p className="stat-value-currency mt-2 text-gray-900">
                         {formatCurrency(reports.summary.total_discount ?? 0)}
-                        <span className="text-gray-500"> disc</span>
                       </p>
-                      <p className="stat-hint mt-1">
-                        Tax {formatCurrency(reports.summary.total_tax ?? 0)}
-                      </p>
+                      <p className="stat-hint mt-1">Given at checkout</p>
                     </div>
                   </div>
                 )}

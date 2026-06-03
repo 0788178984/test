@@ -37,7 +37,6 @@ class ExcelService {
         { header: 'Payment Method', key: 'payment_method', width: 15 },
         { header: 'Subtotal', key: 'subtotal', width: 15 },
         { header: 'Discount', key: 'discount_amount', width: 15 },
-        { header: 'Tax', key: 'tax_amount', width: 15 },
         { header: 'Total', key: 'total_amount', width: 15 },
         { header: 'Cost', key: 'cost', width: 15 },
         { header: 'Profit', key: 'profit', width: 15 }
@@ -51,7 +50,6 @@ class ExcelService {
           payment_method: sale.payment_method.replace('_', ' ').toUpperCase(),
           subtotal: sale.subtotal || 0,
           discount_amount: sale.discount_amount || 0,
-          tax_amount: sale.tax_amount || 0,
           cost: sale.cost || 0,
           profit: sale.profit || 0
         });

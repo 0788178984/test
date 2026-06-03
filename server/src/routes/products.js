@@ -202,7 +202,7 @@ router.post('/', checkPermission('add_edit_products'), async (req, res) => {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 'pending')
     `).run(
       productId, name, barcode, sku, normalizedCategory, unit || 'piece', buying_price, selling_price,
-      tax_rate || 0.18, current_stock || 0, minimum_stock || 5, supplier_id, expiry_date,
+      tax_rate ?? 0, current_stock || 0, minimum_stock || 5, supplier_id, expiry_date,
       req.user.business_id
     );
 

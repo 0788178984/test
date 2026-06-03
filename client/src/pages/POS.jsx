@@ -26,7 +26,6 @@ const POS = () => {
     setDiscount,
     setProcessing,
     getSubtotal,
-    getTaxAmount,
     getTotal,
     validateCart,
     getCartSummary,
@@ -233,7 +232,6 @@ const POS = () => {
   }, [showPaymentModal, showReceiptModal, focusScan]);
 
   const subtotal = getSubtotal();
-  const taxAmount = getTaxAmount();
   const total = getTotal();
 
   return (
@@ -343,10 +341,6 @@ const POS = () => {
               <div className="flex justify-between">
                 <span className="text-gray-600">Discount</span>
                 <span className="font-medium text-red-600">-{formatCurrency(discountAmount)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">VAT (18%)</span>
-                <span className="font-medium">{formatCurrency(taxAmount)}</span>
               </div>
               <div className="flex justify-between border-t border-gray-200 pt-2 text-base font-bold">
                 <span>Due</span>

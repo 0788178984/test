@@ -87,7 +87,6 @@ const Products = () => {
       supplier_id: '',
       buying_price: '',
       selling_price: '',
-      tax_rate: 0.18,
       current_stock: 0,
       minimum_stock: 5,
       expiry_date: '',
@@ -110,7 +109,6 @@ const Products = () => {
       supplier_id: product.supplier_id || '',
       buying_price: product.buying_price ?? '',
       selling_price: product.selling_price ?? '',
-      tax_rate: product.tax_rate ?? 0.18,
       current_stock: product.current_stock ?? 0,
       minimum_stock: product.minimum_stock ?? 5,
       expiry_date: exp,
@@ -143,7 +141,7 @@ const Products = () => {
       supplier_id: supplierId || null,
       buying_price: parseFloat(formData.buying_price),
       selling_price: parseFloat(formData.selling_price),
-      tax_rate: parseFloat(formData.tax_rate) || 0.18,
+      tax_rate: 0,
       current_stock: parseFloat(formData.current_stock) || 0,
       minimum_stock: parseFloat(formData.minimum_stock) || 0,
       expiry_date: formData.expiry_date ? String(formData.expiry_date).trim() : null,
@@ -456,17 +454,6 @@ const Products = () => {
               value={formData.minimum_stock}
               onChange={handleInputChange}
               required
-            />
-
-            <Input
-              label="VAT rate (decimal)"
-              name="tax_rate"
-              type="number"
-              step="0.01"
-              min="0"
-              max="1"
-              value={formData.tax_rate}
-              onChange={handleInputChange}
             />
 
             <Input

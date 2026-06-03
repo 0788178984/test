@@ -158,7 +158,6 @@ class PrintService {
                            `-UGX ${sale.discount_amount.toLocaleString().padStart(14)}`);
         }
         
-        this.printer.text(`VAT (18%):`.padEnd(20) + `UGX ${sale.tax_amount.toLocaleString().padStart(15)}`);
         this.printer.hr();
         this.printer.style('b')
           .text(`TOTAL:`.padEnd(20) + `UGX ${sale.total_amount.toLocaleString().padStart(15)}`)
@@ -259,10 +258,6 @@ class PrintService {
     }
 
     receiptHTML += `
-          <div style="display: flex; justify-content: space-between; margin: 2px 0; font-size: 12px;">
-            <span>VAT (18%):</span>
-            <span>UGX ${sale.tax_amount.toLocaleString()}</span>
-          </div>
           <div style="display: flex; justify-content: space-between; margin: 5px 0; font-size: 12px; border-top: 1px solid #000; padding-top: 5px; font-weight: bold;">
             <span>TOTAL:</span>
             <span>UGX ${sale.total_amount.toLocaleString()}</span>

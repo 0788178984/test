@@ -154,16 +154,6 @@ const Settings = () => {
             </div>
             
             <div>
-              <label className="form-label">Tax Rate (%)</label>
-              <Input
-                type="number"
-                value="18"
-                disabled
-                placeholder="18"
-              />
-            </div>
-            
-            <div>
               <label className="form-label">Loyalty Points Rate</label>
               <Input
                 type="number"

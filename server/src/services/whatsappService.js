@@ -105,7 +105,6 @@ class WhatsAppService {
         `*Items:*\n${itemLines}\n\n` +
         `Subtotal: UGX ${sale.subtotal.toLocaleString()}\n` +
         `${sale.discount_amount > 0 ? `Discount: -UGX ${sale.discount_amount.toLocaleString()}\n` : ''}` +
-        `VAT (18%): UGX ${sale.tax_amount.toLocaleString()}\n` +
         `*Total: UGX ${sale.total_amount.toLocaleString()}*\n` +
         `Paid via: ${sale.payment_method.replace('_', ' ').toUpperCase()}\n` +
         `${sale.payment_reference ? `Ref: ${sale.payment_reference}\n` : ''}` +
