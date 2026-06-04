@@ -144,22 +144,18 @@ const Dashboard = () => {
     <div className="space-y-6">
       {/* Greeting above title so long names never collide with the heading */}
       <header className="space-y-2 border-b border-gray-100 pb-4 sm:space-y-3">
-        <p className="text-sm leading-relaxed text-gray-600 sm:text-base">
-          Welcome back,{' '}
-          <span className="font-medium text-gray-900">{user?.name || 'there'}</span>
-          {storeDate
-            ? `. Figures below are for ${formatDate(`${storeDate}T12:00:00`)} (store day).`
-            : ". Here's what's happening today."}
-        </p>
         <h1 className="text-xl font-bold tracking-tight text-gray-900 sm:text-2xl">Dashboard</h1>
-        {storeCode && (
-          <p className="text-xs text-gray-500">
-            {storeName}
-            {' · '}
-            <span className="font-mono font-medium text-gray-700">{storeCode}</span>
-            {' — sales and totals below are only for this store.'}
-          </p>
-        )}
+        <p className="text-sm text-gray-600">
+          <span className="font-medium text-gray-900">{user?.name || 'there'}</span>
+          {storeCode && (
+            <>
+              {' · '}
+              {storeName}
+              {' · '}
+              <span className="font-mono text-gray-700">{storeCode}</span>
+            </>
+          )}
+        </p>
       </header>
 
       {/* Stats Grid */}
@@ -198,9 +194,6 @@ const Dashboard = () => {
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Today&apos;s Sales</h2>
-            {hasRole('admin', 'manager') && (
-              <p className="text-xs text-gray-500">All cashiers · completed sales only</p>
-            )}
           </div>
           <button
             type="button"
@@ -259,10 +252,7 @@ const Dashboard = () => {
             className="flex w-full max-w-md items-center space-x-3 rounded-lg border-2 border-dashed border-gray-300 p-4 text-left transition-all hover:border-red-400 hover:bg-red-50"
           >
             <Wallet className="h-6 w-6 shrink-0 text-red-600" />
-            <div className="min-w-0">
-              <p className="font-medium text-gray-900">Record expense</p>
-              <p className="text-sm text-gray-500">Money going out today</p>
-            </div>
+            <p className="font-medium text-gray-900">Record expense</p>
           </button>
         </Card>
       )}
@@ -278,10 +268,7 @@ const Dashboard = () => {
               className="flex items-center space-x-3 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-400 hover:bg-primary-50 transition-all text-left"
             >
               <Package className="w-6 h-6 shrink-0 text-primary-600" />
-              <div className="min-w-0">
-                <p className="font-medium text-gray-900">Add New Product</p>
-                <p className="text-sm text-gray-500">Manage inventory</p>
-              </div>
+              <p className="font-medium text-gray-900">Add New Product</p>
             </button>
 
             <button
@@ -290,10 +277,7 @@ const Dashboard = () => {
               className="flex items-center space-x-3 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-400 hover:bg-primary-50 transition-all text-left"
             >
               <Users className="w-6 h-6 shrink-0 text-primary-600" />
-              <div className="min-w-0">
-                <p className="font-medium text-gray-900">Add Customer</p>
-                <p className="text-sm text-gray-500">Customer management</p>
-              </div>
+              <p className="font-medium text-gray-900">Add Customer</p>
             </button>
 
             <button
@@ -314,10 +298,7 @@ const Dashboard = () => {
               className="flex items-center space-x-3 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-400 hover:bg-primary-50 transition-all text-left"
             >
               <Eye className="w-6 h-6 shrink-0 text-primary-600" />
-              <div className="min-w-0">
-                <p className="font-medium text-gray-900">View Reports</p>
-                <p className="text-sm text-gray-500">Sales analytics</p>
-              </div>
+              <p className="font-medium text-gray-900">View Reports</p>
             </button>
 
             <button
@@ -326,10 +307,7 @@ const Dashboard = () => {
               className="flex items-center space-x-3 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-400 hover:bg-primary-50 transition-all text-left"
             >
               <BarChart3 className="w-6 h-6 shrink-0 text-primary-600" />
-              <div className="min-w-0">
-                <p className="font-medium text-gray-900">Inventory Check</p>
-                <p className="text-sm text-gray-500">Stock status</p>
-              </div>
+              <p className="font-medium text-gray-900">Inventory Check</p>
             </button>
           </div>
         </Card>

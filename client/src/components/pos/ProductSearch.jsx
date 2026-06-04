@@ -206,13 +206,6 @@ const ProductSearch = ({ onProductSelect, searchQuery, setSearchQuery }) => {
         </div>
       )}
 
-      {!loading && products.length > 0 && (
-        <p className="mt-3 border-t border-gray-100 pt-3 text-center text-xs text-gray-500">
-          Showing {products.length} product{products.length !== 1 ? 's' : ''} — tap a card to set quantity (kg/L can be
-          fractional)
-        </p>
-      )}
-
       {pickerProduct && (
         <AddQuantityModal product={pickerProduct} onConfirm={confirmQuantity} onCancel={() => setPickerProduct(null)} />
       )}

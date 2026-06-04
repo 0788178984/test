@@ -329,6 +329,71 @@ router.get('/summary', checkPermission('view_inventory'), async (req, res) => {
   }
 });
 
+router.get('/purchase-history', checkPermission('view_inventory'), async (req, res) => {
+  try {
+    const businessId = bid(req);
+    const { limit = 80 } = req.query;
+    const cap = Math.min(Math.max(parseInt(limit, 10) || 80, 1), 200);
+
+    const rows = await db
+      .prepare(
+        `
+      SELECT
+        sa.id,
+        sa.created_at,
+        sa.adjustment_type,
+        sa.quantity_change,
+        sa.cost_per_unit,
+        sa.reason,
+        p.id as product_id,
+        p.name as product_name,
+        p.unit,
+        p.buying_price,
+        p.selling_price,
+        u.name as user_name
+      FROM stock_adjustments sa
+      JOIN products p ON sa.product_id = p.id
+      LEFT JOIN users u ON sa.user_id = u.id
+      WHERE sa.business_id = ?
+        AND p.deleted_at IS NULL
+        AND sa.quantity_change > 0
+      ORDER BY sa.created_at DESC
+      LIMIT ?
+    `
+      )
+      .all(businessId, cap);
+
+    const purchases = rows.map((row) => {
+      const qty = Number(row.quantity_change) || 0;
+      const unitCost = Number(row.cost_per_unit) > 0 ? Number(row.cost_per_unit) : Number(row.buying_price) || 0;
+      const unitSell = Number(row.selling_price) || 0;
+      const expenditure = roundUgx(qty * unitCost);
+      const expected_revenue = roundUgx(qty * unitSell);
+      return {
+        id: row.id,
+        created_at: row.created_at,
+        adjustment_type: row.adjustment_type,
+        product_id: row.product_id,
+        product_name: row.product_name,
+        unit: row.unit,
+        quantity: qty,
+        unit_cost: roundUgx(unitCost),
+        unit_sell: roundUgx(unitSell),
+        expenditure,
+        expected_revenue,
+        expected_profit: Math.max(0, expected_revenue - expenditure),
+        user_name: row.user_name,
+        reason: row.reason,
+      };
+    });
+
+    res.json({ purchases });
+  } catch (error) {
+    console.error('Get purchase history error:', error);
+    res.status(500).json({ error: 'Failed to fetch purchase history.' });
+  }
+});
+
 router.get('/movements/:product_id', checkPermission('view_inventory'), async (req, res) => {
   try {
     const { product_id } = req.params;

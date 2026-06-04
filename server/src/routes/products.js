@@ -194,6 +194,7 @@ router.post('/', checkPermission('add_edit_products'), async (req, res) => {
     }
 
     const productId = newId('prod');
+    const openingQty = Math.max(0, Number(current_stock) || 0);
     const result = await db.prepare(`
       INSERT INTO products (
         id, name, barcode, sku, category, unit, buying_price, selling_price,
@@ -202,9 +203,30 @@ router.post('/', checkPermission('add_edit_products'), async (req, res) => {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 'pending')
     `).run(
       productId, name, barcode, sku, normalizedCategory, unit || 'piece', buying_price, selling_price,
-      tax_rate ?? 0, current_stock || 0, minimum_stock || 5, supplier_id, expiry_date,
+      tax_rate ?? 0, openingQty, minimum_stock || 5, supplier_id, expiry_date,
       req.user.business_id
     );
+
+    if (openingQty > 0) {
+      await db.prepare(
+        `
+        INSERT INTO stock_adjustments (
+          id, product_id, user_id, adjustment_type, quantity_before, quantity_change,
+          quantity_after, reason, supplier_id, cost_per_unit, business_id, created_at, sync_status
+        ) VALUES (?, ?, ?, 'opening', 0, ?, ?, ?, ?, ?, ?, datetime('now'), 'pending')
+      `
+      ).run(
+        newId('adj'),
+        productId,
+        req.user.id,
+        openingQty,
+        openingQty,
+        'Initial stock on product create',
+        supplier_id || null,
+        buying_price,
+        req.user.business_id
+      );
+    }
 
     res.status(201).json({
       message: 'Product created successfully.',

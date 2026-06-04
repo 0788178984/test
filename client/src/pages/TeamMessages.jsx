@@ -68,10 +68,6 @@ export default function TeamMessages() {
           <Megaphone className="h-7 w-7 text-primary-600" />
           Team messages
         </h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Send an in-app notification to everyone with a role, or to one person at this store. Staff cannot message the
-          platform developer here — use <strong>Help</strong> in the header for that.
-        </p>
       </div>
 
       <Card>

@@ -5,9 +5,9 @@ import { toast } from 'react-hot-toast';
 import Button from '../ui/Button';
 
 const ALL_METHODS = [
-  { id: 'cash', name: 'Cash', icon: DollarSign, color: 'green', desc: 'Count cash & change' },
-  { id: 'mtn_momo', name: 'MTN MoMo', icon: Smartphone, color: 'yellow', desc: 'Collection to this store’s MTN keys' },
-  { id: 'airtel_money', name: 'Airtel Money', icon: CreditCard, color: 'blue', desc: 'Collection to this store’s Airtel keys' },
+  { id: 'cash', name: 'Cash', icon: DollarSign, color: 'green' },
+  { id: 'mtn_momo', name: 'MTN MoMo', icon: Smartphone, color: 'yellow' },
+  { id: 'airtel_money', name: 'Airtel Money', icon: CreditCard, color: 'blue' },
 ];
 
 /**
@@ -186,7 +186,6 @@ const PaymentModal = ({ totalAmount, customer, paymentMethods, onPayment, onCanc
               >
                 <Icon className={`mb-2 h-8 w-8 ${active ? 'text-primary-600' : 'text-gray-500'}`} />
                 <p className="font-medium text-gray-900">{method.name}</p>
-                <p className="text-xs text-gray-500">{method.desc}</p>
               </button>
             );
           })}

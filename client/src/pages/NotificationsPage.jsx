@@ -35,7 +35,6 @@ export default function NotificationsPage() {
           <Bell className="h-7 w-7 text-primary-600" />
           Notifications
         </h1>
-        <p className="mt-1 text-sm text-gray-600">Tap a row to mark it as read.</p>
       </div>
 
       <Card>

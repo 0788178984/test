@@ -168,7 +168,6 @@ const Expenses = () => {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Daily Expenses</h1>
-          <p className="text-sm text-gray-600">Record money going out ? rent, utilities, transport, and more.</p>
         </div>
         <Button onClick={openCreate} variant="primary">
           <Plus className="w-4 h-4 mr-2" />

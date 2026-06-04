@@ -100,9 +100,6 @@ const Login = () => {
               {sessionUser.name} · store <strong>{sessionUser.business_code || '—'}</strong>
               {sessionUser.business_name ? ` (${sessionUser.business_name})` : ''}
             </p>
-            <p className="mt-2 text-xs text-amber-800">
-              To open a different store (supermarket or clinic), sign out first — otherwise the app keeps your current session.
-            </p>
             <button
               type="button"
               className="mt-2 text-sm font-semibold text-primary-700 underline"
@@ -251,15 +248,6 @@ const Login = () => {
           </form>
         )}
 
-        <div className="mt-8 rounded-lg border border-gray-200 bg-white/80 px-4 py-3 text-center text-sm text-gray-600">
-          <p>
-            Use the <strong>store code</strong>, <strong>PIN</strong>, or <strong>email and password</strong> your store
-            administrator gave you.
-          </p>
-          <p className="mt-2 text-xs text-gray-500">
-            Platform developer accounts are issued separately and are not shown on this page.
-          </p>
-        </div>
       </div>
     </div>
   );

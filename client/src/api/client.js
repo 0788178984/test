@@ -146,6 +146,7 @@ export const inventoryAPI = {
   getAdjustments: (params = {}) => api.get('/api/inventory/adjustments', { params }),
   restock: (data) => api.post('/api/inventory/restock', data),
   getSummary: () => api.get('/api/inventory/summary'),
+  getPurchaseHistory: (params = {}) => api.get('/api/inventory/purchase-history', { params }),
   getMovements: (productId, params = {}) => api.get(`/api/inventory/movements/${productId}`, { params }),
 };
 
@@ -246,6 +247,17 @@ export const addStoreDays = (dateStr, days) => {
   const [y, m, d] = dateStr.split('-').map(Number);
   const base = new Date(Date.UTC(y, m - 1, d + days, 12, 0, 0));
   return storeDateFormatter.format(base);
+};
+
+export const getStoreDateKey = (date) => storeDateFormatter.format(new Date(date));
+
+/** Today / Yesterday / formatted date for stock purchase log grouping. */
+export const getPurchaseDayLabel = (iso) => {
+  const key = getStoreDateKey(iso);
+  const today = getStoreToday();
+  if (key === today) return 'Today';
+  if (key === addStoreDays(today, -1)) return 'Yesterday';
+  return formatDate(iso);
 };
 
 export const storeAPI = {

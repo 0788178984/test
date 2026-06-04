@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Package,
   AlertTriangle,
@@ -9,10 +9,11 @@ import {
   DollarSign,
   PiggyBank,
   Receipt,
+  History,
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { inventoryAPI } from '../api/client';
-import { formatCurrency, formatDate } from '../api/client';
+import { formatCurrency, formatDateTime, getPurchaseDayLabel } from '../api/client';
 import Card from '../components/ui/Card';
 import StatCard from '../components/ui/StatCard';
 import Table from '../components/ui/Table';
@@ -26,15 +27,32 @@ const Inventory = () => {
   const [summary, setSummary] = useState(null);
   const [categoryBreakdown, setCategoryBreakdown] = useState([]);
   const [productValuation, setProductValuation] = useState([]);
+  const [purchases, setPurchases] = useState([]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
 
   const tabs = [
     { id: 'overview', name: 'Overview', icon: Package },
+    { id: 'purchases', name: 'Purchases', icon: History },
     { id: 'low-stock', name: 'Low Stock', icon: AlertTriangle },
     { id: 'expiring', name: 'Expiring', icon: TrendingDown },
     { id: 'adjustments', name: 'Adjustments', icon: TrendingUp },
   ];
+
+  const purchasesByDay = useMemo(() => {
+    const groups = new Map();
+    for (const row of purchases) {
+      const label = getPurchaseDayLabel(row.created_at);
+      if (!groups.has(label)) {
+        groups.set(label, { label, items: [], expenditure: 0, expected_revenue: 0 });
+      }
+      const g = groups.get(label);
+      g.items.push(row);
+      g.expenditure += row.expenditure || 0;
+      g.expected_revenue += row.expected_revenue || 0;
+    }
+    return Array.from(groups.values());
+  }, [purchases]);
 
   useEffect(() => {
     if (activeTab === 'low-stock') {
@@ -43,6 +61,8 @@ const Inventory = () => {
       fetchExpiring();
     } else if (activeTab === 'adjustments') {
       fetchAdjustments();
+    } else if (activeTab === 'purchases') {
+      fetchPurchases();
     }
   }, [activeTab]);
 
@@ -97,10 +117,23 @@ const Inventory = () => {
     }
   };
 
+  const fetchPurchases = async () => {
+    setLoading(true);
+    try {
+      const { data } = await inventoryAPI.getPurchaseHistory({ limit: 100 });
+      setPurchases(data.purchases || []);
+    } catch (error) {
+      console.error('Fetch purchase history error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleRefresh = () => {
     if (activeTab === 'overview') fetchOverview();
     else if (activeTab === 'low-stock') fetchLowStock();
     else if (activeTab === 'expiring') fetchExpiring();
+    else if (activeTab === 'purchases') fetchPurchases();
     else fetchAdjustments();
   };
 
@@ -290,7 +323,6 @@ const Inventory = () => {
               iconClassName="h-8 w-8 text-primary-700"
               value={loading ? '—' : Number(summary?.total_units ?? 0).toLocaleString()}
               label="Total stock available"
-              hint="Sum of quantities on hand (active products)"
             />
             <StatCard
               icon={Layers}
@@ -298,7 +330,6 @@ const Inventory = () => {
               iconClassName="h-8 w-8 text-indigo-600"
               value={loading ? '—' : Number(summary?.in_stock_products ?? 0).toLocaleString()}
               label="Products with stock"
-              hint={`of ${Number(summary?.active_products ?? summary?.total_products ?? 0)} active`}
             />
             <StatCard
               icon={AlertTriangle}
@@ -324,11 +355,7 @@ const Inventory = () => {
           </div>
 
           <div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-1">Stock valuation</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Expenditure is what you spent to buy stock on hand (quantity × buying price). Potential revenue uses your
-              assigned selling prices. Profit is what you would realise if every unit on hand sold at those prices.
-            </p>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Stock valuation</h2>
             <div className="stat-grid sm:grid-cols-2 lg:grid-cols-4">
               <StatCard
                 icon={Receipt}
@@ -337,7 +364,6 @@ const Inventory = () => {
                 currency
                 value={loading ? '—' : formatCurrency(summary?.stock_expenditure ?? summary?.stock_value_at_cost ?? 0)}
                 label="Total stock expenditure"
-                hint="Money tied up in inventory (cost basis)"
               />
               <StatCard
                 icon={DollarSign}
@@ -348,7 +374,6 @@ const Inventory = () => {
                   loading ? '—' : formatCurrency(summary?.potential_sales_revenue ?? summary?.stock_value_at_selling ?? 0)
                 }
                 label="Potential sales revenue"
-                hint="If all on-hand stock sells at listed prices"
               />
               <StatCard
                 icon={PiggyBank}
@@ -357,11 +382,6 @@ const Inventory = () => {
                 currency
                 value={loading ? '—' : formatCurrency(summary?.projected_profit_if_sold ?? 0)}
                 label="Projected profit if sold"
-                hint={
-                  loading
-                    ? undefined
-                    : `Margin ${Number(summary?.projected_margin_percent ?? 0).toLocaleString()}% on listed prices`
-                }
               />
               <StatCard
                 icon={TrendingUp}
@@ -370,7 +390,6 @@ const Inventory = () => {
                 currency
                 value={loading ? '—' : formatCurrency(summary?.lifetime_purchase_expenditure ?? 0)}
                 label="Recorded stock purchases"
-                hint="Sum of restock & positive adjustments (with cost entered)"
               />
             </div>
           </div>
@@ -389,10 +408,7 @@ const Inventory = () => {
 
           {!loading && productValuation.length > 0 && (
             <Card>
-              <h2 className="text-lg font-semibold text-gray-900 mb-1">Product detail</h2>
-              <p className="text-sm text-gray-500 mb-4">
-                Per-item spend, listed sale value, and profit if every unit on hand sells at the price you set.
-              </p>
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Product detail</h2>
               <Table
                 columns={valuationColumns}
                 data={productValuation}
@@ -403,12 +419,56 @@ const Inventory = () => {
           )}
 
           {!loading && Number(summary?.total_units ?? 0) === 0 && (
-            <Card className="border-amber-200 bg-amber-50/50">
-              <p className="text-sm text-amber-900">
-                No stock on hand yet. Add products under <strong>Products</strong>, or restock via
-                inventory adjustments — POS sales reduce stock automatically.
-              </p>
-            </Card>
+            <p className="text-sm text-gray-500">No stock on hand.</p>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'purchases' && (
+        <div className="space-y-4">
+          {loading ? (
+            <p className="text-gray-500">Loading…</p>
+          ) : purchasesByDay.length === 0 ? (
+            <p className="text-gray-500">No stock purchases recorded yet.</p>
+          ) : (
+            purchasesByDay.map((group) => (
+              <Card key={group.label}>
+                <div className="mb-4 flex flex-wrap items-end justify-between gap-2 border-b border-gray-100 pb-3">
+                  <h2 className="text-lg font-semibold text-gray-900">{group.label}</h2>
+                  <div className="text-sm text-gray-700">
+                    <span className="mr-4">
+                      Spent <strong className="text-rose-700">{formatCurrency(group.expenditure)}</strong>
+                    </span>
+                    <span>
+                      Expected if sold{' '}
+                      <strong className="text-green-700">{formatCurrency(group.expected_revenue)}</strong>
+                    </span>
+                  </div>
+                </div>
+                <ul className="divide-y divide-gray-100">
+                  {group.items.map((row) => (
+                    <li key={row.id} className="py-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-900">{row.product_name}</p>
+                        <p className="text-xs text-gray-500">
+                          {formatDateTime(row.created_at)} · +{Number(row.quantity).toLocaleString()} {row.unit || ''}{' '}
+                          · {row.adjustment_type}
+                          {row.user_name ? ` · ${row.user_name}` : ''}
+                        </p>
+                      </div>
+                      <div className="text-sm shrink-0 text-right">
+                        <p>
+                          Cost <span className="font-medium text-rose-700">{formatCurrency(row.expenditure)}</span>
+                        </p>
+                        <p>
+                          Expected <span className="font-medium text-green-700">{formatCurrency(row.expected_revenue)}</span>
+                        </p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            ))
           )}
         </div>
       )}

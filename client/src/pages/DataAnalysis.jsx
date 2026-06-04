@@ -106,10 +106,6 @@ const DataAnalysis = () => {
             <LineChartIcon className="h-8 w-8 text-primary-600" />
             Data analysis
           </h1>
-          <p className="text-sm text-gray-600 mt-1">
-            Visual trends for <span className="font-medium">{user?.business_name || 'your store'}</span> — managers and
-            admins only.
-          </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex gap-2 pb-1">

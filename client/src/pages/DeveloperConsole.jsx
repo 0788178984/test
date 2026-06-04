@@ -449,12 +449,6 @@ export default function DeveloperConsole() {
               {alertsLoading ? 'Refreshing…' : 'Refresh'}
             </Button>
           </div>
-          <p className="text-sm text-gray-600 mt-1 mb-4">
-            Out-of-licence stores need renewal. “Ending soon” is within 14 days of expiry. “This month” is 15–30 days. You
-            also get a daily <strong>in-app digest</strong> on the bell when there is anything to review. Store{' '}
-            <strong>admins and managers</strong> get reminders (and the same digest pattern for their own store via
-            scheduled notifications).
-          </p>
           {alertsLoading ? (
             <p className="text-sm text-gray-500">Loading alerts…</p>
           ) : (
@@ -508,21 +502,10 @@ export default function DeveloperConsole() {
           )}
         </section>
 
-        <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-          Build <strong>clinic-stable</strong> — you should see <strong>Store type</strong> (Supermarket or Clinic) below.
-          If this box says “Add new supermarket” with no store type, clear site data or uninstall the app from your home
-          screen, then reload.
-        </p>
-
         <section className="bg-white rounded-xl shadow p-6 space-y-4">
           <h2 className="text-md font-semibold text-gray-800 flex items-center gap-2">
             <PlusCircle className="h-4 w-4 text-primary-600" /> Add new store
           </h2>
-          <p className="text-sm text-gray-600">
-            Each store is a separate tenant with its own <strong>business code</strong> (e.g. <code className="text-gray-800">KAMPALA1</code> or{' '}
-            <code className="text-gray-800">CLINIC01</code>). Choose <strong>Supermarket</strong> or <strong>Clinic / drug shop</strong> — product
-            categories follow the store type. Staff enter the code on login. Codes must be unique.
-          </p>
           <form onSubmit={createStore} className="grid gap-3 sm:grid-cols-2">
             <Input
               label="Store name"
@@ -548,11 +531,6 @@ export default function DeveloperConsole() {
                 <option value={BUSINESS_TYPES.SUPERMARKET}>Supermarket</option>
                 <option value={BUSINESS_TYPES.CLINIC}>Clinic / drug shop</option>
               </select>
-              <p className="text-xs text-gray-500 mt-1">
-                {newStore.business_type === BUSINESS_TYPES.CLINIC
-                  ? 'Categories: Tablets, Capsules, Syrups, Cream, Injections, Other.'
-                  : 'Categories: Food, Beverages, Bakery, Dairy, Cleaning, Electronics, Clothing, Other.'}
-              </p>
             </div>
             <div>
               <label className="form-label">Initial subscription</label>
@@ -594,11 +572,6 @@ export default function DeveloperConsole() {
           <h2 className="text-md font-semibold text-gray-800 flex items-center gap-2">
             <CreditCard className="h-4 w-4 text-primary-600" /> Store payment integrations (MTN / Airtel)
           </h2>
-          <p className="text-sm text-gray-600">
-            Each supermarket has its own mobile-money keys. Staff only see MTN or Airtel at checkout after you enable the
-            provider here and save valid credentials from MTN MoMo / Airtel Open API. Secret fields left blank keep the
-            previous saved value.
-          </p>
           <div className="max-w-xl">
             <label className="form-label">Select store</label>
             <select
@@ -844,10 +817,6 @@ export default function DeveloperConsole() {
                   maxLength={4}
                 />
               </div>
-              <p className="text-xs text-gray-500">
-                Provide at least one of password or PIN. Leave a field blank to keep the current value for that login
-                method.
-              </p>
               <Button type="submit" variant="primary" loading={recoverySaving}>
                 Save new credentials
               </Button>

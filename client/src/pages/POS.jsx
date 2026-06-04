@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, Smartphone, Tag, ClipboardList, RotateCcw, User, ShoppingCart, CreditCard } from 'lucide-react';
+import { Search, Tag, ClipboardList, RotateCcw, User, ShoppingCart, CreditCard } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
@@ -242,7 +242,7 @@ const POS = () => {
           <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <h2 className="mb-2 flex items-center gap-2 text-lg font-semibold text-gray-900">
               <Search className="h-5 w-5 text-primary-600" />
-              1. Scan or type barcode
+              Scan barcode
             </h2>
             <input
               ref={barcodeInputRef}
@@ -254,13 +254,12 @@ const POS = () => {
               placeholder="Scanner sends digits here, or type barcode…"
               className="barcode-input w-full rounded-lg border-2 border-gray-200 px-3 py-3 font-mono text-lg focus:border-primary-500 focus:outline-none"
             />
-            <p className="mt-2 text-xs text-gray-500">Tip: USB scanners usually act as a keyboard — focus stays here.</p>
           </div>
 
           <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-gray-900">
               <ShoppingCart className="h-5 w-5 text-primary-600" />
-              2. Browse & add
+              Products
             </h2>
             <ProductSearch onProductSelect={handleProductSelect} searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
           </div>
@@ -287,10 +286,10 @@ const POS = () => {
 
         {/* Step 3: Cart */}
         <section className="order-2 lg:col-span-4">
-          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-600">
-            <CreditCard className="h-4 w-4" />
-            3. Cart & totals
-          </div>
+          <h2 className="mb-2 flex items-center gap-2 text-lg font-semibold text-gray-900">
+            <CreditCard className="h-4 w-4 text-primary-600" />
+            Cart
+          </h2>
           <Cart onCheckout={handleCheckout} />
         </section>
 
@@ -299,7 +298,7 @@ const POS = () => {
           <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-gray-900">
               <User className="h-5 w-5 text-primary-600" />
-              4. Customer (optional)
+              Customer
             </h3>
             <input
               type="text"
@@ -326,9 +325,7 @@ const POS = () => {
                   Remove customer
                 </button>
               </div>
-            ) : (
-              <p className="mt-2 text-xs text-gray-500">Walk-in if empty — loyalty applies when attached.</p>
-            )}
+            ) : null}
           </div>
 
           <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -348,7 +345,6 @@ const POS = () => {
               </div>
             </div>
             <div className="mt-4 space-y-2 border-t border-gray-100 pt-3">
-              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500">Cart actions</p>
               <div className="flex flex-col gap-2">
                 <Button
                   type="button"
@@ -397,9 +393,6 @@ const POS = () => {
             </div>
           </div>
 
-          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
-            <Smartphone className="mb-1 inline h-3 w-3" /> MTN / Airtel appear here only when your system developer enables them for this store in the Developer console with valid API keys.
-          </div>
         </section>
       </div>
 
