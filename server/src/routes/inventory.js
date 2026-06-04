@@ -4,6 +4,7 @@ const { restrictToBusinessStaff } = require('../middleware/tenantContext');
 const { checkPermission } = require('../middleware/roleCheck');
 const db = require('../db/connection');
 const { newId } = require('../db/ids');
+const { roundUgx } = require('../utils/money');
 const router = express.Router();
 
 router.use(authenticate, restrictToBusinessStaff);
@@ -215,7 +216,8 @@ router.post('/restock', checkPermission('adjust_stock'), async (req, res) => {
 
 router.get('/summary', checkPermission('view_inventory'), async (req, res) => {
   try {
-    const summary = await db
+    const businessId = bid(req);
+    const raw = await db
       .prepare(
         `
       SELECT
@@ -226,12 +228,45 @@ router.get('/summary', checkPermission('view_inventory'), async (req, res) => {
         COUNT(CASE WHEN is_active = 1 AND current_stock <= minimum_stock THEN 1 END) as low_stock_count,
         COUNT(CASE WHEN expiry_date IS NOT NULL AND date(expiry_date) < date('now') AND current_stock > 0 THEN 1 END) as expired_count,
         COUNT(CASE WHEN expiry_date IS NOT NULL AND date(expiry_date) <= date('now', '+30 days') AND date(expiry_date) >= date('now') AND current_stock > 0 THEN 1 END) as expiring_soon_count,
-        COALESCE(SUM(CASE WHEN is_active = 1 THEN current_stock * buying_price ELSE 0 END), 0) as stock_value_at_cost
+        COALESCE(SUM(CASE WHEN is_active = 1 THEN current_stock * buying_price ELSE 0 END), 0) as stock_value_at_cost,
+        COALESCE(SUM(CASE WHEN is_active = 1 THEN current_stock * selling_price ELSE 0 END), 0) as stock_value_at_selling
       FROM products
       WHERE deleted_at IS NULL AND business_id = ?
     `
       )
-      .get(bid(req));
+      .get(businessId);
+
+    const stockExpenditure = roundUgx(raw.stock_value_at_cost);
+    const potentialRevenue = roundUgx(raw.stock_value_at_selling);
+    const projectedProfit = Math.max(0, potentialRevenue - stockExpenditure);
+    const projectedMarginPercent =
+      potentialRevenue > 0 ? Math.round((projectedProfit / potentialRevenue) * 1000) / 10 : 0;
+
+    const purchaseRow = await db
+      .prepare(
+        `
+      SELECT COALESCE(SUM(
+        CASE WHEN sa.quantity_change > 0 THEN
+          sa.quantity_change * COALESCE(NULLIF(sa.cost_per_unit, 0), p.buying_price, 0)
+        ELSE 0 END
+      ), 0) as lifetime_purchase_expenditure
+      FROM stock_adjustments sa
+      JOIN products p ON sa.product_id = p.id
+      WHERE sa.business_id = ? AND p.deleted_at IS NULL
+    `
+      )
+      .get(businessId);
+
+    const summary = {
+      ...raw,
+      stock_value_at_cost: stockExpenditure,
+      stock_value_at_selling: potentialRevenue,
+      stock_expenditure: stockExpenditure,
+      potential_sales_revenue: potentialRevenue,
+      projected_profit_if_sold: projectedProfit,
+      projected_margin_percent: projectedMarginPercent,
+      lifetime_purchase_expenditure: roundUgx(purchaseRow?.lifetime_purchase_expenditure),
+    };
 
     const categoryBreakdown = await db
       .prepare(
@@ -239,19 +274,54 @@ router.get('/summary', checkPermission('view_inventory'), async (req, res) => {
       SELECT
         category,
         COUNT(*) as product_count,
-        SUM(current_stock * buying_price) as total_value
+        COALESCE(SUM(current_stock), 0) as total_units,
+        COALESCE(SUM(current_stock * buying_price), 0) as cost_value,
+        COALESCE(SUM(current_stock * selling_price), 0) as sell_value
       FROM products
-      WHERE deleted_at IS NULL AND current_stock > 0 AND business_id = ?
+      WHERE deleted_at IS NULL AND is_active = 1 AND current_stock > 0 AND business_id = ?
       GROUP BY category
-      ORDER BY total_value DESC
-      LIMIT 10
+      ORDER BY sell_value DESC
+      LIMIT 15
     `
       )
-      .all(bid(req));
+      .all(businessId);
+
+    const productValuation = await db
+      .prepare(
+        `
+      SELECT
+        id,
+        name,
+        category,
+        unit,
+        current_stock,
+        buying_price,
+        selling_price,
+        current_stock * buying_price as cost_value,
+        current_stock * selling_price as sell_value,
+        current_stock * (selling_price - buying_price) as profit_value
+      FROM products
+      WHERE deleted_at IS NULL AND is_active = 1 AND current_stock > 0 AND business_id = ?
+      ORDER BY sell_value DESC
+      LIMIT 40
+    `
+      )
+      .all(businessId);
 
     res.json({
       summary,
-      categoryBreakdown,
+      categoryBreakdown: categoryBreakdown.map((row) => ({
+        ...row,
+        cost_value: roundUgx(row.cost_value),
+        sell_value: roundUgx(row.sell_value),
+        profit_value: Math.max(0, roundUgx(row.sell_value) - roundUgx(row.cost_value)),
+      })),
+      productValuation: productValuation.map((row) => ({
+        ...row,
+        cost_value: roundUgx(row.cost_value),
+        sell_value: roundUgx(row.sell_value),
+        profit_value: roundUgx(row.profit_value),
+      })),
     });
   } catch (error) {
     console.error('Get inventory summary error:', error);

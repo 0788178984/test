@@ -1,5 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Package, AlertTriangle, TrendingUp, TrendingDown, Boxes, Layers } from 'lucide-react';
+import {
+  Package,
+  AlertTriangle,
+  TrendingUp,
+  TrendingDown,
+  Boxes,
+  Layers,
+  DollarSign,
+  PiggyBank,
+  Receipt,
+} from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { inventoryAPI } from '../api/client';
 import { formatCurrency, formatDate } from '../api/client';
@@ -14,6 +24,8 @@ const Inventory = () => {
   const [expiringProducts, setExpiringProducts] = useState([]);
   const [adjustments, setAdjustments] = useState([]);
   const [summary, setSummary] = useState(null);
+  const [categoryBreakdown, setCategoryBreakdown] = useState([]);
+  const [productValuation, setProductValuation] = useState([]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
 
@@ -47,6 +59,8 @@ const Inventory = () => {
         inventoryAPI.getExpiring(),
       ]);
       setSummary(summaryRes.data.summary || null);
+      setCategoryBreakdown(summaryRes.data.categoryBreakdown || []);
+      setProductValuation(summaryRes.data.productValuation || []);
       setLowStockItems(lowRes.data.lowStockItems || []);
       setExpiringProducts(expRes.data.expiringProducts || []);
     } catch (error) {
@@ -118,6 +132,83 @@ const Inventory = () => {
     },
   ];
 
+  const categoryColumns = [
+    { header: 'Category', accessor: 'category' },
+    {
+      header: 'Units on hand',
+      accessor: 'total_units',
+      cellClassName: 'text-right',
+      render: (row) => Number(row.total_units).toLocaleString(),
+    },
+    {
+      header: 'Stock spend (cost)',
+      accessor: 'cost_value',
+      cellClassName: 'text-right',
+      render: (row) => formatCurrency(row.cost_value),
+    },
+    {
+      header: 'If sold (listed price)',
+      accessor: 'sell_value',
+      cellClassName: 'text-right',
+      render: (row) => formatCurrency(row.sell_value),
+    },
+    {
+      header: 'Projected profit',
+      accessor: 'profit_value',
+      cellClassName: 'text-right',
+      render: (row) => (
+        <span className={row.profit_value > 0 ? 'text-green-700 font-medium' : 'text-gray-600'}>
+          {formatCurrency(row.profit_value)}
+        </span>
+      ),
+    },
+  ];
+
+  const valuationColumns = [
+    { header: 'Product', accessor: 'name' },
+    { header: 'Category', accessor: 'category' },
+    {
+      header: 'Qty',
+      accessor: 'current_stock',
+      cellClassName: 'text-center',
+      render: (row) => `${Number(row.current_stock).toLocaleString()} ${row.unit || ''}`.trim(),
+    },
+    {
+      header: 'Buy / unit',
+      accessor: 'buying_price',
+      cellClassName: 'text-right',
+      render: (row) => formatCurrency(row.buying_price),
+    },
+    {
+      header: 'Sell / unit',
+      accessor: 'selling_price',
+      cellClassName: 'text-right',
+      render: (row) => formatCurrency(row.selling_price),
+    },
+    {
+      header: 'Stock spend',
+      accessor: 'cost_value',
+      cellClassName: 'text-right',
+      render: (row) => formatCurrency(row.cost_value),
+    },
+    {
+      header: 'If all sold',
+      accessor: 'sell_value',
+      cellClassName: 'text-right',
+      render: (row) => formatCurrency(row.sell_value),
+    },
+    {
+      header: 'Profit if sold',
+      accessor: 'profit_value',
+      cellClassName: 'text-right',
+      render: (row) => (
+        <span className={row.profit_value > 0 ? 'text-green-700 font-medium' : 'text-gray-600'}>
+          {formatCurrency(row.profit_value)}
+        </span>
+      ),
+    },
+  ];
+
   const adjustmentsColumns = [
     { header: 'Product', accessor: 'product_name' },
     { header: 'Type', accessor: 'adjustment_type' },
@@ -131,6 +222,17 @@ const Inventory = () => {
           {row.quantity_change}
         </span>
       ),
+    },
+    {
+      header: 'Purchase cost',
+      accessor: 'cost_per_unit',
+      cellClassName: 'text-right',
+      render: (row) => {
+        if (!(row.quantity_change > 0)) return '—';
+        const unit = Number(row.cost_per_unit);
+        if (!Number.isFinite(unit) || unit <= 0) return '—';
+        return formatCurrency(unit * row.quantity_change);
+      },
     },
     { header: 'Reason', accessor: 'reason' },
     { header: 'User', accessor: 'user_name' },
@@ -199,14 +301,6 @@ const Inventory = () => {
               hint={`of ${Number(summary?.active_products ?? summary?.total_products ?? 0)} active`}
             />
             <StatCard
-              icon={Package}
-              iconWrapClassName="p-0 bg-transparent"
-              iconClassName="h-8 w-8 text-blue-600"
-              currency
-              value={loading ? '—' : formatCurrency(summary?.stock_value_at_cost ?? 0)}
-              label="Stock value (at cost)"
-            />
-            <StatCard
               icon={AlertTriangle}
               iconWrapClassName="p-0 bg-transparent"
               iconClassName="h-8 w-8 text-orange-600"
@@ -228,6 +322,85 @@ const Inventory = () => {
               label="Expiring soon (30 days)"
             />
           </div>
+
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">Stock valuation</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Expenditure is what you spent to buy stock on hand (quantity × buying price). Potential revenue uses your
+              assigned selling prices. Profit is what you would realise if every unit on hand sold at those prices.
+            </p>
+            <div className="stat-grid sm:grid-cols-2 lg:grid-cols-4">
+              <StatCard
+                icon={Receipt}
+                iconWrapClassName="p-0 bg-transparent"
+                iconClassName="h-8 w-8 text-rose-600"
+                currency
+                value={loading ? '—' : formatCurrency(summary?.stock_expenditure ?? summary?.stock_value_at_cost ?? 0)}
+                label="Total stock expenditure"
+                hint="Money tied up in inventory (cost basis)"
+              />
+              <StatCard
+                icon={DollarSign}
+                iconWrapClassName="p-0 bg-transparent"
+                iconClassName="h-8 w-8 text-blue-600"
+                currency
+                value={
+                  loading ? '—' : formatCurrency(summary?.potential_sales_revenue ?? summary?.stock_value_at_selling ?? 0)
+                }
+                label="Potential sales revenue"
+                hint="If all on-hand stock sells at listed prices"
+              />
+              <StatCard
+                icon={PiggyBank}
+                iconWrapClassName="p-0 bg-transparent"
+                iconClassName="h-8 w-8 text-green-600"
+                currency
+                value={loading ? '—' : formatCurrency(summary?.projected_profit_if_sold ?? 0)}
+                label="Projected profit if sold"
+                hint={
+                  loading
+                    ? undefined
+                    : `Margin ${Number(summary?.projected_margin_percent ?? 0).toLocaleString()}% on listed prices`
+                }
+              />
+              <StatCard
+                icon={TrendingUp}
+                iconWrapClassName="p-0 bg-transparent"
+                iconClassName="h-8 w-8 text-violet-600"
+                currency
+                value={loading ? '—' : formatCurrency(summary?.lifetime_purchase_expenditure ?? 0)}
+                label="Recorded stock purchases"
+                hint="Sum of restock & positive adjustments (with cost entered)"
+              />
+            </div>
+          </div>
+
+          {!loading && categoryBreakdown.length > 0 && (
+            <Card>
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">By category</h2>
+              <Table
+                columns={categoryColumns}
+                data={categoryBreakdown}
+                loading={loading}
+                emptyMessage="No categories with stock"
+              />
+            </Card>
+          )}
+
+          {!loading && productValuation.length > 0 && (
+            <Card>
+              <h2 className="text-lg font-semibold text-gray-900 mb-1">Product detail</h2>
+              <p className="text-sm text-gray-500 mb-4">
+                Per-item spend, listed sale value, and profit if every unit on hand sells at the price you set.
+              </p>
+              <Table
+                columns={valuationColumns}
+                data={productValuation}
+                loading={loading}
+                emptyMessage="No products with stock"
+              />
+            </Card>
+          )}
 
           {!loading && Number(summary?.total_units ?? 0) === 0 && (
             <Card className="border-amber-200 bg-amber-50/50">
