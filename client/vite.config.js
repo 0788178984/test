@@ -36,6 +36,8 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Bump when UI must reach all devices (PWA caches old "supermarket-only" builds).
+        cacheId: 'supermkt-v20260604-clinic',
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         cleanupOutdatedCaches: true,
         clientsClaim: true,

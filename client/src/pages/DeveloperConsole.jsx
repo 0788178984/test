@@ -508,6 +508,12 @@ export default function DeveloperConsole() {
           )}
         </section>
 
+        <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          Build <strong>clinic-stable</strong> — you should see <strong>Store type</strong> (Supermarket or Clinic) below.
+          If this box says “Add new supermarket” with no store type, clear site data or uninstall the app from your home
+          screen, then reload.
+        </p>
+
         <section className="bg-white rounded-xl shadow p-6 space-y-4">
           <h2 className="text-md font-semibold text-gray-800 flex items-center gap-2">
             <PlusCircle className="h-4 w-4 text-primary-600" /> Add new store

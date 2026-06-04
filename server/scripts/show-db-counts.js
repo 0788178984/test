@@ -25,6 +25,20 @@ async function main() {
   });
   await client.connect();
   console.log('Supabase (PostgreSQL) row counts:');
+  try {
+    const biz = await client.query(
+      `SELECT id, business_code, name, COALESCE(business_type, 'supermarket') AS business_type
+       FROM businesses ORDER BY name`
+    );
+    console.log('\nStores in database:');
+    if (biz.rows.length === 0) console.log('  (none)');
+    for (const row of biz.rows) {
+      console.log(`  ${row.business_code} — ${row.name} [${row.business_type}] (${row.id})`);
+    }
+    console.log('');
+  } catch (e) {
+    console.log('  businesses list failed:', e.message);
+  }
   for (const t of tables) {
     try {
       const res = await client.query(`SELECT COUNT(*)::int AS c FROM ${t}`);
