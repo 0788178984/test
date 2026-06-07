@@ -36,14 +36,7 @@ const POS = () => {
     resetForNextSale,
   } = useCartStore();
 
-  const [wholesaleInput, setWholesaleInput] = useState(() => {
-    try {
-      const saved = localStorage.getItem('default_wholesale_percent');
-      return saved && Number(saved) > 0 ? saved : '10';
-    } catch {
-      return '10';
-    }
-  });
+  const [wholesaleInput, setWholesaleInput] = useState('');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [lastSale, setLastSale] = useState(null);
@@ -190,6 +183,7 @@ const POS = () => {
       });
 
       resetForNextSale();
+      setWholesaleInput('');
       setShowPaymentModal(false);
       setShowReceiptModal(true);
       toast.success(`Sale ${data.saleNumber} saved`);
@@ -350,19 +344,23 @@ const POS = () => {
                 <span className="text-gray-600">Subtotal</span>
                 <span className="font-medium">{formatCurrency(subtotal)}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">
-                  Discount
-                  {isWholesale && wholesalePercent > 0 ? (
-                    <span className="ml-1 rounded bg-violet-100 px-1.5 py-0.5 text-xs font-semibold text-violet-800">
-                      Wholesale {wholesalePercent}%
+              {discountAmount > 0 ? (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">
+                      Discount
+                      {isWholesale && wholesalePercent > 0 ? (
+                        <span className="ml-1 rounded bg-violet-100 px-1.5 py-0.5 text-xs font-semibold text-violet-800">
+                          Wholesale {wholesalePercent}%
+                        </span>
+                      ) : null}
                     </span>
+                    <span className="font-medium text-red-600">-{formatCurrency(discountAmount)}</span>
+                  </div>
+                  {discountReason ? (
+                    <p className="text-xs text-gray-500">{discountReason}</p>
                   ) : null}
-                </span>
-                <span className="font-medium text-red-600">-{formatCurrency(discountAmount)}</span>
-              </div>
-              {discountReason && discountAmount > 0 ? (
-                <p className="text-xs text-gray-500">{discountReason}</p>
+                </>
               ) : null}
               <div className="flex justify-between border-t border-gray-200 pt-2 text-base font-bold">
                 <span>Due</span>
@@ -385,6 +383,7 @@ const POS = () => {
                       step={1}
                       className="form-input w-full"
                       value={wholesaleInput}
+                      placeholder="e.g. 10"
                       onChange={(e) => setWholesaleInput(e.target.value)}
                       disabled={items.length === 0}
                     />
@@ -415,6 +414,7 @@ const POS = () => {
                     className="w-full"
                     onClick={() => {
                       clearWholesale();
+                      setWholesaleInput('');
                       toast.success('Wholesale pricing cleared');
                     }}
                   >
@@ -431,7 +431,11 @@ const POS = () => {
                   variant="secondary"
                   size="sm"
                   className="flex w-full items-center justify-start gap-2 text-left"
-                  onClick={() => clearWholesale()}
+                  onClick={() => {
+                    clearWholesale();
+                    setWholesaleInput('');
+                  }}
+                  disabled={discountAmount <= 0}
                 >
                   <Tag className="h-4 w-4 shrink-0 text-primary-600" aria-hidden />
                   <span className="min-w-0 leading-snug">Clear discount</span>
@@ -444,6 +448,7 @@ const POS = () => {
                   onClick={() => {
                     if (window.confirm('Clear all lines? Customer can stay attached.')) {
                       resetForNextSale();
+                      setWholesaleInput('');
                       toast.success('Cart cleared');
                       focusScan();
                     }
@@ -460,6 +465,7 @@ const POS = () => {
                   onClick={() => {
                     if (window.confirm('Clear cart and customer?')) {
                       clearCart();
+                      setWholesaleInput('');
                       setCustomerPhoneInput('');
                       toast.success('Cart reset');
                       focusScan();

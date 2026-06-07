@@ -166,11 +166,6 @@ const useCartStore = create((set, get) => ({
       discountAmount: calcWholesaleDiscount(subtotal, p),
       discountReason: wholesaleDiscountReason(p),
     });
-    try {
-      localStorage.setItem('default_wholesale_percent', String(p));
-    } catch {
-      /* ignore */
-    }
   },
 
   clearWholesale: () => {

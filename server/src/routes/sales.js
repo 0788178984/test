@@ -92,7 +92,8 @@ router.post('/', checkPermission('make_sale'), async (req, res) => {
     const wholesalePct = Math.min(100, Math.max(0, Number(wholesale_percent) || 0));
     const reasonText = String(discount_reason || '');
     const isWholesaleSale =
-      wholesalePct > 0 || /^Wholesale\s*\(/i.test(reasonText);
+      discount_amount_r > 0 &&
+      (wholesalePct > 0 || /^Wholesale\s*\(/i.test(reasonText));
 
     if (isWholesaleSale && req.user.role === 'cashier') {
       return res.status(403).json({ error: 'Only admin or manager can complete wholesale sales.' });

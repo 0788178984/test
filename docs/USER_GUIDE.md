@@ -102,10 +102,11 @@ Use **View in Reports** for fuller daily analysis.
 1. Scan barcode or search product name.
 2. Choose quantity (supports kg/L for weight products).
 3. Optionally attach a **customer** (for loyalty points).
-4. **Admin/manager only:** under **Order totals**, use **Wholesale sale** — enter % off (e.g. 10) and tap **Apply**. This is a normal sale with a percentage discount and a **Wholesale** label on the receipt (not a separate branch transfer).
-5. Apply other **discounts** if needed (cashiers: max 5% on retail; cashiers cannot use wholesale).
-6. **Proceed to checkout** → choose payment (Cash, MTN MoMo, Airtel Money, etc.).
-7. Confirm → receipt prints or can be sent.
+4. **Retail and cashier sales have no discount by default** — customer pays full shelf price unless you explicitly apply wholesale or another discount.
+5. **Admin/manager only:** under **Order totals**, use **Wholesale sale** — enter % off (e.g. 10) and tap **Apply** (nothing is pre-filled or auto-applied). Receipt is labeled **Wholesale**.
+6. Other **discounts** (cashiers: max 5% on retail only; cashiers cannot use wholesale).
+7. **Proceed to checkout** → choose payment (Cash, MTN MoMo, Airtel Money, etc.).
+8. Confirm → receipt prints or can be sent.
 
 ### Keyboard shortcuts
 
