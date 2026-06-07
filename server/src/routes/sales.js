@@ -231,8 +231,9 @@ router.post('/', checkPermission('make_sale'), async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const { from, to, cashier_id, status, page = 1, limit = 50 } = req.query;
-    // Date-filtered lists match dashboard/reports: completed sales only unless status is explicit
-    const effectiveStatus = status || (from || to ? 'completed' : undefined);
+    // Date-filtered lists: completed only unless status is explicit; use status=all for returns screen
+    const effectiveStatus =
+      status === 'all' ? undefined : status || (from || to ? 'completed' : undefined);
     const offset = (page - 1) * limit;
 
     let query = `
@@ -424,15 +425,19 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Void sale
+// Void sale (full return — reverses stock, reports, and loyalty)
 router.post('/:id/void', checkPermission('void_sale'), async (req, res) => {
   try {
-    const { reason } = req.body;
+    const reason = String(req.body.reason || '').trim();
+    if (!reason) {
+      return res.status(400).json({ error: 'A return reason is required to void a sale.' });
+    }
 
+    const businessId = req.user.business_id;
     const sale = await db.prepare(`
-      SELECT id, status, cashier_id FROM sales
+      SELECT id, sale_number, status, cashier_id FROM sales
       WHERE id = ? AND deleted_at IS NULL AND business_id = ?
-    `).get(req.params.id, req.user.business_id);
+    `).get(req.params.id, businessId);
 
     if (!sale) {
       return res.status(404).json({ error: 'Sale not found.' });
@@ -442,37 +447,61 @@ router.post('/:id/void', checkPermission('void_sale'), async (req, res) => {
       return res.status(400).json({ error: 'Only completed sales can be voided.' });
     }
 
-    // Get sale items to restore stock
     const items = await db.prepare(`
       SELECT product_id, quantity FROM sale_items WHERE sale_id = ?
     `).all(sale.id);
 
+    const voidNote = `Voided/return: ${reason} (by ${req.user.name || req.user.role})`;
+
     await db.transaction(async (tx) => {
-      // Update sale status
       await tx.prepare(`
         UPDATE sales SET 
           status = 'voided',
-          notes = COALESCE(notes, '') || ' | Voided: ' || COALESCE(?, 'No reason provided'),
+          notes = COALESCE(notes, '') || ' | ' || ?,
           updated_at = datetime('now'),
           sync_status = 'pending'
         WHERE id = ? AND business_id = ?
-      `).run(reason, sale.id, req.user.business_id);
+      `).run(voidNote, sale.id, businessId);
 
-      // Restore stock
       for (const item of items) {
+        const product = await tx
+          .prepare(`SELECT current_stock FROM products WHERE id = ? AND business_id = ? AND deleted_at IS NULL`)
+          .get(item.product_id, businessId);
+        if (!product) continue;
+
+        const quantityBefore = Number(product.current_stock) || 0;
+        const qty = Number(item.quantity) || 0;
+        const quantityAfter = quantityBefore + qty;
+
         await tx.prepare(`
           UPDATE products SET 
-            current_stock = current_stock + ?,
+            current_stock = ?,
             updated_at = datetime('now'),
             sync_status = 'pending'
           WHERE id = ? AND business_id = ?
-        `).run(item.quantity, item.product_id, req.user.business_id);
+        `).run(quantityAfter, item.product_id, businessId);
+
+        await tx.prepare(`
+          INSERT INTO stock_adjustments (
+            id, product_id, user_id, adjustment_type, quantity_before, quantity_change,
+            quantity_after, reason, business_id, created_at, sync_status
+          ) VALUES (?, ?, ?, 'return', ?, ?, ?, ?, ?, datetime('now'), 'pending')
+        `).run(
+          newId('adj'),
+          item.product_id,
+          req.user.id,
+          quantityBefore,
+          qty,
+          quantityAfter,
+          `${sale.sale_number}: ${reason}`,
+          businessId
+        );
       }
 
       // Reverse loyalty points if customer exists
       const customerInfo = await tx.prepare(`
         SELECT customer_id, total_amount FROM sales WHERE id = ? AND business_id = ?
-      `).get(sale.id, req.user.business_id);
+      `).get(sale.id, businessId);
 
       if (customerInfo.customer_id) {
         const loyaltyRate = parseFloat(await tx.prepare(`
@@ -487,22 +516,34 @@ router.post('/:id/void', checkPermission('void_sale'), async (req, res) => {
             INSERT INTO loyalty_transactions (
               id, customer_id, sale_id, points_change, reason, business_id, created_at, sync_status
             ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), 'pending')
-          `).run(newId('loy'), customerInfo.customer_id, sale.id, -pointsToReverse, `Sale voided: ${sale.id}`, req.user.business_id);
+          `).run(
+            newId('loy'),
+            customerInfo.customer_id,
+            sale.id,
+            -pointsToReverse,
+            `Sale voided: ${sale.sale_number}`,
+            businessId
+          );
 
-          // Update customer points
           await tx.prepare(`
             UPDATE customers SET
               loyalty_points = loyalty_points - ?,
               total_spent = total_spent - ?,
+              visit_count = CASE WHEN visit_count > 0 THEN visit_count - 1 ELSE 0 END,
               updated_at = datetime('now'),
               sync_status = 'pending'
             WHERE id = ? AND business_id = ?
-          `).run(pointsToReverse, customerInfo.total_amount, customerInfo.customer_id, req.user.business_id);
+          `).run(pointsToReverse, customerInfo.total_amount, customerInfo.customer_id, businessId);
         }
       }
     });
 
-    res.json({ message: 'Sale voided successfully.' });
+    res.json({
+      message: 'Sale voided successfully. Stock restored and reports updated.',
+      saleId: sale.id,
+      saleNumber: sale.sale_number,
+      status: 'voided',
+    });
   } catch (error) {
     console.error('Void sale error:', error);
     res.status(500).json({ error: 'Failed to void sale.' });

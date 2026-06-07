@@ -21,6 +21,7 @@ import {
   Award,
   Wallet,
   Smartphone,
+  Undo2,
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../../store/authStore';
@@ -155,6 +156,12 @@ const Layout = () => {
       title: 'Reports',
       icon: BarChart3,
       path: '/reports',
+      roles: ['admin', 'manager'],
+    },
+    {
+      title: 'Returns & voids',
+      icon: Undo2,
+      path: '/returns',
       roles: ['admin', 'manager'],
     },
     {

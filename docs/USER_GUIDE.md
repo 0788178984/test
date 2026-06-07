@@ -74,6 +74,7 @@ All “today”, “yesterday”, and daily totals use **East Africa Time (Afric
 | **Stock added today recorded with expenditure** | ✅ Implemented | **Inventory → Purchases** — each restock shows date, time, quantity, cost, and expected revenue |
 | **Product sales recorded daily** | ✅ Implemented | Every sale is timestamped; **Dashboard → Today’s Sales**; **Reports → Daily Sales** |
 | **Transaction statement with dates and times** | ✅ Partially | Dashboard and Purchases show **date + time**; PDF export shows **date** on each receipt line (time in database, not always on PDF) |
+| **Return policy / void sale (admin & manager)** | ✅ Implemented | **Returns & voids** — void receipt restores stock, reverses loyalty, excludes from reports |
 
 ---
 
@@ -95,7 +96,37 @@ Use **View in Reports** for fuller daily analysis.
 
 ---
 
-## 5. Point of Sale (POS)
+## 5. Returns & voids (return policy)
+
+**Menu:** Returns & voids (admin & manager only)
+
+Use this when a customer returns goods or a sale was recorded wrongly and must be **cancelled in the system**.
+
+### What void does
+
+| Effect | What happens |
+|--------|----------------|
+| **Sale status** | Changes from `completed` → `voided` |
+| **Stock** | All items on that receipt are **added back** to inventory |
+| **Inventory log** | A **return** adjustment is recorded (see Inventory → Adjustments) |
+| **Reports** | Revenue and profit for that day **drop** — voided sales are excluded |
+| **Loyalty** | Points and spend from that sale are **reversed** if a customer was attached |
+| **Cash/MoMo** | You refund the customer **manually** — the app reverses the record only |
+
+### How to void a sale
+
+1. Open **Returns & voids**.
+2. Pick the **sale date** and find the receipt (or search by receipt #).
+3. Click **View** or **Void / return**.
+4. Enter a **return reason** (required) and confirm.
+
+**Cashiers cannot void sales.** Only admin or manager.
+
+**Partial returns** (only some items on a receipt) are not supported yet — void is **full receipt only**.
+
+---
+
+## 6. Point of Sale (POS)
 
 ### Workflow
 
@@ -133,7 +164,7 @@ Each completed sale is stored with **date and time** and reduces stock automatic
 
 ---
 
-## 6. Products and pricing
+## 7. Products and pricing
 
 **Menu:** Products (admin & manager only)
 
@@ -158,7 +189,7 @@ When you **create a product with opening stock**, the system records an **initia
 
 ---
 
-## 7. Inventory, stock expenditure, and projected profit
+## 8. Inventory, stock expenditure, and projected profit
 
 **Menu:** Inventory (all staff can view; stock changes need manager/admin permissions on API)
 
@@ -205,7 +236,7 @@ This answers: *“What did we buy / add to stock today and how much did it cost?
 
 ---
 
-## 8. Daily expenses
+## 9. Daily expenses
 
 **Menu:** Daily Expenses (admin & manager)
 
@@ -226,7 +257,7 @@ Filter by **date** and **category** to see daily totals. Summary shows count and
 
 ---
 
-## 9. Reports and data analysis
+## 10. Reports and data analysis
 
 **Menu:** Reports, Data analysis (admin & manager)
 
@@ -255,7 +286,7 @@ Charts for selected day: revenue by hour, payment mix, monthly trend, top produc
 
 ---
 
-## 10. Customers, suppliers, and users
+## 11. Customers, suppliers, and users
 
 ### Customers
 
@@ -271,7 +302,7 @@ Create managers and cashiers, assign PINs, deactivate accounts.
 
 ---
 
-## 11. Mobile money agent float
+## 12. Mobile money agent float
 
 **Menu:** Mobile money (also section in POS)
 
@@ -285,7 +316,7 @@ For **MoMo agent** business (withdrawals, deposits, airtime) — separate from c
 
 ---
 
-## 12. Settings and multi-store
+## 13. Settings and multi-store
 
 ### Store settings (admin)
 
@@ -299,7 +330,7 @@ Each store has a unique **store code**. Data is isolated per store — sales, pr
 
 ---
 
-## 13. Glossary — all terms and meanings
+## 14. Glossary — all terms and meanings
 
 | Term | Definition |
 |------|------------|
@@ -335,7 +366,7 @@ Each store has a unique **store code**. Data is isolated per store — sales, pr
 
 ---
 
-## 14. Known limitations
+## 15. Known limitations
 
 1. **Wholesale** is a **percentage discount at POS**, not a separate stored wholesale price per product.
 2. **Total stock expenditure** on Overview is a **current snapshot**, not “spent today only”; use **Purchases** tab for daily stock-in spending.
@@ -352,6 +383,7 @@ Each store has a unique **store code**. Data is isolated per store — sales, pr
 | Sell to customer | POS |
 | Change selling price | Products (admin/manager) |
 | Sell at wholesale (% off) | POS → Wholesale sale (admin/manager) |
+| Return / void a sale | Returns & voids (admin/manager) |
 | See profit if all stock sells | Inventory → Overview |
 | See what stock we bought today | Inventory → Purchases |
 | See sales today with time | Dashboard → Today's Sales |

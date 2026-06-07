@@ -23,6 +23,7 @@ import NotificationsPage from './pages/NotificationsPage';
 import TeamMessages from './pages/TeamMessages';
 import Subscription from './pages/Subscription';
 import MobileMoney from './pages/MobileMoney';
+import Returns from './pages/Returns';
 
 function App() {
   const checkAuth = useAuthStore((state) => state.checkAuth);
@@ -57,6 +58,7 @@ function App() {
                   <Route path="suppliers" element={<Suppliers />} />
                   <Route path="expenses" element={<Expenses />} />
                   <Route path="reports" element={<Reports />} />
+                  <Route path="returns" element={<Returns />} />
                   <Route path="data-analysis" element={<DataAnalysis />} />
                   <Route path="team-messages" element={<TeamMessages />} />
                 </Route>
