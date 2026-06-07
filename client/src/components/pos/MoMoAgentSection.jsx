@@ -264,28 +264,11 @@ const MoMoAgentSection = () => {
               ))
             )}
           </select>
-          <p className="mt-2 text-xs text-gray-600">
-            Open and reconcile always apply to the cashier selected here. Choose the counter staff
-            who receives the physical cash and MoMo float for the shift.
-          </p>
         </div>
       )}
 
       {!session ? (
-        <p className="rounded-lg border border-dashed border-amber-300 bg-white p-4 text-sm text-gray-700">
-          {canManageSession ? (
-            <>
-              As a supervisor, choose the cashier above, then use <strong>Open today&apos;s float</strong>{' '}
-              to record how much cash and mobile money float they received (for example UGX 500,000
-              each).
-            </>
-          ) : (
-            <>
-              Your supervisor must open today&apos;s cash and mobile money float for you before you
-              can record agent transactions (withdrawals, deposits, etc.).
-            </>
-          )}
-        </p>
+        <p className="text-sm text-gray-600">No float open for today.</p>
       ) : (
         <>
           <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">

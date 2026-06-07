@@ -286,10 +286,7 @@ const Dashboard = () => {
               className="flex items-center space-x-3 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-red-400 hover:bg-red-50 transition-all text-left"
             >
               <Wallet className="w-6 h-6 shrink-0 text-red-600" />
-              <div className="min-w-0">
-                <p className="font-medium text-gray-900">Record expense</p>
-                <p className="text-sm text-gray-500">Money going out today</p>
-              </div>
+              <p className="font-medium text-gray-900">Record expense</p>
             </button>
 
             <button

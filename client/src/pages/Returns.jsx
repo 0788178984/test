@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { RotateCcw, Search, AlertCircle } from 'lucide-react';
+import { RotateCcw, Search } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { salesAPI } from '../api/client';
@@ -97,7 +97,7 @@ const Returns = () => {
       toast.error('Enter why this sale is being returned or voided');
       return;
     }
-    if (!window.confirm(`Void receipt ${selectedSale.sale_number}? Stock will be restored and totals updated.`)) {
+    if (!window.confirm(`Void receipt ${selectedSale.sale_number}?`)) {
       return;
     }
     setVoiding(true);
@@ -165,29 +165,7 @@ const Returns = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Returns & voids</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Cancel a completed sale (return policy). Stock goes back on the shelf, loyalty points are reversed, and
-          daily reports no longer count the sale.
-        </p>
-      </div>
-
-      <Card className="border-amber-200 bg-amber-50/80 p-4">
-        <div className="flex gap-3">
-          <AlertCircle className="h-5 w-5 shrink-0 text-amber-700" />
-          <div className="text-sm text-amber-900">
-            <p className="font-semibold">Return policy (how void works)</p>
-            <ul className="mt-2 list-inside list-disc space-y-1 text-amber-800">
-              <li>Only <strong>admin</strong> or <strong>manager</strong> can void a receipt.</li>
-              <li>Full receipt only — all items on that sale are returned to stock.</li>
-              <li>Give cash or MoMo refund to the customer manually; the system reverses the recorded sale.</li>
-              <li>Voided sales show in reports as excluded from revenue (status = voided).</li>
-              <li>Return appears under <strong>Inventory → Adjustments</strong> as type <strong>return</strong>.</li>
-            </ul>
-          </div>
-        </div>
-      </Card>
+      <h1 className="text-2xl font-bold text-gray-900">Returns & voids</h1>
 
       <div className="flex flex-col gap-4 rounded-xl bg-white p-4 shadow-sm sm:flex-row sm:flex-wrap sm:items-end">
         <div>
@@ -310,17 +288,17 @@ const Returns = () => {
         {selectedSale ? (
           <div className="space-y-4">
             <p className="text-sm text-gray-700">
-              Void receipt <strong className="font-mono">{selectedSale.sale_number}</strong> (
-              {formatCurrency(selectedSale.total_amount)})? Stock will be put back and the sale removed from daily
-              totals.
+              <span className="font-mono font-medium">{selectedSale.sale_number}</span>
+              {' · '}
+              {formatCurrency(selectedSale.total_amount)}
             </p>
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
-                Return reason <span className="text-red-500">*</span>
+                Reason <span className="text-red-500">*</span>
               </label>
               <textarea
                 className="form-input min-h-[88px] w-full"
-                placeholder="e.g. Customer returned goods, wrong item sold, damaged product returned…"
+                placeholder="Return reason"
                 value={voidReason}
                 onChange={(e) => setVoidReason(e.target.value)}
                 disabled={voiding}

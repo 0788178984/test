@@ -317,10 +317,6 @@ const Layout = () => {
 
         {(!showSupportTicketList || helpTab === 'new') && (
           <>
-            <p className="text-sm text-gray-600 mb-4">
-              This opens a support ticket for the platform developer. Store staff cannot message the developer from the
-              notification bell; use this form for billing, licensing, or technical help.
-            </p>
             <form onSubmit={submitHelp} className="space-y-4">
               <Input
                 label="Subject"

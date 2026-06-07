@@ -20,15 +20,6 @@ const Subscription = () => {
       : null;
   const expired = expiryDate && expiryDate < new Date();
 
-  const statusNote = () => {
-    const s = String(status).toLowerCase();
-    if (s === 'active') return 'Your store licence is active. Thank you for staying current.';
-    if (s === 'trial') return 'You are on a trial. Contact your system provider to move to an active plan before trial limits apply.';
-    if (s === 'suspended') return 'This store has been suspended. Use Help & support to reach your system provider.';
-    if (s === 'expired') return 'The subscription term has ended. Use Help & support to renew.';
-    return 'If anything looks wrong, use Help & support in the header.';
-  };
-
   return (
     <div className="mx-auto max-w-lg space-y-6 p-4 md:p-6">
       <div>
@@ -36,7 +27,6 @@ const Subscription = () => {
           <Award className="h-8 w-8 text-primary-600" />
           Subscription
         </h1>
-        <p className="mt-1 text-sm text-gray-600">Licence and term for your supermarket (read-only).</p>
       </div>
 
       <Card className="p-6 space-y-5">
@@ -57,7 +47,6 @@ const Subscription = () => {
           <div>
             <p className="text-xs font-medium uppercase text-gray-500">Status</p>
             <p className="text-lg font-semibold capitalize text-gray-900">{status}</p>
-            <p className="text-sm text-gray-600 mt-2">{statusNote()}</p>
           </div>
         </div>
 
@@ -69,10 +58,10 @@ const Subscription = () => {
               <>
                 <p className="text-lg font-semibold text-gray-900">{expires}</p>
                 {expired ? (
-                  <p className="text-sm text-red-700 mt-1">This date has passed — renew with your system provider.</p>
+                  <p className="text-sm text-red-700 mt-1">Expired</p>
                 ) : daysLeft != null ? (
                   <p className="text-sm text-gray-600 mt-1">
-                    About <strong>{daysLeft}</strong> day{daysLeft === 1 ? '' : 's'} remaining on the calendar.
+                    {daysLeft} day{daysLeft === 1 ? '' : 's'} left
                   </p>
                 ) : null}
               </>
@@ -82,11 +71,6 @@ const Subscription = () => {
           </div>
         </div>
       </Card>
-
-      <p className="text-xs text-gray-500 text-center">
-        Billing and licence changes are done by your system developer. Use <strong>Help</strong> in the menu bar to open a
-        ticket.
-      </p>
     </div>
   );
 };

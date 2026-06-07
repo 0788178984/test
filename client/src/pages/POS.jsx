@@ -369,10 +369,7 @@ const POS = () => {
             </div>
             {hasRole('admin', 'manager') && (
               <div className="mt-4 space-y-2 border-t border-gray-100 pt-3">
-                <h4 className="text-sm font-semibold text-gray-900">Wholesale sale</h4>
-                <p className="text-xs text-gray-500">
-                  Same checkout as retail — apply a percentage off shelf prices and label the receipt wholesale.
-                </p>
+                <h4 className="text-sm font-semibold text-gray-900">Wholesale %</h4>
                 <div className="flex flex-wrap items-end gap-2">
                   <label className="min-w-[5rem] flex-1">
                     <span className="mb-1 block text-xs font-medium text-gray-600">% off</span>

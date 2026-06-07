@@ -214,19 +214,6 @@ const Reports = () => {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
-          {activeTab === 'monthly' && dateRange.from && (
-            <p className="mt-1 text-sm text-gray-600">
-              Showing{' '}
-              <span className="font-medium text-gray-900">
-                {new Date(`${dateRange.from}T12:00:00`).toLocaleString(undefined, {
-                  month: 'long',
-                  year: 'numeric',
-                })}
-              </span>
-              {' — '}
-              use the first date to pick the month (range end is ignored for this tab).
-            </p>
-          )}
         </div>
         <div className="flex flex-wrap items-center gap-3">
           {activeTab === 'daily' && (
@@ -278,12 +265,6 @@ const Reports = () => {
                   className="form-input"
                 />
               </>
-            )}
-            {activeTab === 'annual' && (
-              <p className="text-sm text-gray-600">
-                Year from first date:{' '}
-                <span className="font-medium">{dateRange.from.slice(0, 4)}</span>
-              </p>
             )}
           </div>
           <Button onClick={() => fetchReportData()} variant="secondary" size="sm">
@@ -448,10 +429,7 @@ const Reports = () => {
                   <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50/50 px-6 py-14 text-center">
                     <BarChart3 className="mx-auto mb-3 h-10 w-10 text-gray-400" />
                     <p className="text-sm font-medium text-gray-800">No daily breakdown yet</p>
-                    <p className="mt-1 text-sm text-gray-600">
-                      There were no completed sales on any day in this month, or data is still
-                      loading.
-                    </p>
+                    <p className="mt-1 text-sm text-gray-600">No sales this month.</p>
                   </div>
                 )}
               </div>
@@ -620,9 +598,7 @@ const Reports = () => {
             />
           </div>
         ) : (
-          <p className="py-8 text-center text-sm text-gray-600">
-            On-screen data above matches this period. Use Download PDF when preview is unavailable.
-          </p>
+          <p className="py-8 text-center text-sm text-gray-600">Preview unavailable — use Download PDF.</p>
         )}
         <div className="mt-4 flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={closePreview}>
