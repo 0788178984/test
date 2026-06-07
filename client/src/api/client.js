@@ -264,6 +264,10 @@ export const storeAPI = {
   getCalendar: () => api.get('/api/store/calendar'),
 };
 
+export const docsAPI = {
+  getUserGuide: () => api.get('/api/docs/user-guide'),
+};
+
 export const formatDate = (date, options = {}) => {
   const dateObj = new Date(date);
   return new Intl.DateTimeFormat('en-UG', {

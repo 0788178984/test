@@ -35,6 +35,7 @@ const supportRequestRoutes = require('./routes/supportRequests');
 const paymentRoutes = require('./routes/payments');
 const expenseRoutes = require('./routes/expenses');
 const storeRoutes = require('./routes/store');
+const docsRoutes = require('./routes/docs');
 const { getStoreToday, saleLocalDate } = require('./utils/storeTime');
 
 // Import services
@@ -183,6 +184,7 @@ app.use('/api/support-requests', supportRequestRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/store', storeRoutes);
+app.use('/api/docs', docsRoutes);
 app.use('/api/agent-float', require('./routes/agentFloat'));
 
 // Static files for client (in production)

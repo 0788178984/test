@@ -33,6 +33,7 @@ import NotificationBell from '../notifications/NotificationBell';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
+import UserGuidePanel from '../help/UserGuidePanel';
 
 const LG = '(min-width: 1024px)';
 
@@ -44,7 +45,7 @@ const Layout = () => {
   const navigate = useNavigate();
   const { user, logout, hasRole, refreshProfile } = useAuthStore();
   const [helpOpen, setHelpOpen] = useState(false);
-  const [helpTab, setHelpTab] = useState('new');
+  const [helpTab, setHelpTab] = useState('guide');
   const [helpSubject, setHelpSubject] = useState('');
   const [helpBody, setHelpBody] = useState('');
   const [helpSending, setHelpSending] = useState(false);
@@ -287,22 +288,31 @@ const Layout = () => {
         onClose={() => {
           if (helpSending) return;
           setHelpOpen(false);
-          setHelpTab('new');
+          setHelpTab('guide');
         }}
-        title="Help & support"
-        size="md"
+        title="Help"
+        size={helpTab === 'guide' ? 'xl' : 'md'}
       >
-        {showSupportTicketList && (
-          <div className="flex gap-2 mb-4 border-b border-gray-200 pb-3">
-            <button
-              type="button"
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
-                helpTab === 'new' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-              onClick={() => setHelpTab('new')}
-            >
-              New request
-            </button>
+        <div className="mb-4 flex flex-wrap gap-2 border-b border-gray-200 pb-3">
+          <button
+            type="button"
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
+              helpTab === 'guide' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+            onClick={() => setHelpTab('guide')}
+          >
+            User manual
+          </button>
+          <button
+            type="button"
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
+              helpTab === 'new' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+            onClick={() => setHelpTab('new')}
+          >
+            Contact support
+          </button>
+          {showSupportTicketList && (
             <button
               type="button"
               className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
@@ -312,10 +322,12 @@ const Layout = () => {
             >
               Our tickets
             </button>
-          </div>
-        )}
+          )}
+        </div>
 
-        {(!showSupportTicketList || helpTab === 'new') && (
+        {helpTab === 'guide' && <UserGuidePanel />}
+
+        {helpTab === 'new' && (
           <>
             <form onSubmit={submitHelp} className="space-y-4">
               <Input
@@ -355,7 +367,7 @@ const Layout = () => {
           </>
         )}
 
-        {showSupportTicketList && helpTab === 'tickets' && (
+        {helpTab === 'tickets' && showSupportTicketList && (
           <div className="space-y-2">
             {ticketsLoading ? (
               <p className="text-gray-500 text-sm">Loading…</p>

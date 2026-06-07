@@ -5,7 +5,7 @@
 
 This guide explains every major screen, term, and workflow in plain language. It matches the **current production codebase** (June 2026).
 
-**In the app:** screens show titles, fields, and actions only — detailed instructions live here in the user manual, not as banners on every page.
+**In the app:** screens show titles, fields, and actions only — open **Help → User manual** in the top menu bar to read this guide inside the app.
 
 ---
 
