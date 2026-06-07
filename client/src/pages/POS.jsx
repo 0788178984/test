@@ -15,15 +15,19 @@ import MoMoAgentSection from '../components/pos/MoMoAgentSection';
 import { isSoldByWeight, unitLabel } from '../components/pos/AddQuantityModal';
 
 const POS = () => {
-  const { user } = useAuthStore();
+  const { user, hasRole } = useAuthStore();
   const {
     items,
     customer,
     discountAmount,
+    discountReason,
+    isWholesale,
+    wholesalePercent,
     addItem,
     clearCart,
     setCustomer,
-    setDiscount,
+    setWholesale,
+    clearWholesale,
     setProcessing,
     getSubtotal,
     getTotal,
@@ -32,6 +36,14 @@ const POS = () => {
     resetForNextSale,
   } = useCartStore();
 
+  const [wholesaleInput, setWholesaleInput] = useState(() => {
+    try {
+      const saved = localStorage.getItem('default_wholesale_percent');
+      return saved && Number(saved) > 0 ? saved : '10';
+    } catch {
+      return '10';
+    }
+  });
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [lastSale, setLastSale] = useState(null);
@@ -138,6 +150,7 @@ const POS = () => {
         customer_id: customer?.id || null,
         discount_amount: discountAmount,
         discount_reason: discountAmount > 0 ? summary.discountReason || 'Manual discount' : '',
+        wholesale_percent: summary.isWholesale ? summary.wholesalePercent : 0,
         payment_method: paymentData.method,
         payment_reference: paymentData.reference || null,
         amount_paid: paymentData.amountPaid ?? getTotal(),
@@ -159,6 +172,8 @@ const POS = () => {
         taxAmount: data.taxAmount ?? summary.taxAmount,
         discountAmount: summary.discountAmount,
         discountReason: summary.discountReason,
+        isWholesale: summary.isWholesale,
+        wholesalePercent: summary.wholesalePercent,
         amountPaid: data.amountPaid ?? paymentData.amountPaid ?? summary.total,
         changeGiven: data.changeGiven ?? paymentData.changeGiven ?? 0,
         paymentMethod: paymentData.method,
@@ -336,14 +351,79 @@ const POS = () => {
                 <span className="font-medium">{formatCurrency(subtotal)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Discount</span>
+                <span className="text-gray-600">
+                  Discount
+                  {isWholesale && wholesalePercent > 0 ? (
+                    <span className="ml-1 rounded bg-violet-100 px-1.5 py-0.5 text-xs font-semibold text-violet-800">
+                      Wholesale {wholesalePercent}%
+                    </span>
+                  ) : null}
+                </span>
                 <span className="font-medium text-red-600">-{formatCurrency(discountAmount)}</span>
               </div>
+              {discountReason && discountAmount > 0 ? (
+                <p className="text-xs text-gray-500">{discountReason}</p>
+              ) : null}
               <div className="flex justify-between border-t border-gray-200 pt-2 text-base font-bold">
                 <span>Due</span>
                 <span className="text-primary-600">{formatCurrency(total)}</span>
               </div>
             </div>
+            {hasRole('admin', 'manager') && (
+              <div className="mt-4 space-y-2 border-t border-gray-100 pt-3">
+                <h4 className="text-sm font-semibold text-gray-900">Wholesale sale</h4>
+                <p className="text-xs text-gray-500">
+                  Same checkout as retail — apply a percentage off shelf prices and label the receipt wholesale.
+                </p>
+                <div className="flex flex-wrap items-end gap-2">
+                  <label className="min-w-[5rem] flex-1">
+                    <span className="mb-1 block text-xs font-medium text-gray-600">% off</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      step={1}
+                      className="form-input w-full"
+                      value={wholesaleInput}
+                      onChange={(e) => setWholesaleInput(e.target.value)}
+                      disabled={items.length === 0}
+                    />
+                  </label>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    disabled={items.length === 0}
+                    onClick={() => {
+                      const p = Number(wholesaleInput);
+                      if (!Number.isFinite(p) || p <= 0 || p > 100) {
+                        toast.error('Enter a wholesale percentage between 1 and 100');
+                        return;
+                      }
+                      setWholesale(p);
+                      toast.success(`Wholesale ${p}% applied`);
+                    }}
+                  >
+                    Apply
+                  </Button>
+                </div>
+                {isWholesale ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => {
+                      clearWholesale();
+                      toast.success('Wholesale pricing cleared');
+                    }}
+                  >
+                    Clear wholesale
+                  </Button>
+                ) : null}
+              </div>
+            )}
+
             <div className="mt-4 space-y-2 border-t border-gray-100 pt-3">
               <div className="flex flex-col gap-2">
                 <Button
@@ -351,7 +431,7 @@ const POS = () => {
                   variant="secondary"
                   size="sm"
                   className="flex w-full items-center justify-start gap-2 text-left"
-                  onClick={() => setDiscount(0)}
+                  onClick={() => clearWholesale()}
                 >
                   <Tag className="h-4 w-4 shrink-0 text-primary-600" aria-hidden />
                   <span className="min-w-0 leading-snug">Clear discount</span>

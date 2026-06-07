@@ -9,6 +9,9 @@ const Cart = ({ onCheckout }) => {
     items,
     customer,
     discountAmount,
+    discountReason,
+    isWholesale,
+    wholesalePercent,
     getSubtotal,
     getTotal,
     getItemCount,
@@ -171,11 +174,22 @@ const Cart = ({ onCheckout }) => {
 
           {/* Discount */}
           {discountAmount > 0 && (
-            <div className="flex justify-between">
-              <span className="text-sm text-red-600">Discount:</span>
-              <span className="font-medium text-red-600">
-                -{formatCurrency(discountAmount)}
-              </span>
+            <div className="space-y-0.5">
+              <div className="flex justify-between">
+                <span className="text-sm text-red-600">
+                  Discount
+                  {isWholesale && wholesalePercent > 0 ? (
+                    <span className="ml-1 text-xs text-violet-700">(Wholesale {wholesalePercent}%)</span>
+                  ) : null}
+                  :
+                </span>
+                <span className="font-medium text-red-600">
+                  -{formatCurrency(discountAmount)}
+                </span>
+              </div>
+              {discountReason ? (
+                <p className="text-xs text-gray-500">{discountReason}</p>
+              ) : null}
             </div>
           )}
 

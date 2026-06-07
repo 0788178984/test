@@ -1,12 +1,39 @@
 import { create } from 'zustand';
 import { roundUgx, computeSaleTotals } from '../utils/money';
 
+export const WHOLESALE_REASON_PREFIX = 'Wholesale';
+
+export function wholesaleDiscountReason(percent) {
+  const p = Math.round(Number(percent) || 0);
+  return `${WHOLESALE_REASON_PREFIX} (${p}% off)`;
+}
+
+export function calcWholesaleDiscount(subtotal, percent) {
+  const p = Math.min(100, Math.max(0, Number(percent) || 0));
+  return roundUgx((Number(subtotal) || 0) * (p / 100));
+}
+
+function recalcWholesaleDiscount(state) {
+  if (!state.isWholesale || !(Number(state.wholesalePercent) > 0)) {
+    return null;
+  }
+  const subtotal = roundUgx(
+    state.items.reduce((sum, item) => sum + item.line_total, 0)
+  );
+  return {
+    discountAmount: calcWholesaleDiscount(subtotal, state.wholesalePercent),
+    discountReason: wholesaleDiscountReason(state.wholesalePercent),
+  };
+}
+
 const useCartStore = create((set, get) => ({
   // State
   items: [],
   customer: null,
   discountAmount: 0,
   discountReason: '',
+  isWholesale: false,
+  wholesalePercent: 0,
   paymentMethod: 'cash',
   paymentReference: '',
   isProcessing: false,
@@ -23,7 +50,10 @@ const useCartStore = create((set, get) => ({
           ? { ...item, quantity: newQty, line_total: roundUgx(item.unit_price * newQty) }
           : item
       );
-      set({ items: updatedItems });
+      const next = { items: updatedItems };
+      const wholesalePatch = recalcWholesaleDiscount({ ...get(), ...next });
+      set(wholesalePatch ? { ...next, ...wholesalePatch } : next);
+      return;
     } else {
       // Add new item
       const newItem = {
@@ -38,13 +68,17 @@ const useCartStore = create((set, get) => ({
         quantity,
         line_total: roundUgx(product.selling_price * quantity)
       };
-      set({ items: [...items, newItem] });
+      const next = { items: [...items, newItem] };
+      const wholesalePatch = recalcWholesaleDiscount({ ...get(), ...next });
+      set(wholesalePatch ? { ...next, ...wholesalePatch } : next);
     }
   },
 
   removeItem: (productId) => {
     const items = get().items.filter(item => item.id !== productId);
-    set({ items });
+    const next = { items };
+    const wholesalePatch = recalcWholesaleDiscount({ ...get(), ...next });
+    set(wholesalePatch ? { ...next, ...wholesalePatch } : next);
   },
 
   updateQuantity: (productId, quantity) => {
@@ -58,7 +92,9 @@ const useCartStore = create((set, get) => ({
         ? { ...item, quantity, line_total: roundUgx(item.unit_price * quantity) }
         : item
     );
-    set({ items });
+    const next = { items };
+    const wholesalePatch = recalcWholesaleDiscount({ ...get(), ...next });
+    set(wholesalePatch ? { ...next, ...wholesalePatch } : next);
   },
 
   setQuantity: (productId, quantity) => {
@@ -67,7 +103,9 @@ const useCartStore = create((set, get) => ({
         ? { ...item, quantity, line_total: roundUgx(item.unit_price * quantity) }
         : item
     );
-    set({ items });
+    const next = { items };
+    const wholesalePatch = recalcWholesaleDiscount({ ...get(), ...next });
+    set(wholesalePatch ? { ...next, ...wholesalePatch } : next);
   },
 
   clearCart: () => {
@@ -76,6 +114,8 @@ const useCartStore = create((set, get) => ({
       customer: null,
       discountAmount: 0,
       discountReason: '',
+      isWholesale: false,
+      wholesalePercent: 0,
       paymentMethod: 'cash',
       paymentReference: '',
     });
@@ -87,6 +127,8 @@ const useCartStore = create((set, get) => ({
       items: [],
       discountAmount: 0,
       discountReason: '',
+      isWholesale: false,
+      wholesalePercent: 0,
       paymentMethod: 'cash',
       paymentReference: '',
       isProcessing: false,
@@ -98,9 +140,45 @@ const useCartStore = create((set, get) => ({
   },
 
   setDiscount: (amount, reason = '') => {
-    set({ 
-      discountAmount: amount || 0, 
-      discountReason: reason 
+    set({
+      discountAmount: amount || 0,
+      discountReason: reason,
+      isWholesale: false,
+      wholesalePercent: 0,
+    });
+  },
+
+  setWholesale: (percent) => {
+    const p = Math.min(100, Math.max(0, Number(percent) || 0));
+    if (p <= 0) {
+      set({
+        isWholesale: false,
+        wholesalePercent: 0,
+        discountAmount: 0,
+        discountReason: '',
+      });
+      return;
+    }
+    const subtotal = get().getSubtotal();
+    set({
+      isWholesale: true,
+      wholesalePercent: p,
+      discountAmount: calcWholesaleDiscount(subtotal, p),
+      discountReason: wholesaleDiscountReason(p),
+    });
+    try {
+      localStorage.setItem('default_wholesale_percent', String(p));
+    } catch {
+      /* ignore */
+    }
+  },
+
+  clearWholesale: () => {
+    set({
+      isWholesale: false,
+      wholesalePercent: 0,
+      discountAmount: 0,
+      discountReason: '',
     });
   },
 
@@ -190,9 +268,11 @@ const useCartStore = create((set, get) => ({
     const maxDiscount = points * pointValue;
     const discountAmount = Math.min(maxDiscount, subtotal);
     
-    set({ 
-      discountAmount, 
-      discountReason: `Redeemed ${points} loyalty points` 
+    set({
+      discountAmount,
+      discountReason: `Redeemed ${points} loyalty points`,
+      isWholesale: false,
+      wholesalePercent: 0,
     });
     
     return discountAmount;
@@ -214,13 +294,15 @@ const useCartStore = create((set, get) => ({
       subtotal,
       discountAmount,
       discountReason: get().discountReason,
+      isWholesale: get().isWholesale,
+      wholesalePercent: get().wholesalePercent,
       taxAmount,
       total,
       itemCount,
       totalProfit,
       customer: get().customer,
       paymentMethod: get().paymentMethod,
-      paymentReference: get().paymentReference
+      paymentReference: get().paymentReference,
     };
   },
 

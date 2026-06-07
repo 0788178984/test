@@ -67,7 +67,7 @@ All “today”, “yesterday”, and daily totals use **East Africa Time (Afric
 | Requested feature | Status | Where to find it |
 |-------------------|--------|------------------|
 | **Projected profit if sold** | ✅ Implemented | **Inventory → Overview** — “Projected profit if sold” card; also per category and per product tables |
-| **Wholesale prices when selling to another branch** | ❌ Not implemented | There is no separate wholesale price or branch-to-branch stock transfer module yet |
+| **Wholesale sale (% off shelf price)** | ✅ Implemented | **POS → Wholesale sale** (admin/manager): enter % off, apply — normal checkout, receipt labeled `Wholesale (X% off)` |
 | **Only admin/manager can change prices** | ✅ Implemented | **Products** page (admin/manager only); cashiers cannot edit prices |
 | **Daily organisation by category** | ✅ Partially | **Inventory → By category** table; **Expenses** filter by category per day; **POS** category filters |
 | **Total stock expenditure (daily / per day)** | ✅ Partially | **Total stock expenditure** = current stock value at cost (snapshot). **Daily** stock spending = **Inventory → Purchases** tab, grouped by Today / Yesterday / date |
@@ -102,9 +102,10 @@ Use **View in Reports** for fuller daily analysis.
 1. Scan barcode or search product name.
 2. Choose quantity (supports kg/L for weight products).
 3. Optionally attach a **customer** (for loyalty points).
-4. Apply **discount** if your role allows (cashiers: max 5%).
-5. **Proceed to checkout** → choose payment (Cash, MTN MoMo, Airtel Money, etc.).
-6. Confirm → receipt prints or can be sent.
+4. **Admin/manager only:** under **Order totals**, use **Wholesale sale** — enter % off (e.g. 10) and tap **Apply**. This is a normal sale with a percentage discount and a **Wholesale** label on the receipt (not a separate branch transfer).
+5. Apply other **discounts** if needed (cashiers: max 5% on retail; cashiers cannot use wholesale).
+6. **Proceed to checkout** → choose payment (Cash, MTN MoMo, Airtel Money, etc.).
+7. Confirm → receipt prints or can be sent.
 
 ### Keyboard shortcuts
 
@@ -119,6 +120,8 @@ Use **View in Reports** for fuller daily analysis.
 |------|---------|
 | **Subtotal** | Sum of line items before discount and tax |
 | **Discount** | Amount taken off the bill |
+| **Wholesale sale** | Retail checkout with a set **percentage off** all shelf prices; only admin/manager can apply; stored as discount reason `Wholesale (X% off)` |
+| **Wholesale %** | Percentage decrement from selling price (1–100%) |
 | **VAT / Tax** | 18% VAT applied per store rules |
 | **Total** | Amount the customer pays |
 | **Amount paid** | Cash handed over (cash sales) |
@@ -291,7 +294,7 @@ Store name, address, phone, TIN, tax rate, receipt footer, notification hooks.
 
 Each store has a unique **store code**. Data is isolated per store — sales, products, and reports never mix between codes.
 
-**Important:** The system does **not** yet support **wholesale transfer pricing** or automatic **stock sales between branches**. To supply another branch today, use separate stores and manual stock/product management, or record transfers as adjustments with notes.
+**Wholesale pricing** is done at **POS** (percentage off shelf prices), not as a separate product price field. There is **no** automatic stock transfer between store codes — each store remains separate.
 
 ---
 
@@ -326,14 +329,14 @@ Each store has a unique **store code**. Data is isolated per store — sales, pr
 | **PWA** | Progressive Web App — installable web version |
 | **PIN** | 4-digit cashier/manager/admin quick login |
 | **JWT session** | Secure login token (expires after hours of inactivity) |
-| **Wholesale price** | *Not in system yet* — would be a special lower price for branch-to-branch sales |
-| **Branch transfer** | *Not in system yet* — automated inter-store stock movement |
+| **Wholesale sale** | POS sale with % discount off shelf prices; label on receipt; admin/manager only |
+| **Wholesale %** | Percentage off selling price for that receipt (e.g. 15% → customer pays 85% of shelf total) |
 
 ---
 
 ## 14. Known limitations
 
-1. **No wholesale / inter-branch sales module** — no separate wholesale price field or transfer workflow between store codes.
+1. **Wholesale** is a **percentage discount at POS**, not a separate stored wholesale price per product.
 2. **Total stock expenditure** on Overview is a **current snapshot**, not “spent today only”; use **Purchases** tab for daily stock-in spending.
 3. **Reports → Daily Sales** shows totals, not every receipt line; use **Dashboard** or **PDF export** for transaction lists.
 4. **PDF sales table** shows date per sale; for exact time, use Dashboard or database export.
@@ -347,6 +350,7 @@ Each store has a unique **store code**. Data is isolated per store — sales, pr
 |------|--------|
 | Sell to customer | POS |
 | Change selling price | Products (admin/manager) |
+| Sell at wholesale (% off) | POS → Wholesale sale (admin/manager) |
 | See profit if all stock sells | Inventory → Overview |
 | See what stock we bought today | Inventory → Purchases |
 | See sales today with time | Dashboard → Today's Sales |

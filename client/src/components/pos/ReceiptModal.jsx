@@ -83,9 +83,19 @@ const ReceiptModal = ({ sale, onClose, onPrint, onSendSMS, onSendWhatsApp }) => 
               <span>{formatCurrency(sale.subtotal ?? 0)}</span>
             </div>
             {(sale.discountAmount || 0) > 0 && (
-              <div className="flex justify-between text-red-600">
-                <span>Discount</span>
-                <span>-{formatCurrency(sale.discountAmount)}</span>
+              <div className="space-y-0.5 text-red-600">
+                <div className="flex justify-between">
+                  <span>
+                    Discount
+                    {sale.isWholesale && sale.wholesalePercent > 0
+                      ? ` (Wholesale ${sale.wholesalePercent}%)`
+                      : ''}
+                  </span>
+                  <span>-{formatCurrency(sale.discountAmount)}</span>
+                </div>
+                {sale.discountReason ? (
+                  <p className="text-xs text-gray-600">{sale.discountReason}</p>
+                ) : null}
               </div>
             )}
             <div className="receipt-total flex justify-between text-base font-bold">

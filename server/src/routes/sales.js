@@ -32,6 +32,7 @@ router.post('/', checkPermission('make_sale'), async (req, res) => {
       customer_id,
       discount_amount = 0,
       discount_reason,
+      wholesale_percent = 0,
       payment_method,
       payment_reference,
       notes,
@@ -88,6 +89,28 @@ router.post('/', checkPermission('make_sale'), async (req, res) => {
 
     subtotal = roundUgx(subtotal);
     const discount_amount_r = roundUgx(discount_amount);
+    const wholesalePct = Math.min(100, Math.max(0, Number(wholesale_percent) || 0));
+    const reasonText = String(discount_reason || '');
+    const isWholesaleSale =
+      wholesalePct > 0 || /^Wholesale\s*\(/i.test(reasonText);
+
+    if (isWholesaleSale && req.user.role === 'cashier') {
+      return res.status(403).json({ error: 'Only admin or manager can complete wholesale sales.' });
+    }
+
+    if (isWholesaleSale) {
+      const pctMatch = reasonText.match(/Wholesale\s*\((\d+(?:\.\d+)?)%/i);
+      const effectivePct = wholesalePct > 0 ? wholesalePct : Number(pctMatch?.[1]) || 0;
+      if (effectivePct <= 0 || effectivePct > 100) {
+        return res.status(400).json({ error: 'Wholesale sales need a percentage between 1 and 100.' });
+      }
+      const expectedDiscount = roundUgx(subtotal * (effectivePct / 100));
+      if (Math.abs(discount_amount_r - expectedDiscount) > 1) {
+        return res.status(400).json({
+          error: `Wholesale discount must match ${effectivePct}% of subtotal (expected UGX ${expectedDiscount}).`,
+        });
+      }
+    }
 
     // Apply discount limits for cashiers
     if (req.user.role === 'cashier' && discount_amount_r > 0) {
