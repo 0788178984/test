@@ -1,7 +1,6 @@
 # Uganda Supermarket Manager — Comprehensive User Guide
 
 **Production app:** [https://supermkt-n1nf.onrender.com/](https://supermkt-n1nf.onrender.com/)  
-**Source repository:** [https://github.com/0788178984/test.git](https://github.com/0788178984/test.git)
 
 This guide explains every major screen, term, and workflow in plain language. It matches the **current production codebase** (June 2026).
 
