@@ -9,6 +9,7 @@ const {
   getProductCategories,
   normalizeProductCategory,
 } = require('../db/businessTypes');
+const { assertSellingNotBelowCost } = require('../utils/money');
 const router = express.Router();
 
 async function businessTypeForUser(user) {
@@ -181,8 +182,13 @@ router.post('/', checkPermission('add_edit_products'), async (req, res) => {
       tax_rate, current_stock, minimum_stock, supplier_id, expiry_date
     } = req.body;
 
-    if (!name || !buying_price || !selling_price) {
+    if (!name || buying_price === undefined || selling_price === undefined) {
       return res.status(400).json({ error: 'Name, buying price, and selling price are required.' });
+    }
+
+    const priceCheck = assertSellingNotBelowCost(buying_price, selling_price);
+    if (!priceCheck.ok) {
+      return res.status(400).json({ error: priceCheck.error });
     }
 
     const businessType = await businessTypeForUser(req.user);
@@ -202,7 +208,7 @@ router.post('/', checkPermission('add_edit_products'), async (req, res) => {
         created_at, updated_at, sync_status
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 'pending')
     `).run(
-      productId, name, barcode, sku, normalizedCategory, unit || 'piece', buying_price, selling_price,
+      productId, name, barcode, sku, normalizedCategory, unit || 'piece', priceCheck.buy, priceCheck.sell,
       tax_rate ?? 0, openingQty, minimum_stock || 5, supplier_id, expiry_date,
       req.user.business_id
     );
@@ -223,7 +229,7 @@ router.post('/', checkPermission('add_edit_products'), async (req, res) => {
         openingQty,
         'Initial stock on product create',
         supplier_id || null,
-        buying_price,
+        priceCheck.buy,
         req.user.business_id
       );
     }
@@ -255,6 +261,13 @@ router.put('/:id', checkPermission('add_edit_products'), async (req, res) => {
 
     if (!existingProduct) {
       return res.status(404).json({ error: 'Product not found.' });
+    }
+
+    if (buying_price !== undefined && selling_price !== undefined) {
+      const priceCheck = assertSellingNotBelowCost(buying_price, selling_price);
+      if (!priceCheck.ok) {
+        return res.status(400).json({ error: priceCheck.error });
+      }
     }
 
     const businessType = await businessTypeForUser(req.user);

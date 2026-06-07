@@ -165,6 +165,23 @@ const Inventory = () => {
     },
   ];
 
+  const renderProfitCell = (profit, belowCost) => (
+    <span
+      className={
+        profit < 0
+          ? 'font-medium text-red-700'
+          : profit > 0
+            ? 'font-medium text-green-700'
+            : belowCost
+              ? 'font-medium text-amber-700'
+              : 'text-gray-600'
+      }
+    >
+      {formatCurrency(profit)}
+      {profit < 0 ? ' (loss)' : ''}
+    </span>
+  );
+
   const categoryColumns = [
     { header: 'Category', accessor: 'category' },
     {
@@ -189,11 +206,7 @@ const Inventory = () => {
       header: 'Projected profit',
       accessor: 'profit_value',
       cellClassName: 'text-right',
-      render: (row) => (
-        <span className={row.profit_value > 0 ? 'text-green-700 font-medium' : 'text-gray-600'}>
-          {formatCurrency(row.profit_value)}
-        </span>
-      ),
+      render: (row) => renderProfitCell(row.profit_value, row.selling_below_cost),
     },
   ];
 
@@ -216,7 +229,11 @@ const Inventory = () => {
       header: 'Sell / unit',
       accessor: 'selling_price',
       cellClassName: 'text-right',
-      render: (row) => formatCurrency(row.selling_price),
+      render: (row) => (
+        <span className={row.selling_below_cost ? 'font-medium text-red-700' : ''}>
+          {formatCurrency(row.selling_price)}
+        </span>
+      ),
     },
     {
       header: 'Stock spend',
@@ -234,11 +251,7 @@ const Inventory = () => {
       header: 'Profit if sold',
       accessor: 'profit_value',
       cellClassName: 'text-right',
-      render: (row) => (
-        <span className={row.profit_value > 0 ? 'text-green-700 font-medium' : 'text-gray-600'}>
-          {formatCurrency(row.profit_value)}
-        </span>
-      ),
+      render: (row) => renderProfitCell(row.profit_value, row.selling_below_cost),
     },
   ];
 
@@ -356,6 +369,12 @@ const Inventory = () => {
 
           <div>
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Stock valuation</h2>
+            {!loading && Number(summary?.below_cost_products ?? 0) > 0 && (
+              <p className="mb-3 text-sm font-medium text-red-700">
+                {Number(summary.below_cost_products)} product
+                {Number(summary.below_cost_products) === 1 ? '' : 's'} sell below cost — update selling prices under Products.
+              </p>
+            )}
             <div className="stat-grid sm:grid-cols-2 lg:grid-cols-4">
               <StatCard
                 icon={Receipt}
@@ -378,10 +397,17 @@ const Inventory = () => {
               <StatCard
                 icon={PiggyBank}
                 iconWrapClassName="p-0 bg-transparent"
-                iconClassName="h-8 w-8 text-green-600"
+                iconClassName={`h-8 w-8 ${!loading && Number(summary?.projected_profit_if_sold ?? 0) < 0 ? 'text-red-600' : 'text-green-600'}`}
                 currency
                 value={loading ? '—' : formatCurrency(summary?.projected_profit_if_sold ?? 0)}
-                label="Projected profit if sold"
+                label={
+                  !loading && Number(summary?.projected_profit_if_sold ?? 0) < 0
+                    ? 'Projected loss if sold'
+                    : 'Projected profit if sold'
+                }
+                valueClassName={
+                  !loading && Number(summary?.projected_profit_if_sold ?? 0) < 0 ? 'text-red-700' : ''
+                }
               />
               <StatCard
                 icon={TrendingUp}

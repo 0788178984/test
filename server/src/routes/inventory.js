@@ -229,7 +229,8 @@ router.get('/summary', checkPermission('view_inventory'), async (req, res) => {
         COUNT(CASE WHEN expiry_date IS NOT NULL AND date(expiry_date) < date('now') AND current_stock > 0 THEN 1 END) as expired_count,
         COUNT(CASE WHEN expiry_date IS NOT NULL AND date(expiry_date) <= date('now', '+30 days') AND date(expiry_date) >= date('now') AND current_stock > 0 THEN 1 END) as expiring_soon_count,
         COALESCE(SUM(CASE WHEN is_active = 1 THEN current_stock * buying_price ELSE 0 END), 0) as stock_value_at_cost,
-        COALESCE(SUM(CASE WHEN is_active = 1 THEN current_stock * selling_price ELSE 0 END), 0) as stock_value_at_selling
+        COALESCE(SUM(CASE WHEN is_active = 1 THEN current_stock * selling_price ELSE 0 END), 0) as stock_value_at_selling,
+        COUNT(CASE WHEN is_active = 1 AND current_stock > 0 AND selling_price < buying_price THEN 1 END) as below_cost_products
       FROM products
       WHERE deleted_at IS NULL AND business_id = ?
     `
@@ -238,7 +239,7 @@ router.get('/summary', checkPermission('view_inventory'), async (req, res) => {
 
     const stockExpenditure = roundUgx(raw.stock_value_at_cost);
     const potentialRevenue = roundUgx(raw.stock_value_at_selling);
-    const projectedProfit = Math.max(0, potentialRevenue - stockExpenditure);
+    const projectedProfit = roundUgx(potentialRevenue - stockExpenditure);
     const projectedMarginPercent =
       potentialRevenue > 0 ? Math.round((projectedProfit / potentialRevenue) * 1000) / 10 : 0;
 
@@ -264,7 +265,9 @@ router.get('/summary', checkPermission('view_inventory'), async (req, res) => {
       stock_expenditure: stockExpenditure,
       potential_sales_revenue: potentialRevenue,
       projected_profit_if_sold: projectedProfit,
+      projected_loss_if_negative: projectedProfit < 0,
       projected_margin_percent: projectedMarginPercent,
+      below_cost_products: Number(raw.below_cost_products) || 0,
       lifetime_purchase_expenditure: roundUgx(purchaseRow?.lifetime_purchase_expenditure),
     };
 
@@ -310,18 +313,30 @@ router.get('/summary', checkPermission('view_inventory'), async (req, res) => {
 
     res.json({
       summary,
-      categoryBreakdown: categoryBreakdown.map((row) => ({
-        ...row,
-        cost_value: roundUgx(row.cost_value),
-        sell_value: roundUgx(row.sell_value),
-        profit_value: Math.max(0, roundUgx(row.sell_value) - roundUgx(row.cost_value)),
-      })),
-      productValuation: productValuation.map((row) => ({
-        ...row,
-        cost_value: roundUgx(row.cost_value),
-        sell_value: roundUgx(row.sell_value),
-        profit_value: roundUgx(row.profit_value),
-      })),
+      categoryBreakdown: categoryBreakdown.map((row) => {
+        const cost = roundUgx(row.cost_value);
+        const sell = roundUgx(row.sell_value);
+        const profit = roundUgx(sell - cost);
+        return {
+          ...row,
+          cost_value: cost,
+          sell_value: sell,
+          profit_value: profit,
+          selling_below_cost: sell < cost,
+        };
+      }),
+      productValuation: productValuation.map((row) => {
+        const cost = roundUgx(row.cost_value);
+        const sell = roundUgx(row.sell_value);
+        const profit = roundUgx(row.profit_value);
+        return {
+          ...row,
+          cost_value: cost,
+          sell_value: sell,
+          profit_value: profit,
+          selling_below_cost: Number(row.selling_price) < Number(row.buying_price),
+        };
+      }),
     });
   } catch (error) {
     console.error('Get inventory summary error:', error);
@@ -381,7 +396,7 @@ router.get('/purchase-history', checkPermission('view_inventory'), async (req, r
         unit_sell: roundUgx(unitSell),
         expenditure,
         expected_revenue,
-        expected_profit: Math.max(0, expected_revenue - expenditure),
+        expected_profit: roundUgx(expected_revenue - expenditure),
         user_name: row.user_name,
         reason: row.reason,
       };

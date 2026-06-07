@@ -161,6 +161,10 @@ const Products = () => {
       toast.error('Enter valid buying and selling prices');
       return;
     }
+    if (payload.selling_price < payload.buying_price) {
+      toast.error('Selling price cannot be lower than buying price');
+      return;
+    }
 
     try {
       if (editingProduct?.id) {
@@ -236,7 +240,19 @@ const Products = () => {
       render: (row) => renderStockStatus(Number(row.current_stock), Number(row.minimum_stock)),
     },
     { header: 'Buying Price', accessor: 'buying_price', render: (row) => formatCurrency(row.buying_price) },
-    { header: 'Selling Price', accessor: 'selling_price', render: (row) => formatCurrency(row.selling_price) },
+    {
+      header: 'Selling Price',
+      accessor: 'selling_price',
+      render: (row) => {
+        const below = Number(row.selling_price) < Number(row.buying_price);
+        return (
+          <span className={below ? 'font-medium text-red-700' : ''}>
+            {formatCurrency(row.selling_price)}
+            {below ? ' ⚠' : ''}
+          </span>
+        );
+      },
+    },
     { header: 'Actions', accessor: 'actions', cellClassName: 'text-right', render: renderActions },
   ];
 

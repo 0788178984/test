@@ -11,4 +11,17 @@ function computeSaleTotals(subtotal, discountAmount = 0) {
   return { subtotal: sub, discountAmount: disc, taxAmount: 0, totalAmount: net };
 }
 
-module.exports = { roundUgx, computeSaleTotals };
+/** Reject selling below cost — returns { ok, buy, sell } or { ok: false, error }. */
+function assertSellingNotBelowCost(buyingPrice, sellingPrice) {
+  const buy = roundUgx(buyingPrice);
+  const sell = roundUgx(sellingPrice);
+  if (sell < buy) {
+    return {
+      ok: false,
+      error: `Selling price (UGX ${sell.toLocaleString()}) cannot be lower than buying price (UGX ${buy.toLocaleString()}).`,
+    };
+  }
+  return { ok: true, buy, sell };
+}
+
+module.exports = { roundUgx, computeSaleTotals, assertSellingNotBelowCost };

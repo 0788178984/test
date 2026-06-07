@@ -205,7 +205,7 @@ When you **create a product with opening stock**, the system records an **initia
 | **Expiring soon (30 days)** | Expiry within next 30 days |
 | **Total stock expenditure** | Current stock × **buying price** (money tied up in inventory at cost) |
 | **Potential sales revenue** | Current stock × **selling price** (if everything sold at shelf price) |
-| **Projected profit if sold** | Potential revenue minus stock expenditure (estimated gross profit if all current stock sells) |
+| **Projected profit if sold** | Potential revenue minus stock expenditure — shows a **loss in red** if selling prices are below cost; the system blocks new/edited products where sell &lt; buy |
 | **Recorded stock purchases** | Lifetime sum of positive stock adjustments × cost (historical buying recorded in system) |
 
 ### By category table
