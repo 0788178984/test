@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Smartphone, RefreshCw } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Smartphone, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { agentFloatAPI, formatCurrency, formatDate, handleApiError, usersAPI } from '../../api/client';
 import Currency from '../ui/Currency';
@@ -29,7 +30,12 @@ const defaultTxForm = () => ({
   notes: '',
 });
 
-const MoMoAgentSection = () => {
+/**
+ * @param {{ embedded?: boolean, defaultExpanded?: boolean }} props
+ * embedded — compact collapsible panel on POS (does not stretch over checkout).
+ */
+const MoMoAgentSection = ({ embedded = false, defaultExpanded = true }) => {
+  const [expanded, setExpanded] = useState(embedded ? defaultExpanded : true);
   const user = useAuthStore((s) => s.user);
   const hasRole = useAuthStore((s) => s.hasRole);
   const isSupervisor = user && ['admin', 'manager'].includes(user.role);
@@ -196,21 +202,62 @@ const MoMoAgentSection = () => {
 
   const isOpen = session?.status === 'open';
 
+  const sectionCls = embedded
+    ? 'relative z-0 isolate rounded-xl border border-amber-200 bg-gradient-to-b from-amber-50/80 to-white shadow-sm'
+    : 'rounded-xl border-2 border-amber-200 bg-gradient-to-b from-amber-50/80 to-white p-4 shadow-sm';
+
   return (
-    <section className="rounded-xl border-2 border-amber-200 bg-gradient-to-b from-amber-50/80 to-white p-4 shadow-sm">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="flex items-center gap-2 text-lg font-bold text-gray-900">
-            <Smartphone className="h-5 w-5 text-amber-600" />
+    <section className={sectionCls}>
+      <div
+        className={`flex flex-wrap items-center justify-between gap-3 ${embedded ? 'border-b border-amber-100 px-4 py-3' : 'mb-4'}`}
+      >
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <h2 className="flex items-center gap-2 text-base font-bold text-gray-900 sm:text-lg">
+            <Smartphone className="h-5 w-5 shrink-0 text-amber-600" />
             Mobile money agent
           </h2>
+          {embedded && !expanded && session?.status === 'open' ? (
+            <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+              Float open
+            </span>
+          ) : null}
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {embedded ? (
+            <>
+              <Link
+                to="/mobile-money"
+                className="text-xs font-medium text-amber-800 underline-offset-2 hover:underline"
+              >
+                Full screen
+              </Link>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-800 hover:bg-amber-50"
+                onClick={() => setExpanded((v) => !v)}
+                aria-expanded={expanded}
+              >
+                {expanded ? (
+                  <>
+                    <ChevronUp className="h-4 w-4" aria-hidden />
+                    Collapse
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="h-4 w-4" aria-hidden />
+                    Expand
+                  </>
+                )}
+              </button>
+            </>
+          ) : null}
+          {(expanded || !embedded) && (
           <Button type="button" variant="secondary" size="sm" onClick={load} disabled={loading}>
             <RefreshCw className={`mr-1 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
-          {!session && canManageSession && (
+          )}
+          {(expanded || !embedded) && !session && canManageSession && (
             <Button
               type="button"
               variant="primary"
@@ -226,7 +273,7 @@ const MoMoAgentSection = () => {
               Open today&apos;s float
             </Button>
           )}
-          {isOpen && canManageSession && (
+          {(expanded || !embedded) && isOpen && canManageSession && (
             <Button
               type="button"
               variant="secondary"
@@ -247,6 +294,18 @@ const MoMoAgentSection = () => {
         </div>
       </div>
 
+      {embedded && !expanded ? (
+        <p className="px-4 py-2 text-xs text-gray-600">
+          Collapsed — expand to record agent float, or use{' '}
+          <Link to="/mobile-money" className="font-medium text-amber-800 underline-offset-2 hover:underline">
+            Mobile money
+          </Link>{' '}
+          in the menu.
+        </p>
+      ) : null}
+
+      {(expanded || !embedded) && (
+      <div className={embedded ? 'max-h-[min(50vh,28rem)] overflow-y-auto p-4 pt-3' : undefined}>
       {isSupervisor && (
         <div className="mb-4 max-w-xl rounded-lg border border-amber-100 bg-white/80 p-3">
           <label className="block text-sm font-medium text-gray-800">Which cashier is this float for?</label>
@@ -420,6 +479,9 @@ const MoMoAgentSection = () => {
             </table>
           </div>
         </>
+      )}
+
+      </div>
       )}
 
       <Modal isOpen={openModal} onClose={() => setOpenModal(false)} title="Open float — today" size="md">

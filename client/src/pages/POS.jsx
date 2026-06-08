@@ -271,7 +271,7 @@ const POS = () => {
     <div className="mx-auto flex max-w-[1600px] flex-col gap-4 pb-8">
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-6">
         {/* Step 1–2: Scan + catalogue */}
-        <section className="order-1 space-y-4 lg:col-span-5">
+        <section className="order-1 space-y-4 lg:col-span-5 lg:self-start">
           <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <h2 className="mb-2 flex items-center gap-2 text-lg font-semibold text-gray-900">
               <Search className="h-5 w-5 text-primary-600" />
@@ -324,7 +324,7 @@ const POS = () => {
         </section>
 
         {/* Step 3: Cart */}
-        <section className="order-2 lg:col-span-4">
+        <section className="order-2 lg:col-span-4 lg:self-start relative z-10">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <h2 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
               <CreditCard className="h-4 w-4 text-primary-600" />
@@ -356,7 +356,7 @@ const POS = () => {
         </section>
 
         {/* Step 4: Customer + summary */}
-        <section className="order-3 space-y-4 lg:col-span-3">
+        <section className="order-3 space-y-4 lg:col-span-3 lg:self-start">
           <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-gray-900">
               <User className="h-5 w-5 text-primary-600" />
@@ -463,9 +463,11 @@ const POS = () => {
           </div>
 
         </section>
-      </div>
 
-      <MoMoAgentSection />
+        <section className="order-4 lg:col-span-12 lg:col-start-1">
+          <MoMoAgentSection embedded defaultExpanded={false} />
+        </section>
+      </div>
 
       {barcodePickerProduct && (
         <AddQuantityModal
