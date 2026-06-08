@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Search, Filter, AlertTriangle } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Filter, AlertTriangle, Upload } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { isClinicStore } from '../constants/businessTypes';
@@ -9,6 +9,7 @@ import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Modal from '../components/ui/Modal';
 import Table from '../components/ui/Table';
+import ProductImportModal from '../components/products/ProductImportModal';
 
 const Products = () => {
   const { hasRole, user } = useAuthStore();
@@ -22,6 +23,7 @@ const Products = () => {
   const [formData, setFormData] = useState({});
   const [suppliers, setSuppliers] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -276,14 +278,16 @@ const Products = () => {
           {clinicStore ? 'Medicines & supplies' : 'Products Management'}
         </h1>
         {hasRole('admin', 'manager') && (
-          <Button
-            onClick={handleCreateProduct}
-            variant="primary"
-            size="sm"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Add Product
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={() => setShowImportModal(true)} variant="secondary" size="sm">
+              <Upload className="w-4 h-4 mr-2" />
+              Import Excel
+            </Button>
+            <Button onClick={handleCreateProduct} variant="primary" size="sm">
+              <Plus className="w-4 h-4 mr-2" />
+              Add Product
+            </Button>
+          </div>
         )}
       </div>
 
@@ -517,6 +521,12 @@ const Products = () => {
           </div>
         </form>
       </Modal>
+
+      <ProductImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImported={fetchProducts}
+      />
     </div>
   );
 };

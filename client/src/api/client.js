@@ -88,6 +88,16 @@ export const productsAPI = {
   delete: (id) => api.delete(`/api/products/${id}`),
   adjustStock: (id, data) => api.post(`/api/products/${id}/adjust-stock`, data),
   getCategories: () => api.get('/api/products/categories/list'),
+  downloadImportTemplate: () =>
+    api.get('/api/products/import/template', { responseType: 'blob' }),
+  importFromExcel: (file) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.post('/api/products/import', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
+    });
+  },
 };
 
 export const salesAPI = {
@@ -220,13 +230,46 @@ export const developerAPI = {
 };
 
 // Utility functions
-export const formatCurrency = (amount) => {
-  return new Intl.NumberFormat('en-UG', {
-    style: 'currency',
-    currency: 'UGX',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount || 0);
+const ugxFormatter = new Intl.NumberFormat('en-UG', {
+  style: 'currency',
+  currency: 'UGX',
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+});
+
+export const formatCurrencyParts = (amount) => {
+  const parts = ugxFormatter.formatToParts(amount || 0);
+  let symbol = '';
+  let number = '';
+  let literal = '';
+  for (const part of parts) {
+    if (part.type === 'currency') symbol += part.value;
+    else if (part.type === 'integer' || part.type === 'group' || part.type === 'fraction' || part.type === 'decimal') {
+      number += part.value;
+    } else if (part.type === 'literal') literal += part.value;
+  }
+  return { symbol: symbol.trim(), number, literal };
+};
+
+export const formatCurrency = (amount) => ugxFormatter.format(amount || 0);
+
+/** Trigger a browser download from an axios blob response. */
+export const downloadBlobResponse = (response, fallbackName = 'download') => {
+  const disposition = response.headers?.['content-disposition'] || '';
+  const match = disposition.match(/filename="?([^"]+)"?/i);
+  const filename = match?.[1] || fallbackName;
+  const blob =
+    response.data instanceof Blob
+      ? response.data
+      : new Blob([response.data], { type: response.headers?.['content-type'] || 'application/octet-stream' });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
 };
 
 /** Store calendar (matches server STORE_TIMEZONE / Africa/Kampala). */

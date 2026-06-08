@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Smartphone, RefreshCw } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { agentFloatAPI, formatCurrency, formatDate, handleApiError, usersAPI } from '../../api/client';
+import Currency from '../ui/Currency';
 import { useAuthStore } from '../../store/authStore';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
@@ -506,9 +507,9 @@ const MoMoAgentSection = () => {
 
 function BalanceCard({ label, value, muted }) {
   return (
-    <div className={`rounded-lg border p-3 ${muted ? 'border-gray-200 bg-gray-50' : 'border-amber-200 bg-white'}`}>
+    <div className={`min-w-0 overflow-hidden rounded-lg border p-3 ${muted ? 'border-gray-200 bg-gray-50' : 'border-amber-200 bg-white'}`}>
       <p className="text-xs text-gray-500">{label}</p>
-      <p className="text-lg font-bold text-gray-900">{formatCurrency(value ?? 0)}</p>
+      <Currency amount={value ?? 0} className="stat-value-currency mt-0.5 text-gray-900" />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import React from 'react';
 import Card from './Card';
+import Currency from './Currency';
 
 /**
  * Metric card with overflow-safe layout for large numbers and currency strings.
@@ -20,6 +21,13 @@ export const StatCard = ({
     ? `stat-value-currency ${valueClassName}`
     : `stat-value ${valueClassName}`;
 
+  const valueNode =
+    currency && typeof value === 'number' ? (
+      <Currency amount={value} className={valueCls} amountClassName={valueClassName} />
+    ) : (
+      <p className={valueCls}>{value}</p>
+    );
+
   return (
     <Card
       className={`stat-card min-w-0 ${featured ? 'border-primary-100 bg-gradient-to-br from-primary-50/80 to-white lg:col-span-2' : ''} ${className}`}
@@ -31,7 +39,7 @@ export const StatCard = ({
           </div>
         )}
         <div className="stat-card__content">
-          <p className={valueCls}>{value}</p>
+          {valueNode}
           {label && <p className="stat-label">{label}</p>}
           {hint && <p className="stat-hint">{hint}</p>}
         </div>
@@ -40,9 +48,9 @@ export const StatCard = ({
   );
 };
 
-export const StatValue = ({ children, currency = false, className = '' }) => (
+export const StatValue = ({ children, amount, currency = false, className = '' }) => (
   <p className={currency ? `stat-value-currency ${className}` : `stat-value ${className}`}>
-    {children}
+    {currency && typeof amount === 'number' ? <Currency amount={amount} /> : children}
   </p>
 );
 

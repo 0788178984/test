@@ -14,6 +14,7 @@ import { useAuthStore } from '../store/authStore';
 import { salesAPI, productsAPI, inventoryAPI, customersAPI, expensesAPI } from '../api/client';
 import { formatCurrency, formatDate } from '../api/client';
 import Card from '../components/ui/Card';
+import Currency from '../components/ui/Currency';
 import { storeReceiptBranding } from '../utils/storeBrand';
 
 const STAT_ICON_STYLES = {
@@ -98,7 +99,8 @@ const Dashboard = () => {
     },
     {
       title: "Today's Revenue",
-      value: formatCurrency(stats.todayRevenue),
+      value: stats.todayRevenue,
+      currency: true,
       icon: DollarSign,
       color: 'green',
     },
@@ -106,7 +108,8 @@ const Dashboard = () => {
       ? [
           {
             title: "Today's Expenses",
-            value: formatCurrency(stats.todayExpenses),
+            value: stats.todayExpenses,
+            currency: true,
             icon: Wallet,
             color: 'red',
           },
@@ -170,15 +173,11 @@ const Dashboard = () => {
               <div className="stat-card__inner items-center justify-between">
                 <div className="stat-card__content">
                   <p className="stat-label">{stat.title}</p>
-                  <p
-                    className={
-                      stat.title.includes('Revenue') || stat.title.includes('Expenses')
-                        ? 'stat-value-currency'
-                        : 'stat-value'
-                    }
-                  >
-                    {stat.value}
-                  </p>
+                  {stat.currency ? (
+                    <Currency amount={stat.value} className="stat-value-currency" />
+                  ) : (
+                    <p className="stat-value">{stat.value}</p>
+                  )}
                 </div>
                 <div className={`stat-card__icon rounded-full p-3 ${iconStyle.wrap}`}>
                   <stat.icon className={`h-6 w-6 ${iconStyle.icon}`} aria-hidden />

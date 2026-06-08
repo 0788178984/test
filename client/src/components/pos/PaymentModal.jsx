@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { X, CreditCard, Smartphone, DollarSign } from 'lucide-react';
 import { customersAPI, paymentsAPI, formatCurrency, formatPhoneNumber, handleApiError } from '../../api/client';
+import Currency from '../ui/Currency';
 import { toast } from 'react-hot-toast';
 import Button from '../ui/Button';
 
@@ -148,7 +149,7 @@ const PaymentModal = ({ totalAmount, customer, paymentMethods, onPayment, onCanc
       <div className="rounded-lg bg-gray-50 p-6">
         <div className="text-center">
           <p className="text-sm text-gray-600">Total due</p>
-          <p className="stat-value-currency text-primary-600">{formatCurrency(totalAmount)}</p>
+          <Currency amount={totalAmount} className="stat-value-currency text-primary-600" amountClassName="text-primary-600" />
         </div>
       </div>
 

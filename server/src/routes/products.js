@@ -1,4 +1,5 @@
 const express = require('express');
+const multer = require('multer');
 const { authenticate } = require('../middleware/auth');
 const { restrictToBusinessStaff } = require('../middleware/tenantContext');
 const { checkPermission } = require('../middleware/roleCheck');
@@ -10,7 +11,24 @@ const {
   normalizeProductCategory,
 } = require('../db/businessTypes');
 const { assertSellingNotBelowCost } = require('../utils/money');
+const productImportService = require('../services/productImportService');
 const router = express.Router();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const name = String(file.originalname || '').toLowerCase();
+    if (
+      name.endsWith('.xlsx') ||
+      file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    ) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only .xlsx Excel files are supported.'));
+    }
+  },
+});
 
 async function businessTypeForUser(user) {
   if (!user?.business_id) return 'supermarket';
@@ -130,6 +148,55 @@ router.get('/categories/list', async (req, res) => {
   } catch (error) {
     console.error('Get categories error:', error);
     res.status(500).json({ error: 'Failed to fetch categories.' });
+  }
+});
+
+router.get('/import/template', checkPermission('add_edit_products'), async (req, res) => {
+  try {
+    const businessType = await businessTypeForUser(req.user);
+    const buffer = await productImportService.buildTemplateBuffer(businessType);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader('Content-Disposition', 'attachment; filename="product_import_template.xlsx"');
+    res.send(Buffer.from(buffer));
+  } catch (error) {
+    console.error('Product import template error:', error);
+    res.status(500).json({ error: 'Failed to generate import template.' });
+  }
+});
+
+router.post('/import', checkPermission('add_edit_products'), upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file?.buffer) {
+      return res.status(400).json({ error: 'Upload an Excel (.xlsx) file.' });
+    }
+
+    const businessType = await businessTypeForUser(req.user);
+    const rows = await productImportService.parseWorkbook(req.file.buffer);
+    if (rows.length === 0) {
+      return res.status(400).json({
+        error: 'No product rows found. Fill the Products sheet (delete the sample row if unused).',
+      });
+    }
+    if (rows.length > 2000) {
+      return res.status(400).json({ error: 'Maximum 2,000 products per import. Split into smaller files.' });
+    }
+
+    const results = await productImportService.importProducts(rows, {
+      businessId: req.user.business_id,
+      businessType,
+      userId: req.user.id,
+    });
+
+    res.json({
+      message: `Import finished: ${results.created} created, ${results.skipped} skipped.`,
+      ...results,
+    });
+  } catch (error) {
+    console.error('Product import error:', error);
+    res.status(400).json({ error: error.message || 'Import failed.' });
   }
 });
 

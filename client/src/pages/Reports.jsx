@@ -4,6 +4,7 @@ import { Download, Calendar, TrendingUp, DollarSign, BarChart3, Users, Package }
 import { useAuthStore } from '../store/authStore';
 import { reportsAPI } from '../api/client';
 import { formatCurrency, formatDate, getStoreToday, addStoreDays } from '../api/client';
+import Currency from '../components/ui/Currency';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Card from '../components/ui/Card';
@@ -336,21 +337,27 @@ const Reports = () => {
                   <p className="stat-label mt-1">Total Sales</p>
                 </div>
                 <div className="stat-panel text-center">
-                  <p className="stat-value-currency text-green-600">
-                    {formatCurrency(reports.dailySales.revenue || 0)}
-                  </p>
+                  <Currency
+                    amount={reports.dailySales.revenue || 0}
+                    className="stat-value-currency text-green-600"
+                    amountClassName="text-green-600"
+                  />
                   <p className="stat-label mt-1">Total Revenue</p>
                 </div>
                 <div className="stat-panel text-center">
-                  <p className="stat-value-currency text-blue-600">
-                    {formatCurrency(reports.dailySales.profit || 0)}
-                  </p>
+                  <Currency
+                    amount={reports.dailySales.profit || 0}
+                    className="stat-value-currency text-blue-600"
+                    amountClassName="text-blue-600"
+                  />
                   <p className="stat-label mt-1">Total Profit</p>
                 </div>
                 <div className="stat-panel text-center">
-                  <p className="stat-value-currency text-orange-600">
-                    {formatCurrency(reports.dailySales.averageSale || 0)}
-                  </p>
+                  <Currency
+                    amount={reports.dailySales.averageSale || 0}
+                    className="stat-value-currency text-orange-600"
+                    amountClassName="text-orange-600"
+                  />
                   <p className="stat-label mt-1">Average Sale</p>
                 </div>
               </div>
@@ -374,27 +381,32 @@ const Reports = () => {
                       <p className="text-xs font-medium uppercase tracking-wide text-green-800">
                         Revenue
                       </p>
-                      <p className="stat-value-currency mt-2 text-green-700">
-                        {formatCurrency(reports.summary.revenue ?? 0)}
-                      </p>
+                      <Currency
+                        amount={reports.summary.revenue ?? 0}
+                        className="stat-value-currency mt-2 text-green-700"
+                        amountClassName="text-green-700"
+                      />
                       <p className="stat-hint mt-1">Total takings</p>
                     </div>
                     <div className="stat-panel bg-gradient-to-br from-blue-50 to-white">
                       <p className="text-xs font-medium uppercase tracking-wide text-blue-800">
                         Profit
                       </p>
-                      <p className="stat-value-currency mt-2 text-blue-700">
-                        {formatCurrency(reports.summary.profit ?? 0)}
-                      </p>
+                      <Currency
+                        amount={reports.summary.profit ?? 0}
+                        className="stat-value-currency mt-2 text-blue-700"
+                        amountClassName="text-blue-700"
+                      />
                       <p className="stat-hint mt-1">After cost of goods</p>
                     </div>
                     <div className="stat-panel bg-gradient-to-br from-amber-50 to-white">
                       <p className="text-xs font-medium uppercase tracking-wide text-amber-900">
                         Discounts
                       </p>
-                      <p className="stat-value-currency mt-2 text-gray-900">
-                        {formatCurrency(reports.summary.total_discount ?? 0)}
-                      </p>
+                      <Currency
+                        amount={reports.summary.total_discount ?? 0}
+                        className="stat-value-currency mt-2 text-gray-900"
+                      />
                       <p className="stat-hint mt-1">Given at checkout</p>
                     </div>
                   </div>
@@ -439,21 +451,27 @@ const Reports = () => {
               <div className="space-y-6">
                 <div className="stat-grid">
                   <div className="stat-panel text-center">
-                    <p className="stat-value-currency text-green-600">
-                      {formatCurrency(reports.summary.revenue || 0)}
-                    </p>
+                    <Currency
+                      amount={reports.summary.revenue || 0}
+                      className="stat-value-currency text-green-600"
+                      amountClassName="text-green-600"
+                    />
                     <p className="stat-label mt-1">Year revenue</p>
                   </div>
                   <div className="stat-panel text-center">
-                    <p className="stat-value-currency text-red-600">
-                      {formatCurrency(reports.summary.expenses_total || 0)}
-                    </p>
+                    <Currency
+                      amount={reports.summary.expenses_total || 0}
+                      className="stat-value-currency text-red-600"
+                      amountClassName="text-red-600"
+                    />
                     <p className="stat-label mt-1">Year expenses</p>
                   </div>
                   <div className="stat-panel text-center">
-                    <p className="stat-value-currency text-blue-600">
-                      {formatCurrency(reports.summary.net_cash ?? reports.summary.revenue)}
-                    </p>
+                    <Currency
+                      amount={reports.summary.net_cash ?? reports.summary.revenue}
+                      className="stat-value-currency text-blue-600"
+                      amountClassName="text-blue-600"
+                    />
                     <p className="stat-label mt-1">Net (after expenses)</p>
                   </div>
                 </div>

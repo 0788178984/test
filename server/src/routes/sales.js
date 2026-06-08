@@ -5,7 +5,7 @@ const { checkPermission } = require('../middleware/roleCheck');
 const db = require('../db/connection');
 const { newId } = require('../db/ids');
 const { getStoreToday, saleLocalDate, STORE_TZ } = require('../utils/storeTime');
-const { roundUgx, computeSaleTotals } = require('../utils/money');
+const { roundUgx, computeSaleTotals, calcWholesaleUnitPrice } = require('../utils/money');
 const router = express.Router();
 
 router.use(authenticate, restrictToBusinessStaff);
@@ -32,7 +32,6 @@ router.post('/', checkPermission('make_sale'), async (req, res) => {
       customer_id,
       discount_amount = 0,
       discount_reason,
-      wholesale_percent = 0,
       payment_method,
       payment_reference,
       notes,
@@ -75,43 +74,50 @@ router.post('/', checkPermission('make_sale'), async (req, res) => {
         return res.status(400).json({ error: `Insufficient stock for ${product.name}. Available: ${product.current_stock}, Requested: ${item.quantity}` });
       }
 
-      const lineTotal = roundUgx(item.quantity * product.selling_price);
+      const isWholesaleLine = Boolean(item.is_wholesale) && item.wholesale_markup_percent != null;
+      let unitPrice = roundUgx(product.selling_price);
+
+      if (isWholesaleLine) {
+        if (req.user.role === 'cashier') {
+          return res.status(403).json({ error: 'Only admin or manager can complete wholesale sales.' });
+        }
+        const markup = Math.min(500, Math.max(0, Number(item.wholesale_markup_percent) || 0));
+        if (markup <= 0) {
+          return res.status(400).json({ error: `Wholesale markup is required for ${product.name}.` });
+        }
+        const expectedUnit = calcWholesaleUnitPrice(product.buying_price, markup);
+        const clientUnit = roundUgx(item.unit_price);
+        if (Math.abs(clientUnit - expectedUnit) > 1) {
+          return res.status(400).json({
+            error: `Wholesale price mismatch for ${product.name} (expected UGX ${expectedUnit}).`,
+          });
+        }
+        if (clientUnit < roundUgx(product.buying_price)) {
+          return res.status(400).json({
+            error: `Wholesale price for ${product.name} cannot be below buying price.`,
+          });
+        }
+        unitPrice = clientUnit;
+      } else if (item.unit_price != null && Math.abs(roundUgx(item.unit_price) - roundUgx(product.selling_price)) > 1) {
+        return res.status(400).json({ error: `Invalid unit price for ${product.name}.` });
+      }
+
+      const lineTotal = roundUgx(item.quantity * unitPrice);
       subtotal += lineTotal;
 
       validatedItems.push({
         ...item,
         product_name: product.name,
-        unit_price: product.selling_price,
+        unit_price: unitPrice,
         buying_price: product.buying_price,
-        line_total: lineTotal
+        line_total: lineTotal,
+        is_wholesale: isWholesaleLine,
+        wholesale_markup_percent: isWholesaleLine ? Number(item.wholesale_markup_percent) : 0,
       });
     }
 
     subtotal = roundUgx(subtotal);
     const discount_amount_r = roundUgx(discount_amount);
-    const wholesalePct = Math.min(100, Math.max(0, Number(wholesale_percent) || 0));
-    const reasonText = String(discount_reason || '');
-    const isWholesaleSale =
-      discount_amount_r > 0 &&
-      (wholesalePct > 0 || /^Wholesale\s*\(/i.test(reasonText));
-
-    if (isWholesaleSale && req.user.role === 'cashier') {
-      return res.status(403).json({ error: 'Only admin or manager can complete wholesale sales.' });
-    }
-
-    if (isWholesaleSale) {
-      const pctMatch = reasonText.match(/Wholesale\s*\((\d+(?:\.\d+)?)%/i);
-      const effectivePct = wholesalePct > 0 ? wholesalePct : Number(pctMatch?.[1]) || 0;
-      if (effectivePct <= 0 || effectivePct > 100) {
-        return res.status(400).json({ error: 'Wholesale sales need a percentage between 1 and 100.' });
-      }
-      const expectedDiscount = roundUgx(subtotal * (effectivePct / 100));
-      if (Math.abs(discount_amount_r - expectedDiscount) > 1) {
-        return res.status(400).json({
-          error: `Wholesale discount must match ${effectivePct}% of subtotal (expected UGX ${expectedDiscount}).`,
-        });
-      }
-    }
 
     // Apply discount limits for cashiers
     if (req.user.role === 'cashier' && discount_amount_r > 0) {

@@ -3,6 +3,7 @@ import { Wallet, Plus, Edit, Trash2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { expensesAPI } from '../api/client';
 import { formatCurrency, formatDate, getStoreToday, handleApiError } from '../api/client';
+import Currency from '../components/ui/Currency';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Modal from '../components/ui/Modal';
@@ -178,7 +179,7 @@ const Expenses = () => {
       <div className="stat-grid sm:grid-cols-2">
         <Card className="stat-card min-w-0">
           <p className="stat-label">Total for selected day</p>
-          <p className="stat-value-currency text-red-600">{formatCurrency(summary.total)}</p>
+          <Currency amount={summary.total} className="stat-value-currency text-red-600" amountClassName="text-red-600" />
           <p className="stat-hint mt-1">{summary.count} expense{summary.count === 1 ? '' : 's'}</p>
         </Card>
         <Card>

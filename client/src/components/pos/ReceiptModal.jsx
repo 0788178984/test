@@ -18,6 +18,8 @@ const ReceiptModal = ({ sale, onClose, onPrint, onSendSMS, onSendWhatsApp }) => 
     label: item.productName || item.name,
     qty: item.quantity,
     line: item.lineTotal ?? item.line_total ?? 0,
+    wholesale: item.isWholesale,
+    markup: item.wholesaleMarkupPercent,
   }));
 
   const payLabel = (sale.paymentMethod || 'cash').replace(/_/g, ' ');
@@ -72,6 +74,9 @@ const ReceiptModal = ({ sale, onClose, onPrint, onSendSMS, onSendWhatsApp }) => 
             <div key={index} className="receipt-item flex justify-between gap-2 text-sm">
               <span className="min-w-0 flex-1 truncate">
                 {row.label} ×{row.qty}
+                {row.wholesale && row.markup ? (
+                  <span className="text-[10px] text-violet-700"> (W/S +{row.markup}%)</span>
+                ) : null}
               </span>
               <span>{formatCurrency(row.line)}</span>
             </div>
@@ -87,9 +92,7 @@ const ReceiptModal = ({ sale, onClose, onPrint, onSendSMS, onSendWhatsApp }) => 
                 <div className="flex justify-between">
                   <span>
                     Discount
-                    {sale.isWholesale && sale.wholesalePercent > 0
-                      ? ` (Wholesale ${sale.wholesalePercent}%)`
-                      : ''}
+                    {sale.hasWholesaleItems ? ' (excl. wholesale lines)' : ''}
                   </span>
                   <span>-{formatCurrency(sale.discountAmount)}</span>
                 </div>

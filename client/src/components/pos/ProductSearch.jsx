@@ -3,7 +3,13 @@ import { Search, Package, Filter } from 'lucide-react';
 import { productsAPI, formatCurrency } from '../../api/client';
 import AddQuantityModal from './AddQuantityModal';
 
-const ProductSearch = ({ onProductSelect, searchQuery, setSearchQuery }) => {
+const ProductSearch = ({
+  onProductSelect,
+  searchQuery,
+  setSearchQuery,
+  wholesaleMode = false,
+  defaultWholesaleMarkup = 10,
+}) => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState([]);
@@ -79,9 +85,9 @@ const ProductSearch = ({ onProductSelect, searchQuery, setSearchQuery }) => {
     setPickerProduct(product);
   };
 
-  const confirmQuantity = (qty) => {
+  const confirmQuantity = (qty, extras) => {
     if (!pickerProduct) return;
-    onProductSelect(pickerProduct, qty);
+    onProductSelect(pickerProduct, qty, extras);
     setPickerProduct(null);
   };
 
@@ -207,7 +213,13 @@ const ProductSearch = ({ onProductSelect, searchQuery, setSearchQuery }) => {
       )}
 
       {pickerProduct && (
-        <AddQuantityModal product={pickerProduct} onConfirm={confirmQuantity} onCancel={() => setPickerProduct(null)} />
+        <AddQuantityModal
+          product={pickerProduct}
+          wholesaleMode={wholesaleMode}
+          defaultMarkupPercent={defaultWholesaleMarkup}
+          onConfirm={confirmQuantity}
+          onCancel={() => setPickerProduct(null)}
+        />
       )}
     </div>
   );

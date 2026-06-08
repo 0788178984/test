@@ -3,6 +3,7 @@ import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Cart
 import { LineChart as LineChartIcon, Calendar } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { reportsAPI, formatCurrency, formatDate, getStoreToday, addStoreDays } from '../api/client';
+import Currency from '../components/ui/Currency';
 import Card from '../components/ui/Card';
 import Input from '../components/ui/Input';
 
@@ -168,23 +169,29 @@ const DataAnalysis = () => {
           <div className="stat-grid">
             <Card className="stat-card min-w-0 p-4">
               <p className="text-xs font-medium uppercase text-gray-500">Selected day revenue</p>
-              <p className="stat-value-currency mt-1 text-primary-700">
-                {formatCurrency(daily?.summary?.revenue ?? 0)}
-              </p>
+              <Currency
+                amount={daily?.summary?.revenue ?? 0}
+                className="stat-value-currency mt-1 text-primary-700"
+                amountClassName="text-primary-700"
+              />
               <p className="stat-hint mt-1">{daily?.summary?.sales_count ?? 0} completed sales</p>
             </Card>
             <Card className="stat-card min-w-0 p-4">
               <p className="text-xs font-medium uppercase text-gray-500">Month revenue</p>
-              <p className="stat-value-currency mt-1 text-primary-700">
-                {formatCurrency(monthly?.summary?.revenue ?? 0)}
-              </p>
+              <Currency
+                amount={monthly?.summary?.revenue ?? 0}
+                className="stat-value-currency mt-1 text-primary-700"
+                amountClassName="text-primary-700"
+              />
               <p className="stat-hint mt-1">{monthly?.summary?.sales_count ?? 0} sales this month</p>
             </Card>
             <Card className="stat-card min-w-0 p-4">
               <p className="text-xs font-medium uppercase text-gray-500">Month profit (est.)</p>
-              <p className="stat-value-currency mt-1 text-emerald-700">
-                {formatCurrency(monthly?.summary?.profit ?? 0)}
-              </p>
+              <Currency
+                amount={monthly?.summary?.profit ?? 0}
+                className="stat-value-currency mt-1 text-emerald-700"
+                amountClassName="text-emerald-700"
+              />
               <p className="stat-hint mt-1">From completed sales in range</p>
             </Card>
           </div>

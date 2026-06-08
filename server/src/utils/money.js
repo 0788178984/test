@@ -11,6 +11,13 @@ function computeSaleTotals(subtotal, discountAmount = 0) {
   return { subtotal: sub, discountAmount: disc, taxAmount: 0, totalAmount: net };
 }
 
+/** Wholesale unit price = buying price + markup% on cost. */
+function calcWholesaleUnitPrice(buyingPrice, markupPercent) {
+  const buy = roundUgx(buyingPrice);
+  const p = Math.min(500, Math.max(0, Number(markupPercent) || 0));
+  return roundUgx(buy * (1 + p / 100));
+}
+
 /** Reject selling below cost — returns { ok, buy, sell } or { ok: false, error }. */
 function assertSellingNotBelowCost(buyingPrice, sellingPrice) {
   const buy = roundUgx(buyingPrice);
@@ -24,4 +31,4 @@ function assertSellingNotBelowCost(buyingPrice, sellingPrice) {
   return { ok: true, buy, sell };
 }
 
-module.exports = { roundUgx, computeSaleTotals, assertSellingNotBelowCost };
+module.exports = { roundUgx, computeSaleTotals, assertSellingNotBelowCost, calcWholesaleUnitPrice };

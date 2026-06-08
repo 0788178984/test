@@ -375,13 +375,13 @@ const Inventory = () => {
                 {Number(summary.below_cost_products) === 1 ? '' : 's'} sell below cost — update selling prices under Products.
               </p>
             )}
-            <div className="stat-grid sm:grid-cols-2 lg:grid-cols-4">
+            <div className="stat-grid">
               <StatCard
                 icon={Receipt}
                 iconWrapClassName="p-0 bg-transparent"
                 iconClassName="h-8 w-8 text-rose-600"
                 currency
-                value={loading ? '—' : formatCurrency(summary?.stock_expenditure ?? summary?.stock_value_at_cost ?? 0)}
+                value={loading ? '—' : Number(summary?.stock_expenditure ?? summary?.stock_value_at_cost ?? 0)}
                 label="Total stock expenditure"
               />
               <StatCard
@@ -390,7 +390,7 @@ const Inventory = () => {
                 iconClassName="h-8 w-8 text-blue-600"
                 currency
                 value={
-                  loading ? '—' : formatCurrency(summary?.potential_sales_revenue ?? summary?.stock_value_at_selling ?? 0)
+                  loading ? '—' : Number(summary?.potential_sales_revenue ?? summary?.stock_value_at_selling ?? 0)
                 }
                 label="Potential sales revenue"
               />
@@ -399,7 +399,7 @@ const Inventory = () => {
                 iconWrapClassName="p-0 bg-transparent"
                 iconClassName={`h-8 w-8 ${!loading && Number(summary?.projected_profit_if_sold ?? 0) < 0 ? 'text-red-600' : 'text-green-600'}`}
                 currency
-                value={loading ? '—' : formatCurrency(summary?.projected_profit_if_sold ?? 0)}
+                value={loading ? '—' : Number(summary?.projected_profit_if_sold ?? 0)}
                 label={
                   !loading && Number(summary?.projected_profit_if_sold ?? 0) < 0
                     ? 'Projected loss if sold'
@@ -414,7 +414,7 @@ const Inventory = () => {
                 iconWrapClassName="p-0 bg-transparent"
                 iconClassName="h-8 w-8 text-violet-600"
                 currency
-                value={loading ? '—' : formatCurrency(summary?.lifetime_purchase_expenditure ?? 0)}
+                value={loading ? '—' : Number(summary?.lifetime_purchase_expenditure ?? 0)}
                 label="Recorded stock purchases"
               />
             </div>

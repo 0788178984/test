@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, Tag, ClipboardList, RotateCcw, User, ShoppingCart, CreditCard } from 'lucide-react';
+import { Search, Tag, ClipboardList, RotateCcw, User, ShoppingCart, CreditCard, Package } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
@@ -12,7 +12,7 @@ import Cart from '../components/pos/Cart';
 import PaymentModal from '../components/pos/PaymentModal';
 import ReceiptModal from '../components/pos/ReceiptModal';
 import MoMoAgentSection from '../components/pos/MoMoAgentSection';
-import { isSoldByWeight, unitLabel } from '../components/pos/AddQuantityModal';
+import AddQuantityModal, { isSoldByWeight, unitLabel } from '../components/pos/AddQuantityModal';
 
 const POS = () => {
   const { user, hasRole } = useAuthStore();
@@ -21,13 +21,12 @@ const POS = () => {
     customer,
     discountAmount,
     discountReason,
-    isWholesale,
-    wholesalePercent,
+    wholesaleMode,
+    defaultWholesaleMarkup,
     addItem,
     clearCart,
     setCustomer,
-    setWholesale,
-    clearWholesale,
+    setWholesaleMode,
     setProcessing,
     getSubtotal,
     getTotal,
@@ -36,7 +35,7 @@ const POS = () => {
     resetForNextSale,
   } = useCartStore();
 
-  const [wholesaleInput, setWholesaleInput] = useState('');
+  const [barcodePickerProduct, setBarcodePickerProduct] = useState(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [lastSale, setLastSale] = useState(null);
@@ -56,8 +55,13 @@ const POS = () => {
     try {
       const response = await productsAPI.getByBarcode(barcode);
       if (response.data.product) {
-        addItem(response.data.product, 1);
-        toast.success(`Added: ${response.data.product.name}`);
+        const product = response.data.product;
+        if (wholesaleMode && hasRole('admin', 'manager')) {
+          setBarcodePickerProduct(product);
+        } else {
+          addItem(product, 1);
+          toast.success(`Added: ${product.name}`);
+        }
         setSearchQuery('');
         focusScan();
       }
@@ -76,14 +80,27 @@ const POS = () => {
     }
   };
 
-  const handleProductSelect = (product, qty = 1) => {
-    addItem(product, qty);
+  const handleProductSelect = (product, qty = 1, extras = {}) => {
+    if (wholesaleMode && hasRole('admin', 'manager')) {
+      const markup = extras.wholesaleMarkupPercent ?? defaultWholesaleMarkup;
+      if (!markup || markup <= 0) {
+        toast.error('Set a wholesale markup % for this product');
+        return;
+      }
+      addItem(product, qty, { wholesaleMarkupPercent: markup });
+    } else {
+      addItem(product, qty);
+    }
     const suffix = isSoldByWeight(product)
       ? ` (${qty} ${unitLabel(product)})`
       : qty !== 1
         ? ` ×${qty}`
         : '';
-    toast.success(`Added: ${product.name}${suffix}`);
+    const wholesaleNote =
+      wholesaleMode && hasRole('admin', 'manager')
+        ? ` @ wholesale +${extras.wholesaleMarkupPercent ?? defaultWholesaleMarkup}%`
+        : '';
+    toast.success(`Added: ${product.name}${suffix}${wholesaleNote}`);
     setSearchQuery('');
     focusScan();
   };
@@ -139,11 +156,17 @@ const POS = () => {
         items: items.map((item) => ({
           product_id: item.id,
           quantity: item.quantity,
+          ...(item.is_wholesale
+            ? {
+                unit_price: item.unit_price,
+                is_wholesale: true,
+                wholesale_markup_percent: item.wholesale_markup_percent,
+              }
+            : {}),
         })),
         customer_id: customer?.id || null,
         discount_amount: discountAmount,
         discount_reason: discountAmount > 0 ? summary.discountReason || 'Manual discount' : '',
-        wholesale_percent: summary.isWholesale ? summary.wholesalePercent : 0,
         payment_method: paymentData.method,
         payment_reference: paymentData.reference || null,
         amount_paid: paymentData.amountPaid ?? getTotal(),
@@ -165,8 +188,7 @@ const POS = () => {
         taxAmount: data.taxAmount ?? summary.taxAmount,
         discountAmount: summary.discountAmount,
         discountReason: summary.discountReason,
-        isWholesale: summary.isWholesale,
-        wholesalePercent: summary.wholesalePercent,
+        hasWholesaleItems: summary.hasWholesaleItems,
         amountPaid: data.amountPaid ?? paymentData.amountPaid ?? summary.total,
         changeGiven: data.changeGiven ?? paymentData.changeGiven ?? 0,
         paymentMethod: paymentData.method,
@@ -179,11 +201,13 @@ const POS = () => {
           productName: it.name,
           quantity: it.quantity,
           lineTotal: it.line_total,
+          isWholesale: it.is_wholesale,
+          wholesaleMarkupPercent: it.wholesale_markup_percent,
+          unitPrice: it.unit_price,
         })),
       });
 
       resetForNextSale();
-      setWholesaleInput('');
       setShowPaymentModal(false);
       setShowReceiptModal(true);
       toast.success(`Sale ${data.saleNumber} saved`);
@@ -270,7 +294,13 @@ const POS = () => {
               <ShoppingCart className="h-5 w-5 text-primary-600" />
               Products
             </h2>
-            <ProductSearch onProductSelect={handleProductSelect} searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
+            <ProductSearch
+              onProductSelect={handleProductSelect}
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              wholesaleMode={wholesaleMode && hasRole('admin', 'manager')}
+              defaultWholesaleMarkup={defaultWholesaleMarkup}
+            />
           </div>
 
           <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -295,10 +325,33 @@ const POS = () => {
 
         {/* Step 3: Cart */}
         <section className="order-2 lg:col-span-4">
-          <h2 className="mb-2 flex items-center gap-2 text-lg font-semibold text-gray-900">
-            <CreditCard className="h-4 w-4 text-primary-600" />
-            Cart
-          </h2>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+              <CreditCard className="h-4 w-4 text-primary-600" />
+              Cart
+            </h2>
+            {hasRole('admin', 'manager') && (
+              <Button
+                type="button"
+                size="sm"
+                variant={wholesaleMode ? 'primary' : 'secondary'}
+                className={wholesaleMode ? 'bg-violet-600 hover:bg-violet-700' : ''}
+                onClick={() => {
+                  const next = !wholesaleMode;
+                  setWholesaleMode(next);
+                  toast.success(next ? 'Wholesale mode — set markup per product' : 'Retail mode');
+                }}
+              >
+                <Package className="mr-1.5 h-4 w-4" />
+                {wholesaleMode ? 'Wholesale ON' : 'Wholesale'}
+              </Button>
+            )}
+          </div>
+          {wholesaleMode && hasRole('admin', 'manager') && (
+            <p className="mb-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-900">
+              Wholesale mode: each product gets its own markup % on buying price when added.
+            </p>
+          )}
           <Cart onCheckout={handleCheckout} />
         </section>
 
@@ -347,19 +400,10 @@ const POS = () => {
               {discountAmount > 0 ? (
                 <>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">
-                      Discount
-                      {isWholesale && wholesalePercent > 0 ? (
-                        <span className="ml-1 rounded bg-violet-100 px-1.5 py-0.5 text-xs font-semibold text-violet-800">
-                          Wholesale {wholesalePercent}%
-                        </span>
-                      ) : null}
-                    </span>
+                    <span className="text-gray-600">Discount</span>
                     <span className="font-medium text-red-600">-{formatCurrency(discountAmount)}</span>
                   </div>
-                  {discountReason ? (
-                    <p className="text-xs text-gray-500">{discountReason}</p>
-                  ) : null}
+                  {discountReason ? <p className="text-xs text-gray-500">{discountReason}</p> : null}
                 </>
               ) : null}
               <div className="flex justify-between border-t border-gray-200 pt-2 text-base font-bold">
@@ -367,60 +411,6 @@ const POS = () => {
                 <span className="text-primary-600">{formatCurrency(total)}</span>
               </div>
             </div>
-            {hasRole('admin', 'manager') && (
-              <div className="mt-4 space-y-2 border-t border-gray-100 pt-3">
-                <h4 className="text-sm font-semibold text-gray-900">Wholesale %</h4>
-                <div className="flex flex-wrap items-end gap-2">
-                  <label className="min-w-[5rem] flex-1">
-                    <span className="mb-1 block text-xs font-medium text-gray-600">% off</span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={100}
-                      step={1}
-                      className="form-input w-full"
-                      value={wholesaleInput}
-                      placeholder="e.g. 10"
-                      onChange={(e) => setWholesaleInput(e.target.value)}
-                      disabled={items.length === 0}
-                    />
-                  </label>
-                  <Button
-                    type="button"
-                    variant="primary"
-                    size="sm"
-                    disabled={items.length === 0}
-                    onClick={() => {
-                      const p = Number(wholesaleInput);
-                      if (!Number.isFinite(p) || p <= 0 || p > 100) {
-                        toast.error('Enter a wholesale percentage between 1 and 100');
-                        return;
-                      }
-                      setWholesale(p);
-                      toast.success(`Wholesale ${p}% applied`);
-                    }}
-                  >
-                    Apply
-                  </Button>
-                </div>
-                {isWholesale ? (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="w-full"
-                    onClick={() => {
-                      clearWholesale();
-                      setWholesaleInput('');
-                      toast.success('Wholesale pricing cleared');
-                    }}
-                  >
-                    Clear wholesale
-                  </Button>
-                ) : null}
-              </div>
-            )}
-
             <div className="mt-4 space-y-2 border-t border-gray-100 pt-3">
               <div className="flex flex-col gap-2">
                 <Button
@@ -428,10 +418,7 @@ const POS = () => {
                   variant="secondary"
                   size="sm"
                   className="flex w-full items-center justify-start gap-2 text-left"
-                  onClick={() => {
-                    clearWholesale();
-                    setWholesaleInput('');
-                  }}
+                  onClick={() => useCartStore.getState().setDiscount(0, '')}
                   disabled={discountAmount <= 0}
                 >
                   <Tag className="h-4 w-4 shrink-0 text-primary-600" aria-hidden />
@@ -445,7 +432,6 @@ const POS = () => {
                   onClick={() => {
                     if (window.confirm('Clear all lines? Customer can stay attached.')) {
                       resetForNextSale();
-                      setWholesaleInput('');
                       toast.success('Cart cleared');
                       focusScan();
                     }
@@ -462,7 +448,7 @@ const POS = () => {
                   onClick={() => {
                     if (window.confirm('Clear cart and customer?')) {
                       clearCart();
-                      setWholesaleInput('');
+                      setWholesaleMode(false);
                       setCustomerPhoneInput('');
                       toast.success('Cart reset');
                       focusScan();
@@ -480,6 +466,19 @@ const POS = () => {
       </div>
 
       <MoMoAgentSection />
+
+      {barcodePickerProduct && (
+        <AddQuantityModal
+          product={barcodePickerProduct}
+          wholesaleMode
+          defaultMarkupPercent={defaultWholesaleMarkup}
+          onConfirm={(qty, extras) => {
+            handleProductSelect(barcodePickerProduct, qty, extras);
+            setBarcodePickerProduct(null);
+          }}
+          onCancel={() => setBarcodePickerProduct(null)}
+        />
+      )}
 
       <Modal isOpen={showPaymentModal} onClose={() => setShowPaymentModal(false)} title="" size="lg" showCloseButton={false}>
         <PaymentModal
