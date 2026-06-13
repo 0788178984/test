@@ -90,6 +90,7 @@ const Products = () => {
       buying_price: '',
       selling_price: '',
       current_stock: 0,
+      stock_to_add: '',
       minimum_stock: 5,
       expiry_date: '',
       is_active: true,
@@ -112,6 +113,7 @@ const Products = () => {
       buying_price: product.buying_price ?? '',
       selling_price: product.selling_price ?? '',
       current_stock: product.current_stock ?? 0,
+      stock_to_add: '',
       minimum_stock: product.minimum_stock ?? 5,
       expiry_date: exp,
       is_active: Boolean(product.is_active),
@@ -134,7 +136,7 @@ const Products = () => {
 
   const buildPayload = () => {
     const supplierId = formData.supplier_id ? String(formData.supplier_id).trim() : '';
-    return {
+    const base = {
       name: String(formData.name || '').trim(),
       sku: formData.sku ? String(formData.sku).trim() : null,
       barcode: formData.barcode ? String(formData.barcode).trim() : null,
@@ -144,10 +146,20 @@ const Products = () => {
       buying_price: parseFloat(formData.buying_price),
       selling_price: parseFloat(formData.selling_price),
       tax_rate: 0,
-      current_stock: parseFloat(formData.current_stock) || 0,
       minimum_stock: parseFloat(formData.minimum_stock) || 0,
       expiry_date: formData.expiry_date ? String(formData.expiry_date).trim() : null,
       is_active: Boolean(formData.is_active),
+    };
+    if (editingProduct?.id) {
+      const addQty = parseFloat(formData.stock_to_add);
+      if (Number.isFinite(addQty) && addQty > 0) {
+        base.stock_to_add = addQty;
+      }
+      return base;
+    }
+    return {
+      ...base,
+      current_stock: parseFloat(formData.current_stock) || 0,
     };
   };
 
@@ -170,8 +182,8 @@ const Products = () => {
 
     try {
       if (editingProduct?.id) {
-        await productsAPI.update(editingProduct.id, payload);
-        toast.success('Product updated');
+        const res = await productsAPI.update(editingProduct.id, payload);
+        toast.success(res.data?.message || 'Product updated');
       } else {
         await productsAPI.create(payload);
         toast.success('Product added');
@@ -273,8 +285,8 @@ const Products = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">
           {clinicStore ? 'Medicines & supplies' : 'Products Management'}
         </h1>
         {hasRole('admin', 'manager') && (
@@ -456,15 +468,36 @@ const Products = () => {
               required
             />
             
-            <Input
-              label="Current Stock"
-              name="current_stock"
-              type="number"
-              min="0"
-              value={formData.current_stock}
-              onChange={handleInputChange}
-              required
-            />
+            {editingProduct?.id ? (
+              <>
+                <div>
+                  <label className="form-label">Current stock (on hand)</label>
+                  <p className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-semibold tabular-nums text-gray-900">
+                    {Number(formData.current_stock ?? 0).toLocaleString()} {formData.unit || 'piece'}
+                  </p>
+                </div>
+                <Input
+                  label="Add stock (purchase qty)"
+                  name="stock_to_add"
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={formData.stock_to_add ?? ''}
+                  onChange={handleInputChange}
+                  placeholder="e.g. 10 — adds to stock on hand"
+                />
+              </>
+            ) : (
+              <Input
+                label="Opening stock"
+                name="current_stock"
+                type="number"
+                min="0"
+                value={formData.current_stock}
+                onChange={handleInputChange}
+                required
+              />
+            )}
             
             <Input
               label="Minimum Stock"

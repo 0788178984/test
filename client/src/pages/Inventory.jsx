@@ -10,14 +10,18 @@ import {
   PiggyBank,
   Receipt,
   History,
+  Plus,
 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
-import { inventoryAPI } from '../api/client';
-import { formatCurrency, formatDateTime, getPurchaseDayLabel } from '../api/client';
+import { inventoryAPI, productsAPI } from '../api/client';
+import { formatCurrency, formatDate, formatDateTime, getPurchaseDayLabel, handleApiError } from '../api/client';
 import Card from '../components/ui/Card';
 import StatCard from '../components/ui/StatCard';
 import Table from '../components/ui/Table';
 import Button from '../components/ui/Button';
+import Modal from '../components/ui/Modal';
+import Input from '../components/ui/Input';
 
 const Inventory = () => {
   const { hasRole } = useAuthStore();
@@ -28,6 +32,15 @@ const Inventory = () => {
   const [categoryBreakdown, setCategoryBreakdown] = useState([]);
   const [productValuation, setProductValuation] = useState([]);
   const [purchases, setPurchases] = useState([]);
+  const [purchaseProducts, setPurchaseProducts] = useState([]);
+  const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  const [purchaseForm, setPurchaseForm] = useState({
+    product_id: '',
+    quantity: '',
+    cost_per_unit: '',
+    reason: 'Stock purchase',
+  });
+  const [purchaseSaving, setPurchaseSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
 
@@ -126,6 +139,51 @@ const Inventory = () => {
       console.error('Fetch purchase history error:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadPurchaseProducts = async () => {
+    try {
+      const { data } = await productsAPI.getAll({ limit: 500 });
+      setPurchaseProducts(data.products || []);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const openPurchaseModal = () => {
+    setPurchaseForm({ product_id: '', quantity: '', cost_per_unit: '', reason: 'Stock purchase' });
+    loadPurchaseProducts();
+    setShowPurchaseModal(true);
+  };
+
+  const handlePurchaseSubmit = async (e) => {
+    e.preventDefault();
+    const qty = Number(purchaseForm.quantity);
+    if (!purchaseForm.product_id || !Number.isFinite(qty) || qty <= 0) {
+      toast.error('Choose a product and enter a positive quantity');
+      return;
+    }
+    setPurchaseSaving(true);
+    try {
+      const payload = {
+        product_id: purchaseForm.product_id,
+        quantity: qty,
+        reason: purchaseForm.reason || 'Stock purchase',
+      };
+      if (purchaseForm.cost_per_unit !== '') {
+        payload.cost_per_unit = Number(purchaseForm.cost_per_unit);
+      }
+      const { data } = await inventoryAPI.restock(payload);
+      toast.success(data.message || 'Stock added');
+      setShowPurchaseModal(false);
+      fetchPurchases();
+      if (activeTab === 'overview') fetchOverview();
+    } catch (error) {
+      const { message } = handleApiError(error);
+      toast.error(message);
+    } finally {
+      setPurchaseSaving(false);
     }
   };
 
@@ -307,13 +365,13 @@ const Inventory = () => {
       </div>
 
       <div className="rounded-xl bg-white p-2 shadow-sm">
-        <div className="flex space-x-1">
+        <div className="flex gap-1 overflow-x-auto pb-1">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center space-x-2 rounded-lg px-4 py-2 transition-colors ${
+              className={`flex shrink-0 items-center space-x-2 rounded-lg px-3 py-2 text-sm transition-colors sm:px-4 ${
                 activeTab === tab.id
                   ? 'bg-primary-600 text-white'
                   : 'text-gray-600 hover:bg-primary-50 hover:text-primary-800'
@@ -452,6 +510,17 @@ const Inventory = () => {
 
       {activeTab === 'purchases' && (
         <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-gray-600">
+              Purchases add to existing stock (e.g. 20 + 10 = 30) and are timestamped here.
+            </p>
+            {hasRole('admin', 'manager') && (
+              <Button type="button" variant="primary" size="sm" onClick={openPurchaseModal}>
+                <Plus className="mr-1 h-4 w-4" />
+                Record purchase
+              </Button>
+            )}
+          </div>
           {loading ? (
             <p className="text-gray-500">Loading…</p>
           ) : purchasesByDay.length === 0 ? (
@@ -477,8 +546,10 @@ const Inventory = () => {
                       <div className="min-w-0">
                         <p className="font-medium text-gray-900">{row.product_name}</p>
                         <p className="text-xs text-gray-500">
-                          {formatDateTime(row.created_at)} · +{Number(row.quantity).toLocaleString()} {row.unit || ''}{' '}
-                          · {row.adjustment_type}
+                          {formatDateTime(row.created_at)} ·{' '}
+                          {Number(row.quantity_before ?? 0).toLocaleString()} →{' '}
+                          {Number(row.quantity_after ?? row.quantity).toLocaleString()} {row.unit || ''}{' '}
+                          (+{Number(row.quantity).toLocaleString()}) · {row.adjustment_type}
                           {row.user_name ? ` · ${row.user_name}` : ''}
                         </p>
                       </div>
@@ -549,6 +620,72 @@ const Inventory = () => {
           />
         </Card>
       )}
+
+      <Modal
+        isOpen={showPurchaseModal}
+        onClose={() => setShowPurchaseModal(false)}
+        title="Record stock purchase"
+        size="md"
+      >
+        <form onSubmit={handlePurchaseSubmit} className="space-y-4">
+          <div>
+            <label className="form-label">Product</label>
+            <select
+              className="form-input w-full"
+              value={purchaseForm.product_id}
+              required
+              onChange={(e) => {
+                const id = e.target.value;
+                const p = purchaseProducts.find((x) => x.id === id);
+                setPurchaseForm((f) => ({
+                  ...f,
+                  product_id: id,
+                  cost_per_unit: p?.buying_price != null ? String(p.buying_price) : f.cost_per_unit,
+                }));
+              }}
+            >
+              <option value="">Select product…</option>
+              {purchaseProducts.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} — on hand: {Number(p.current_stock).toLocaleString()} {p.unit || 'pcs'}
+                </option>
+              ))}
+            </select>
+          </div>
+          <Input
+            label="Quantity to add"
+            name="quantity"
+            type="number"
+            min="0.01"
+            step="any"
+            value={purchaseForm.quantity}
+            onChange={(e) => setPurchaseForm((f) => ({ ...f, quantity: e.target.value }))}
+            required
+          />
+          <Input
+            label="Cost per unit (UGX, optional)"
+            name="cost_per_unit"
+            type="number"
+            min="0"
+            value={purchaseForm.cost_per_unit}
+            onChange={(e) => setPurchaseForm((f) => ({ ...f, cost_per_unit: e.target.value }))}
+          />
+          <Input
+            label="Note"
+            name="reason"
+            value={purchaseForm.reason}
+            onChange={(e) => setPurchaseForm((f) => ({ ...f, reason: e.target.value }))}
+          />
+          <div className="flex justify-end gap-2 border-t border-gray-100 pt-4">
+            <Button type="button" variant="secondary" onClick={() => setShowPurchaseModal(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" loading={purchaseSaving}>
+              Add to stock
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };

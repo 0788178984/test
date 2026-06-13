@@ -133,11 +133,33 @@ router.get('/daily', checkPermission('view_reports'), async (req, res) => {
 
     const revenue = Number(summary.revenue || 0);
     const expensesTotal = expensesSummary.total;
+    const salesCount = Number(summary.sales_count || 0);
+
+    const saleLines = await db.prepare(`
+      SELECT
+        s.sale_number,
+        s.total_amount,
+        s.created_at,
+        u.name as cashier_name,
+        c.name as customer_name,
+        si.product_name,
+        si.quantity,
+        si.line_total
+      FROM sale_items si
+      JOIN sales s ON si.sale_id = s.id
+      LEFT JOIN users u ON s.cashier_id = u.id
+      LEFT JOIN customers c ON s.customer_id = c.id
+      WHERE ${LD} = ?
+        AND s.status = 'completed'
+        AND s.deleted_at IS NULL
+        AND s.business_id = ?
+      ORDER BY s.created_at DESC, si.product_name ASC
+    `).all(date, req.user.business_id);
 
     res.json({
       date,
       summary: {
-        sales_count: summary.sales_count || 0,
+        sales_count: salesCount,
         revenue: summary.revenue || 0,
         gross_sales: summary.gross_sales || 0,
         total_discount: summary.total_discount || 0,
@@ -146,7 +168,15 @@ router.get('/daily', checkPermission('view_reports'), async (req, res) => {
         expenses_count: expensesSummary.count,
         expenses_total: expensesTotal,
         net_cash: revenue - expensesTotal,
+        average_sale: salesCount > 0 ? Math.round(revenue / salesCount) : 0,
       },
+      dailySales: {
+        salesCount,
+        revenue: summary.revenue || 0,
+        profit: summary.profit || 0,
+        averageSale: salesCount > 0 ? Math.round(revenue / salesCount) : 0,
+      },
+      saleLines,
       paymentMethods,
       hourlySales,
     });

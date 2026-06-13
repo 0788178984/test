@@ -63,9 +63,10 @@ const ProductImportModal = ({ isOpen, onClose, onImported }) => {
         <div className="rounded-lg border border-blue-100 bg-blue-50/80 p-4 text-sm text-gray-700">
           <p className="font-medium text-gray-900">How it works</p>
           <ol className="mt-2 list-decimal space-y-1 pl-5">
-            <li>Download the template and fill the <strong>Products</strong> sheet.</li>
-            <li>Keep column headers unchanged. Required: name, buying_price, selling_price.</li>
-            <li>Upload the completed file — up to 2,000 rows per import.</li>
+            <li>Download the template — yellow <strong># GUIDE</strong> rows show allowed values (import skips them automatically).</li>
+            <li>Fill product rows on the <strong>Products</strong> sheet only. Use category dropdown where available.</li>
+            <li>See <strong>Instructions</strong> and <strong>Allowed values</strong> sheets for reference (never imported).</li>
+            <li>Upload the completed file — up to 2,000 products per import.</li>
           </ol>
         </div>
 

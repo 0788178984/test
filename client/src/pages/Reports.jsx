@@ -330,15 +330,17 @@ const Reports = () => {
         ) : (
           <div className="space-y-6">
             {/* Daily Sales Report */}
-            {activeTab === 'daily' && reports.dailySales && (
+            {activeTab === 'daily' && (reports.dailySales || reports.summary) && (
               <div className="stat-grid gap-6">
                 <div className="stat-panel text-center">
-                  <p className="stat-value text-primary-600">{reports.dailySales.salesCount || 0}</p>
+                  <p className="stat-value text-primary-600">
+                    {reports.dailySales?.salesCount ?? reports.summary?.sales_count ?? 0}
+                  </p>
                   <p className="stat-label mt-1">Total Sales</p>
                 </div>
                 <div className="stat-panel text-center">
                   <Currency
-                    amount={reports.dailySales.revenue || 0}
+                    amount={reports.dailySales?.revenue ?? reports.summary?.revenue ?? 0}
                     className="stat-value-currency text-green-600"
                     amountClassName="text-green-600"
                   />
@@ -346,7 +348,7 @@ const Reports = () => {
                 </div>
                 <div className="stat-panel text-center">
                   <Currency
-                    amount={reports.dailySales.profit || 0}
+                    amount={reports.dailySales?.profit ?? reports.summary?.profit ?? 0}
                     className="stat-value-currency text-blue-600"
                     amountClassName="text-blue-600"
                   />
@@ -354,13 +356,60 @@ const Reports = () => {
                 </div>
                 <div className="stat-panel text-center">
                   <Currency
-                    amount={reports.dailySales.averageSale || 0}
+                    amount={reports.dailySales?.averageSale ?? reports.summary?.average_sale ?? 0}
                     className="stat-value-currency text-orange-600"
                     amountClassName="text-orange-600"
                   />
                   <p className="stat-label mt-1">Average Sale</p>
                 </div>
               </div>
+            )}
+
+            {activeTab === 'daily' && (
+              <Card className="overflow-hidden p-0">
+                <div className="border-b border-gray-100 px-4 py-3 sm:px-6">
+                  <h3 className="text-base font-semibold text-gray-900">Sales detail — {dateRange.from}</h3>
+                  <p className="text-xs text-gray-500">Seller, item sold, and line total for each receipt line</p>
+                </div>
+                {reports.saleLines?.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="table min-w-[640px]">
+                      <thead>
+                        <tr>
+                          <th>Time</th>
+                          <th>Receipt</th>
+                          <th>Seller</th>
+                          <th>Item</th>
+                          <th className="text-right">Qty</th>
+                          <th className="text-right">Line total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {reports.saleLines.map((row, index) => (
+                          <tr key={`${row.sale_number}-${row.product_name}-${index}`}>
+                            <td className="whitespace-nowrap text-gray-600">
+                              {formatDate(row.created_at, { hour: '2-digit', minute: '2-digit' })}
+                            </td>
+                            <td className="font-mono text-xs">{row.sale_number}</td>
+                            <td>{row.cashier_name || '—'}</td>
+                            <td className="max-w-[12rem] truncate" title={row.product_name}>
+                              {row.product_name}
+                            </td>
+                            <td className="text-right tabular-nums">{Number(row.quantity)}</td>
+                            <td className="text-right font-medium text-green-800">
+                              {formatCurrency(row.line_total)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="px-4 py-10 text-center text-sm text-gray-500 sm:px-6">
+                    No completed sales for this day.
+                  </p>
+                )}
+              </Card>
             )}
 
             {/* Monthly Sales Report */}

@@ -7,9 +7,11 @@ const {
 } = require('../db/businessTypes');
 const { assertSellingNotBelowCost } = require('../utils/money');
 
+const ALLOWED_UNITS = ['piece', 'pack', 'strip', 'bottle', 'tube', 'vial', 'litre', 'kg', 'g', 'box'];
+
 const TEMPLATE_COLUMNS = [
   { header: 'name', key: 'name', width: 28 },
-  { header: 'category', key: 'category', width: 16 },
+  { header: 'category', key: 'category', width: 18 },
   { header: 'sku', key: 'sku', width: 14 },
   { header: 'barcode', key: 'barcode', width: 16 },
   { header: 'unit', key: 'unit', width: 10 },
@@ -43,6 +45,29 @@ function normalizeHeader(value) {
     .toLowerCase()
     .replace(/\s+/g, '_')
     .replace(/[*]/g, '');
+}
+
+function isGuideRow(name, buyingPrice) {
+  const n = String(name || '').trim();
+  if (!n) return true;
+  const upper = n.toUpperCase();
+  if (
+    upper.startsWith('#') ||
+    upper.startsWith('GUIDE') ||
+    upper.includes('DELETE THIS') ||
+    upper.includes('DO NOT IMPORT') ||
+    upper.includes('INSTRUCTION')
+  ) {
+    return true;
+  }
+  if (n.toLowerCase() === 'sample rice 1kg') return true;
+  const buyLabel = String(buyingPrice ?? '')
+    .trim()
+    .toLowerCase();
+  if (['required', 'yes', 'number', 'ugx', 'see instructions', 'required (ugx)'].includes(buyLabel)) {
+    return true;
+  }
+  return false;
 }
 
 function parseBool(value) {
@@ -98,6 +123,7 @@ class ProductImportService {
 
     const sheet = workbook.addWorksheet('Products');
     sheet.columns = TEMPLATE_COLUMNS;
+
     const headerRow = sheet.getRow(1);
     headerRow.font = { bold: true };
     headerRow.fill = {
@@ -105,36 +131,139 @@ class ProductImportService {
       pattern: 'solid',
       fgColor: { argb: 'FFE8F0FE' },
     };
+
+    const guideFill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFFFF8E1' },
+    };
+
+    sheet.addRow({
+      name: '# GUIDE — import skips rows starting with # (safe to leave in file)',
+      category: `Allowed: ${categories.join(', ')}`,
+      sku: 'Optional, unique',
+      barcode: 'Optional, unique',
+      unit: ALLOWED_UNITS.join(', '),
+      buying_price: 'Required (UGX whole number)',
+      selling_price: 'Required, must be ≥ buying',
+      current_stock: 'Opening qty (0 if none)',
+      minimum_stock: 'Default 5',
+      supplier_name: 'Created if new name',
+      expiry_date: 'YYYY-MM-DD or blank',
+      is_active: 'yes or no',
+    });
+    sheet.getRow(2).eachCell((cell) => {
+      cell.fill = guideFill;
+      cell.font = { italic: true, size: 10, color: { argb: 'FF6B5B00' } };
+    });
+
+    sheet.addRow({
+      name: '# GUIDE — delete guide rows if you prefer a clean sheet',
+      category: categories[0] || 'Food',
+      unit: 'piece',
+      buying_price: '',
+      selling_price: '',
+      is_active: 'yes',
+    });
+    sheet.getRow(3).eachCell((cell) => {
+      cell.fill = guideFill;
+      cell.font = { italic: true, size: 10, color: { argb: 'FF6B5B00' } };
+    });
+
     sheet.addRow(EXAMPLE_ROW);
+    sheet.getRow(4).font = { color: { argb: 'FF666666' } };
+
+    // Category dropdown on column B (rows 2–2000)
+    if (categories.length > 0) {
+      sheet.dataValidations.add('B2:B2000', {
+        type: 'list',
+        allowBlank: true,
+        formulae: [`"${categories.join(',')}"`],
+        showErrorMessage: true,
+        errorTitle: 'Invalid category',
+        error: `Choose one of: ${categories.join(', ')}`,
+      });
+    }
+
+    sheet.dataValidations.add('F2:F2000', {
+      type: 'whole',
+      operator: 'greaterThanOrEqual',
+      formulae: [0],
+      allowBlank: true,
+      showErrorMessage: true,
+      errorTitle: 'Invalid price',
+      error: 'Enter a whole number (UGX).',
+    });
+    sheet.dataValidations.add('G2:G2000', {
+      type: 'whole',
+      operator: 'greaterThanOrEqual',
+      formulae: [0],
+      allowBlank: true,
+      showErrorMessage: true,
+      errorTitle: 'Invalid price',
+      error: 'Enter a whole number (UGX).',
+    });
+    sheet.dataValidations.add('L2:L2000', {
+      type: 'list',
+      allowBlank: true,
+      formulae: ['"yes,no"'],
+      showErrorMessage: true,
+      errorTitle: 'Invalid value',
+      error: 'Use yes or no.',
+    });
 
     const instructions = workbook.addWorksheet('Instructions');
     instructions.columns = [
       { header: 'Field', key: 'field', width: 22 },
       { header: 'Required', key: 'required', width: 10 },
-      { header: 'Description', key: 'description', width: 70 },
+      { header: 'Description', key: 'description', width: 72 },
     ];
     instructions.addRows([
+      {
+        field: 'Import rules',
+        required: '—',
+        description:
+          'Only the Products sheet is imported. Rows starting with # GUIDE are ignored. Instructions / Allowed values sheets are never imported.',
+      },
       { field: 'name', required: 'Yes', description: 'Product name as shown on receipts and POS.' },
       {
         field: 'category',
         required: 'No',
-        description: `One of: ${categories.join(', ')}. Leave blank for uncategorised.`,
+        description: `Must be one of: ${categories.join(', ')}. Use the dropdown in Excel. Leave blank for uncategorised.`,
       },
       { field: 'sku / barcode', required: 'No', description: 'Must be unique within your store if provided.' },
-      { field: 'unit', required: 'No', description: 'e.g. piece, kg, litre. Defaults to piece.' },
-      { field: 'buying_price', required: 'Yes', description: 'Cost price in UGX (whole shillings).' },
+      {
+        field: 'unit',
+        required: 'No',
+        description: `Common values: ${ALLOWED_UNITS.join(', ')}. Defaults to piece.`,
+      },
+      { field: 'buying_price', required: 'Yes', description: 'Cost price in UGX (whole shillings, no decimals).' },
       { field: 'selling_price', required: 'Yes', description: 'Shelf price in UGX. Must be ≥ buying price.' },
-      { field: 'current_stock', required: 'No', description: 'Opening quantity on hand. Defaults to 0.' },
+      { field: 'current_stock', required: 'No', description: 'Opening quantity on hand when creating the product. Defaults to 0.' },
       { field: 'minimum_stock', required: 'No', description: 'Low-stock alert level. Defaults to 5.' },
       {
         field: 'supplier_name',
         required: 'No',
         description: 'Matched to an existing supplier or created automatically.',
       },
-      { field: 'expiry_date', required: 'No', description: 'YYYY-MM-DD for perishables / medicines.' },
-      { field: 'is_active', required: 'No', description: 'yes/no. Defaults to yes.' },
+      { field: 'expiry_date', required: 'No', description: 'YYYY-MM-DD for perishables / medicines. Leave blank if N/A.' },
+      { field: 'is_active', required: 'No', description: 'yes or no. Defaults to yes.' },
     ]);
     instructions.getRow(1).font = { bold: true };
+
+    const allowed = workbook.addWorksheet('Allowed values');
+    allowed.columns = [
+      { header: 'Categories (use exact spelling)', key: 'category', width: 24 },
+      { header: 'Units (examples)', key: 'unit', width: 16 },
+    ];
+    const maxLen = Math.max(categories.length, ALLOWED_UNITS.length);
+    for (let i = 0; i < maxLen; i += 1) {
+      allowed.addRow({
+        category: categories[i] || '',
+        unit: ALLOWED_UNITS[i] || '',
+      });
+    }
+    allowed.getRow(1).font = { bold: true };
 
     return workbook.xlsx.writeBuffer();
   }
@@ -144,6 +273,9 @@ class ProductImportService {
     await workbook.xlsx.load(buffer);
     const sheet = workbook.getWorksheet('Products') || workbook.worksheets[0];
     if (!sheet) throw new Error('No worksheet found in the uploaded file.');
+    if (sheet.name !== 'Products' && workbook.getWorksheet('Products')) {
+      throw new Error('Import reads the "Products" sheet only. Keep product rows on that sheet.');
+    }
 
     const headerRow = sheet.getRow(1);
     const columnMap = {};
@@ -166,7 +298,8 @@ class ProductImportService {
       };
 
       const name = String(get('name') || '').trim();
-      if (!name || name.toLowerCase() === 'sample rice 1kg') return;
+      const buying_price = get('buying_price');
+      if (isGuideRow(name, buying_price)) return;
 
       rows.push({
         rowNumber,
@@ -175,7 +308,7 @@ class ProductImportService {
         sku: String(get('sku') || '').trim() || null,
         barcode: String(get('barcode') || '').trim() || null,
         unit: String(get('unit') || 'piece').trim() || 'piece',
-        buying_price: get('buying_price'),
+        buying_price,
         selling_price: get('selling_price'),
         current_stock: get('current_stock'),
         minimum_stock: get('minimum_stock'),

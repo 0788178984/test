@@ -319,11 +319,12 @@ router.put('/:id', checkPermission('add_edit_products'), async (req, res) => {
   try {
     const {
       name, barcode, sku, category, unit, buying_price, selling_price,
-      tax_rate, current_stock, minimum_stock, supplier_id, expiry_date, is_active
+      tax_rate, minimum_stock, supplier_id, expiry_date, is_active,
+      stock_to_add,
     } = req.body;
 
     const existingProduct = await db.prepare(`
-      SELECT id, category FROM products WHERE id = ? AND business_id = ? AND deleted_at IS NULL
+      SELECT id, category, current_stock, buying_price FROM products WHERE id = ? AND business_id = ? AND deleted_at IS NULL
     `).get(req.params.id, req.user.business_id);
 
     if (!existingProduct) {
@@ -349,32 +350,74 @@ router.put('/:id', checkPermission('add_edit_products'), async (req, res) => {
       categoryToSave = normalizedCategory;
     }
 
-    await db.prepare(`
-      UPDATE products SET
-        name = ?, barcode = ?, sku = ?, category = ?, unit = ?,
-        buying_price = ?, selling_price = ?, tax_rate = ?,
-        current_stock = ?, minimum_stock = ?, supplier_id = ?, expiry_date = ?,
-        is_active = ?, updated_at = datetime('now'), sync_status = 'pending'
-      WHERE id = ? AND business_id = ?
-    `).run(
-      name,
-      barcode,
-      sku,
-      categoryToSave,
-      unit,
-      buying_price,
-      selling_price,
-      tax_rate,
-      current_stock !== undefined && current_stock !== null ? current_stock : 0,
-      minimum_stock,
-      supplier_id,
-      expiry_date,
-      is_active ? 1 : 0,
-      req.params.id,
-      req.user.business_id
-    );
+    const addQty = Math.max(0, Number(stock_to_add) || 0);
+    let stockAfterUpdate = Number(existingProduct.current_stock) || 0;
 
-    res.json({ message: 'Product updated successfully.' });
+    await db.transaction(async (tx) => {
+      await tx.prepare(`
+        UPDATE products SET
+          name = ?, barcode = ?, sku = ?, category = ?, unit = ?,
+          buying_price = ?, selling_price = ?, tax_rate = ?,
+          minimum_stock = ?, supplier_id = ?, expiry_date = ?,
+          is_active = ?, updated_at = datetime('now'), sync_status = 'pending'
+        WHERE id = ? AND business_id = ?
+      `).run(
+        name,
+        barcode,
+        sku,
+        categoryToSave,
+        unit,
+        buying_price,
+        selling_price,
+        tax_rate,
+        minimum_stock,
+        supplier_id,
+        expiry_date,
+        is_active ? 1 : 0,
+        req.params.id,
+        req.user.business_id
+      );
+
+      if (addQty > 0) {
+        const quantityBefore = stockAfterUpdate;
+        stockAfterUpdate = quantityBefore + addQty;
+        const unitCost =
+          buying_price !== undefined && buying_price !== null
+            ? Number(buying_price)
+            : Number(existingProduct.buying_price) || 0;
+
+        await tx.prepare(`
+          UPDATE products SET
+            current_stock = ?,
+            updated_at = datetime('now'),
+            sync_status = 'pending'
+          WHERE id = ? AND business_id = ?
+        `).run(stockAfterUpdate, req.params.id, req.user.business_id);
+
+        await tx.prepare(`
+          INSERT INTO stock_adjustments (
+            id, product_id, user_id, adjustment_type, quantity_before, quantity_change,
+            quantity_after, reason, supplier_id, cost_per_unit, business_id, created_at, sync_status
+          ) VALUES (?, ?, ?, 'restock', ?, ?, ?, ?, ?, ?, ?, datetime('now'), 'pending')
+        `).run(
+          newId('adj'),
+          req.params.id,
+          req.user.id,
+          quantityBefore,
+          addQty,
+          stockAfterUpdate,
+          'Stock purchase / restock',
+          supplier_id || null,
+          unitCost,
+          req.user.business_id
+        );
+      }
+    });
+
+    res.json({
+      message: addQty > 0 ? `Product updated. Stock increased by ${addQty} to ${stockAfterUpdate}.` : 'Product updated successfully.',
+      newStock: stockAfterUpdate,
+    });
   } catch (error) {
     console.error('Update product error:', error);
     if (error.code === 'SQLITE_CONSTRAINT_UNIQUE' || error.code === '23505') {
