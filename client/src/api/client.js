@@ -110,6 +110,18 @@ export const salesAPI = {
   getTodaySummary: () => api.get('/api/sales/today-summary'),
 };
 
+export const creditAPI = {
+  getReceivables: (params = {}) => api.get('/api/credit/receivables', { params }),
+  getAging: () => api.get('/api/credit/aging'),
+  getSummary: () => api.get('/api/credit/summary'),
+  getPayments: (params = {}) => api.get('/api/credit/payments', { params }),
+  recordPayment: (data) => api.post('/api/credit/payments', data),
+};
+
+export const cartAuditAPI = {
+  log: (data) => api.post('/api/cart-audit', data),
+};
+
 export const customersAPI = {
   getAll: (params = {}) => api.get('/api/customers', { params }),
   getById: (id) => api.get(`/api/customers/${id}`),

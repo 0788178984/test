@@ -150,20 +150,24 @@ router.get('/:id', async (req, res) => {
 
 router.post('/', checkPermission('manage_customers'), async (req, res) => {
   try {
-    const { name, phone, email, notes } = req.body;
+    const { name, phone, email, notes, credit_enabled, credit_limit } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: 'Customer name is required.' });
     }
 
     const customerId = newId('cust');
+    const creditEnabled = credit_enabled ? 1 : 0;
+    const limit = Math.max(0, Number(credit_limit) || 0);
+
     await db.prepare(
       `
       INSERT INTO customers (
-        id, name, phone, email, notes, business_id, created_at, updated_at, sync_status
-      ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 'pending')
+        id, name, phone, email, notes, credit_enabled, credit_limit,
+        business_id, created_at, updated_at, sync_status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 'pending')
     `
-    ).run(customerId, name, phone, email, notes, bid(req));
+    ).run(customerId, name, phone, email, notes, creditEnabled, limit, bid(req));
 
     res.status(201).json({
       message: 'Customer created successfully.',
@@ -179,7 +183,7 @@ router.post('/', checkPermission('manage_customers'), async (req, res) => {
 
 router.put('/:id', checkPermission('manage_customers'), async (req, res) => {
   try {
-    const { name, phone, email, notes } = req.body;
+    const { name, phone, email, notes, credit_enabled, credit_limit } = req.body;
 
     const existingCustomer = await db
       .prepare(`SELECT id FROM customers WHERE id = ? AND deleted_at IS NULL AND business_id = ?`)
@@ -189,14 +193,30 @@ router.put('/:id', checkPermission('manage_customers'), async (req, res) => {
       return res.status(404).json({ error: 'Customer not found.' });
     }
 
-    await db.prepare(
-      `
+    const creditEnabled = credit_enabled !== undefined ? (credit_enabled ? 1 : 0) : undefined;
+    const limit = credit_limit !== undefined ? Math.max(0, Number(credit_limit) || 0) : undefined;
+
+    if (creditEnabled !== undefined || limit !== undefined) {
+      await db.prepare(
+        `
+      UPDATE customers SET
+        name = ?, phone = ?, email = ?, notes = ?,
+        credit_enabled = COALESCE(?, credit_enabled),
+        credit_limit = COALESCE(?, credit_limit),
+        updated_at = datetime('now'), sync_status = 'pending'
+      WHERE id = ? AND business_id = ?
+    `
+      ).run(name, phone, email, notes, creditEnabled ?? null, limit ?? null, req.params.id, bid(req));
+    } else {
+      await db.prepare(
+        `
       UPDATE customers SET
         name = ?, phone = ?, email = ?, notes = ?,
         updated_at = datetime('now'), sync_status = 'pending'
       WHERE id = ? AND business_id = ?
     `
-    ).run(name, phone, email, notes, req.params.id, bid(req));
+      ).run(name, phone, email, notes, req.params.id, bid(req));
+    }
 
     res.json({ message: 'Customer updated successfully.' });
   } catch (error) {

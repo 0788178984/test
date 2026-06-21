@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { getPool, closePool } = require('./pool');
 const { translateSql } = require('./sqlTranslate');
-const { applyBusinessTypePatch } = require('./schemaPatches');
+const { applyAllSchemaPatches } = require('./schemaPatches');
 
 function prepareOn(client, sql) {
   const q = translateSql(sql);
@@ -57,14 +57,20 @@ async function init() {
   );
   await pool.query(agentFloatMigration);
 
-  await applyBusinessTypePatch(pool);
+  const creditMigration = fs.readFileSync(
+    path.join(__dirname, 'migrations/007_credit_sales_postgres.sql'),
+    'utf8'
+  );
+  await pool.query(creditMigration);
+
+  await applyAllSchemaPatches(pool);
 
   const db = {
     dialect: 'postgres',
     name: 'postgresql (Supabase)',
     isPostgres: true,
     pool,
-    ensureSchema: () => applyBusinessTypePatch(pool),
+    ensureSchema: () => applyAllSchemaPatches(pool),
     prepare: (sql) => prepareOn(pool, sql),
     exec(sql) {
       return pool.query(translateSql(sql));

@@ -6,6 +6,7 @@ const db = require('../db/connection');
 const { newId } = require('../db/ids');
 const { getStoreToday, saleLocalDate, STORE_TZ } = require('../utils/storeTime');
 const { roundUgx, computeSaleTotals, calcWholesaleUnitPrice } = require('../utils/money');
+const { dispatch } = require('./notifications');
 const router = express.Router();
 
 router.use(authenticate, restrictToBusinessStaff);
@@ -24,6 +25,12 @@ async function generateSaleNumber(businessId) {
   return `INV-${today}-${String(Number(count) + 1).padStart(6, '0')}`;
 }
 
+function defaultCreditDueDate() {
+  const d = new Date();
+  d.setDate(d.getDate() + 30);
+  return d.toISOString().slice(0, 10);
+}
+
 // Create sale
 router.post('/', checkPermission('make_sale'), async (req, res) => {
   try {
@@ -36,7 +43,8 @@ router.post('/', checkPermission('make_sale'), async (req, res) => {
       payment_reference,
       notes,
       amount_paid,
-      change_given
+      change_given,
+      credit_due_date,
     } = req.body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -49,10 +57,20 @@ router.post('/', checkPermission('make_sale'), async (req, res) => {
 
     if (customer_id) {
       const cust = await db
-        .prepare(`SELECT id FROM customers WHERE id = ? AND business_id = ? AND deleted_at IS NULL`)
+        .prepare(`SELECT id, credit_enabled, credit_limit, credit_balance, name FROM customers WHERE id = ? AND business_id = ? AND deleted_at IS NULL`)
         .get(customer_id, req.user.business_id);
       if (!cust) {
         return res.status(400).json({ error: 'Invalid customer for this store.' });
+      }
+    }
+
+    const isCreditSale = payment_method === 'credit';
+    if (isCreditSale) {
+      if (!customer_id) {
+        return res.status(400).json({ error: 'A customer must be attached for credit sales.' });
+      }
+      if (req.user.role === 'cashier') {
+        return res.status(403).json({ error: 'Only admin or manager can complete credit sales.' });
       }
     }
 
@@ -133,7 +151,44 @@ router.post('/', checkPermission('make_sale'), async (req, res) => {
     let change = change_given !== undefined && change_given !== null ? roundUgx(change_given) : 0;
     if (Number.isNaN(paid)) paid = totalAmount;
     if (Number.isNaN(change)) change = 0;
-    if (payment_method === 'cash') {
+
+    let balanceDue = 0;
+    let paymentStatus = 'paid';
+    let dueDate = null;
+
+    if (isCreditSale) {
+      paid = Math.min(paid, totalAmount);
+      if (paid < 0) paid = 0;
+      balanceDue = roundUgx(totalAmount - paid);
+      change = 0;
+
+      if (balanceDue <= 0) {
+        paymentStatus = 'paid';
+        balanceDue = 0;
+      } else {
+        paymentStatus = paid > 0 ? 'partial' : 'credit';
+        dueDate = credit_due_date || defaultCreditDueDate();
+
+        const customer = await db.prepare(`
+          SELECT credit_enabled, credit_limit, credit_balance, name FROM customers
+          WHERE id = ? AND business_id = ? AND deleted_at IS NULL
+        `).get(customer_id, req.user.business_id);
+
+        if (!customer?.credit_enabled) {
+          return res.status(400).json({ error: 'Credit is not enabled for this customer. Enable it in Customers.' });
+        }
+
+        const limit = Number(customer.credit_limit) || 0;
+        if (limit > 0) {
+          const projected = (Number(customer.credit_balance) || 0) + balanceDue;
+          if (projected > limit + 0.01) {
+            return res.status(400).json({
+              error: `Credit limit exceeded. Limit UGX ${roundUgx(limit).toLocaleString()}, current balance UGX ${roundUgx(customer.credit_balance).toLocaleString()}, this sale adds UGX ${balanceDue.toLocaleString()}.`,
+            });
+          }
+        }
+      }
+    } else if (payment_method === 'cash') {
       if (paid + 0.001 < totalAmount) {
         return res.status(400).json({ error: 'Amount paid must be at least the total due.' });
       }
@@ -142,6 +197,8 @@ router.post('/', checkPermission('make_sale'), async (req, res) => {
       paid = totalAmount;
       change = 0;
     }
+
+    const saleType = validatedItems.some((i) => i.is_wholesale) ? 'wholesale' : 'retail';
 
     // Generate sale number
     const saleNumber = await generateSaleNumber(req.user.business_id);
@@ -153,12 +210,14 @@ router.post('/', checkPermission('make_sale'), async (req, res) => {
         INSERT INTO sales (
           id, sale_number, cashier_id, customer_id, subtotal, discount_amount,
           discount_reason, tax_amount, total_amount, amount_paid, change_given,
-          payment_method, payment_reference, notes, business_id, created_at, updated_at, sync_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 'pending')
+          payment_method, payment_reference, notes, sale_type, payment_status,
+          balance_due, credit_due_date, business_id, created_at, updated_at, sync_status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 'pending')
       `).run(
         saleId, saleNumber, req.user.id, customer_id || null, subtotal, discount_amount_r,
         discount_reason, taxAmount, totalAmount, paid, change,
-        payment_method, payment_reference || null, notes || null, req.user.business_id
+        payment_method, payment_reference || null, notes || null,
+        saleType, paymentStatus, balanceDue, dueDate, req.user.business_id
       );
 
       // Insert sale items and update stock
@@ -167,11 +226,11 @@ router.post('/', checkPermission('make_sale'), async (req, res) => {
         await tx.prepare(`
           INSERT INTO sale_items (
             id, sale_id, product_id, product_name, quantity, unit_price,
-            buying_price, line_total, created_at, sync_status
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), 'pending')
+            buying_price, line_total, is_wholesale, created_at, sync_status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), 'pending')
         `).run(
           newId('si'), saleId, item.product_id, item.product_name, item.quantity,
-          item.unit_price, item.buying_price, item.line_total
+          item.unit_price, item.buying_price, item.line_total, item.is_wholesale ? 1 : 0
         );
 
         // Update product stock
@@ -214,10 +273,53 @@ router.post('/', checkPermission('make_sale'), async (req, res) => {
         }
       }
 
+      if (balanceDue > 0 && customer_id) {
+        await tx.prepare(`
+          UPDATE customers SET
+            credit_balance = credit_balance + ?,
+            updated_at = datetime('now'),
+            sync_status = 'pending'
+          WHERE id = ? AND business_id = ?
+        `).run(balanceDue, customer_id, req.user.business_id);
+      }
+
     });
 
+    if (discount_amount_r > 0) {
+      dispatch(
+        'DISCOUNT_APPROVAL',
+        {
+          cashier_name: req.user.name,
+          discount: subtotal > 0 ? Math.round((discount_amount_r / subtotal) * 100) : 0,
+          discount_amount: discount_amount_r,
+          sale_number: saleNumber,
+        },
+        { business_id: req.user.business_id }
+      );
+    }
+
+    if (balanceDue > 0) {
+      const custName = customer_id
+        ? (await db.prepare(`SELECT name FROM customers WHERE id = ?`).get(customer_id))?.name
+        : null;
+      dispatch(
+        'CREDIT_SALE',
+        {
+          sale_number: saleNumber,
+          customer_name: custName || 'Customer',
+          total: totalAmount,
+          amount_paid: paid,
+          balance_due: balanceDue,
+          due_date: dueDate,
+          sale_type: saleType,
+          cashier_name: req.user.name,
+        },
+        { business_id: req.user.business_id }
+      );
+    }
+
     res.status(201).json({
-      message: 'Sale completed successfully.',
+      message: balanceDue > 0 ? 'Credit sale recorded. Balance due on account.' : 'Sale completed successfully.',
       saleId,
       saleNumber,
       subtotal,
@@ -225,7 +327,11 @@ router.post('/', checkPermission('make_sale'), async (req, res) => {
       taxAmount,
       totalAmount,
       amountPaid: paid,
-      changeGiven: change
+      changeGiven: change,
+      balanceDue,
+      paymentStatus,
+      saleType,
+      creditDueDate: dueDate,
     });
   } catch (error) {
     console.error('Create sale error:', error);
@@ -441,7 +547,8 @@ router.post('/:id/void', checkPermission('void_sale'), async (req, res) => {
 
     const businessId = req.user.business_id;
     const sale = await db.prepare(`
-      SELECT id, sale_number, status, cashier_id FROM sales
+      SELECT id, sale_number, status, cashier_id, total_amount, balance_due, customer_id, payment_status
+      FROM sales
       WHERE id = ? AND deleted_at IS NULL AND business_id = ?
     `).get(req.params.id, businessId);
 
@@ -541,8 +648,29 @@ router.post('/:id/void', checkPermission('void_sale'), async (req, res) => {
             WHERE id = ? AND business_id = ?
           `).run(pointsToReverse, customerInfo.total_amount, customerInfo.customer_id, businessId);
         }
+
+        if (Number(sale.balance_due) > 0 && customerInfo.customer_id) {
+          await tx.prepare(`
+            UPDATE customers SET
+              credit_balance = GREATEST(0, credit_balance - ?),
+              updated_at = datetime('now'),
+              sync_status = 'pending'
+            WHERE id = ? AND business_id = ?
+          `).run(Number(sale.balance_due), customerInfo.customer_id, businessId);
+        }
       }
     });
+
+    dispatch(
+      'VOID_SALE',
+      {
+        sale_number: sale.sale_number,
+        total: sale.total_amount,
+        cashier_name: req.user.name,
+        reason,
+      },
+      { business_id: businessId, sender_user_id: req.user.id }
+    );
 
     res.json({
       message: 'Sale voided successfully. Stock restored and reports updated.',

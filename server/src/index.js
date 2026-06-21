@@ -36,6 +36,8 @@ const paymentRoutes = require('./routes/payments');
 const expenseRoutes = require('./routes/expenses');
 const storeRoutes = require('./routes/store');
 const docsRoutes = require('./routes/docs');
+const creditRoutes = require('./routes/credit');
+const cartAuditRoutes = require('./routes/cartAudit');
 const { getStoreToday, saleLocalDate } = require('./utils/storeTime');
 
 // Import services
@@ -185,6 +187,8 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/store', storeRoutes);
 app.use('/api/docs', docsRoutes);
+app.use('/api/credit', creditRoutes);
+app.use('/api/cart-audit', cartAuditRoutes);
 app.use('/api/agent-float', require('./routes/agentFloat'));
 
 // Static files for client (in production)
@@ -354,6 +358,53 @@ cron.schedule('*/5 * * * *', async () => {
     }
   } catch (error) {
     logger.error('Low stock check error:', error);
+  }
+});
+
+// Every day at 9:30 AM — overdue credit follow-up
+cron.schedule('30 9 * * *', async () => {
+  logger.info('Running overdue credit check...');
+
+  try {
+    const overdueSales = await db.prepare(`
+      SELECT s.id, s.sale_number, s.balance_due, s.credit_due_date,
+             c.name as customer_name, c.phone as customer_phone, s.business_id
+      FROM sales s
+      LEFT JOIN customers c ON s.customer_id = c.id
+      WHERE s.deleted_at IS NULL AND s.status = 'completed'
+        AND s.balance_due > 0
+        AND s.credit_due_date IS NOT NULL
+        AND date(s.credit_due_date) < date('now')
+    `).all();
+
+    for (const sale of overdueSales) {
+      const recent = await db.prepare(`
+        SELECT id FROM notifications
+        WHERE type = 'credit_overdue'
+        AND json_extract(meta, '$.sale_id') = ?
+        AND business_id = ?
+        AND created_at > datetime('now', '-24 hours')
+      `).get(sale.id, sale.business_id);
+
+      if (!recent) {
+        dispatch(
+          'CREDIT_OVERDUE',
+          {
+            sale_id: sale.id,
+            sale_number: sale.sale_number,
+            customer_name: sale.customer_name || 'Customer',
+            customer_phone: sale.customer_phone,
+            balance_due: sale.balance_due,
+            due_date: sale.credit_due_date,
+          },
+          { business_id: sale.business_id }
+        );
+      }
+    }
+
+    logger.info(`Overdue credit check completed. Found ${overdueSales.length} overdue sale(s).`);
+  } catch (error) {
+    logger.error('Overdue credit check error:', error);
   }
 });
 

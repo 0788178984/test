@@ -464,7 +464,9 @@ const NOTIFICATION_EVENTS = {
     channels: ['in_app'],
     template: (meta) => ({
       title: 'Discount Applied',
-      message: `${meta.cashier_name} applied ${meta.discount}% discount on ${meta.sale_number}`,
+      message: meta.discount_amount
+        ? `${meta.cashier_name} applied UGX ${Number(meta.discount_amount).toLocaleString()} discount${meta.sale_number ? ` on ${meta.sale_number}` : ' on cart'}.`
+        : `${meta.cashier_name} applied ${meta.discount}% discount on ${meta.sale_number || 'cart'}`,
     }),
   },
 
@@ -520,6 +522,72 @@ const NOTIFICATION_EVENTS = {
     template: (meta) => ({
       title: 'User Login',
       message: `${meta.user_name} (${meta.role}) logged in at ${meta.time}`,
+    }),
+  },
+
+  CREDIT_SALE: {
+    type: 'credit_sale',
+    severity: 'warning',
+    target_role: 'admin',
+    channels: ['in_app', 'sms'],
+    template: (meta) => ({
+      title: 'Credit Sale',
+      message: `📋 ${meta.sale_type === 'wholesale' ? 'Wholesale' : 'Retail'} credit sale ${meta.sale_number} — ${meta.customer_name}: UGX ${meta.balance_due?.toLocaleString()} due (paid UGX ${meta.amount_paid?.toLocaleString()}). Due: ${meta.due_date || 'N/A'}. By ${meta.cashier_name}.`,
+    }),
+  },
+
+  CREDIT_PAYMENT_RECEIVED: {
+    type: 'credit_payment',
+    severity: 'success',
+    target_role: 'admin',
+    channels: ['in_app', 'sms'],
+    template: (meta) => ({
+      title: 'Credit Payment Received',
+      message: `✅ ${meta.customer_name} paid UGX ${meta.amount?.toLocaleString()} on ${meta.sale_number}. Remaining: UGX ${meta.balance_due?.toLocaleString()}. Recorded by ${meta.recorded_by}.`,
+    }),
+  },
+
+  CREDIT_OVERDUE: {
+    type: 'credit_overdue',
+    severity: 'danger',
+    target_role: 'admin',
+    channels: ['in_app', 'sms'],
+    template: (meta) => ({
+      title: 'Overdue Credit',
+      message: `🚨 Overdue: ${meta.customer_name} owes UGX ${meta.balance_due?.toLocaleString()} on ${meta.sale_number} (due ${meta.due_date}). Phone: ${meta.customer_phone || 'N/A'}.`,
+    }),
+  },
+
+  CART_LINE_REMOVED: {
+    type: 'cart_line_removed',
+    severity: 'info',
+    target_role: 'admin',
+    channels: ['in_app'],
+    template: (meta) => ({
+      title: 'Cart Item Removed',
+      message: `${meta.cashier_name} removed ${meta.product_name}${meta.quantity ? ` (qty ${meta.quantity})` : ''}${meta.line_amount ? ` — UGX ${Number(meta.line_amount).toLocaleString()}` : ''}. Cart total: UGX ${Number(meta.cart_total || 0).toLocaleString()}.`,
+    }),
+  },
+
+  CART_CLEARED: {
+    type: 'cart_cleared',
+    severity: 'warning',
+    target_role: 'admin',
+    channels: ['in_app'],
+    template: (meta) => ({
+      title: 'Cart Cleared',
+      message: `${meta.cashier_name} cleared the cart (was UGX ${Number(meta.cart_total || 0).toLocaleString()}, ${meta.item_count || 0} items).`,
+    }),
+  },
+
+  CART_WHOLESALE_CHANGED: {
+    type: 'cart_wholesale_changed',
+    severity: 'info',
+    target_role: 'admin',
+    channels: ['in_app'],
+    template: (meta) => ({
+      title: 'Wholesale Markup Changed',
+      message: `${meta.cashier_name} changed wholesale markup on ${meta.product_name} to ${meta.markup_percent}%.`,
     }),
   },
 };

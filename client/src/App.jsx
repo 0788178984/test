@@ -24,6 +24,7 @@ import TeamMessages from './pages/TeamMessages';
 import Subscription from './pages/Subscription';
 import MobileMoney from './pages/MobileMoney';
 import Returns from './pages/Returns';
+import CreditReceivables from './pages/CreditReceivables';
 
 function App() {
   const checkAuth = useAuthStore((state) => state.checkAuth);
@@ -59,6 +60,7 @@ function App() {
                   <Route path="expenses" element={<Expenses />} />
                   <Route path="reports" element={<Reports />} />
                   <Route path="returns" element={<Returns />} />
+                  <Route path="credit" element={<CreditReceivables />} />
                   <Route path="data-analysis" element={<DataAnalysis />} />
                   <Route path="team-messages" element={<TeamMessages />} />
                 </Route>

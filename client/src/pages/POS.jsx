@@ -171,6 +171,7 @@ const POS = () => {
         payment_reference: paymentData.reference || null,
         amount_paid: paymentData.amountPaid ?? getTotal(),
         change_given: paymentData.changeGiven ?? 0,
+        credit_due_date: paymentData.creditDueDate || null,
       };
 
       const response = await salesAPI.create(saleData);
@@ -191,6 +192,10 @@ const POS = () => {
         hasWholesaleItems: summary.hasWholesaleItems,
         amountPaid: data.amountPaid ?? paymentData.amountPaid ?? summary.total,
         changeGiven: data.changeGiven ?? paymentData.changeGiven ?? 0,
+        balanceDue: data.balanceDue ?? paymentData.balanceDue ?? 0,
+        paymentStatus: data.paymentStatus,
+        creditDueDate: data.creditDueDate ?? paymentData.creditDueDate,
+        saleType: data.saleType,
         paymentMethod: paymentData.method,
         paymentReference: paymentData.reference || '',
         customerName: customer?.name,
@@ -486,6 +491,7 @@ const POS = () => {
         <PaymentModal
           totalAmount={getTotal()}
           customer={customer}
+          canUseCredit={hasRole('admin', 'manager') && Boolean(customer?.credit_enabled)}
           paymentMethods={
             user?.payment_methods || { cash: true, mtn_momo: false, airtel_money: false }
           }

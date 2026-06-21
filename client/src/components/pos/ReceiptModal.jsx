@@ -115,6 +115,20 @@ const ReceiptModal = ({ sale, onClose, onPrint, onSendSMS, onSendWhatsApp }) => 
                 <span>{formatCurrency(sale.changeGiven)}</span>
               </div>
             )}
+            {(sale.balanceDue || 0) > 0 && (
+              <>
+                <div className="flex justify-between font-semibold text-violet-800">
+                  <span>Balance due (credit)</span>
+                  <span>{formatCurrency(sale.balanceDue)}</span>
+                </div>
+                {sale.creditDueDate && (
+                  <div className="flex justify-between text-xs text-violet-700">
+                    <span>Due date</span>
+                    <span>{sale.creditDueDate}</span>
+                  </div>
+                )}
+              </>
+            )}
             {sale.paymentReference && (
               <div className="flex justify-between text-xs text-gray-500">
                 <span>Ref</span>

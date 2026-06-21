@@ -22,6 +22,7 @@ import {
   Wallet,
   Smartphone,
   Undo2,
+  BookOpen,
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../../store/authStore';
@@ -163,6 +164,12 @@ const Layout = () => {
       title: 'Returns & voids',
       icon: Undo2,
       path: '/returns',
+      roles: ['admin', 'manager'],
+    },
+    {
+      title: 'Credit & receivables',
+      icon: BookOpen,
+      path: '/credit',
       roles: ['admin', 'manager'],
     },
     {

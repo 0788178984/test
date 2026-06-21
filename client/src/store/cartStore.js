@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { roundUgx, computeSaleTotals, calcWholesaleUnitPrice } from '../utils/money';
+import { logCartAction } from '../utils/cartAudit';
 
 function buildLinePricing(product, wholesaleMarkupPercent) {
   const retailPrice = roundUgx(product.selling_price);
@@ -144,9 +145,28 @@ const useCartStore = create((set, get) => ({
       items,
       defaultWholesaleMarkup: pct > 0 ? pct : get().defaultWholesaleMarkup,
     });
+    const item = items.find((i) => i.id === productId);
+    if (item && pct > 0) {
+      logCartAction({
+        action: 'wholesale_markup_changed',
+        product_name: item.name,
+        meta: { markup_percent: pct },
+      });
+    }
   },
 
   removeItem: (productId) => {
+    const item = get().items.find((i) => i.id === productId);
+    if (item) {
+      const remainingTotal = roundUgx(get().getTotal() - item.line_total);
+      logCartAction({
+        action: 'line_removed',
+        product_name: item.name,
+        quantity: item.quantity,
+        line_amount: item.line_total,
+        cart_total: remainingTotal,
+      });
+    }
     set({ items: get().items.filter((item) => item.id !== productId) });
   },
 
@@ -170,6 +190,14 @@ const useCartStore = create((set, get) => ({
   },
 
   clearCart: () => {
+    const items = get().items;
+    if (items.length > 0) {
+      logCartAction({
+        action: 'cart_cleared',
+        cart_total: get().getTotal(),
+        meta: { item_count: items.length },
+      });
+    }
     set({
       items: [],
       customer: null,
@@ -197,8 +225,16 @@ const useCartStore = create((set, get) => ({
   },
 
   setDiscount: (amount, reason = '') => {
+    const discountAmount = amount || 0;
+    if (discountAmount > 0) {
+      logCartAction({
+        action: 'discount_applied',
+        cart_total: get().getTotal(),
+        meta: { discount_amount: discountAmount, reason },
+      });
+    }
     set({
-      discountAmount: amount || 0,
+      discountAmount,
       discountReason: reason,
     });
   },

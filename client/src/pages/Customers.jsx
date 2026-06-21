@@ -41,7 +41,9 @@ const Customers = () => {
       name: '',
       phone: '',
       email: '',
-      notes: ''
+      notes: '',
+      credit_enabled: false,
+      credit_limit: '',
     });
     setShowModal(true);
   };
@@ -53,6 +55,8 @@ const Customers = () => {
       phone: customer.phone || '',
       email: customer.email || '',
       notes: customer.notes || '',
+      credit_enabled: Boolean(customer.credit_enabled),
+      credit_limit: customer.credit_limit ? String(customer.credit_limit) : '',
     });
     setShowModal(true);
   };
@@ -61,11 +65,16 @@ const Customers = () => {
     e.preventDefault();
     
     try {
+      const payload = {
+        ...formData,
+        credit_enabled: Boolean(formData.credit_enabled),
+        credit_limit: formData.credit_limit ? Number(formData.credit_limit) : 0,
+      };
       if (editingCustomer?.id) {
-        await customersAPI.update(editingCustomer.id, formData);
+        await customersAPI.update(editingCustomer.id, payload);
         toast.success('Customer updated');
       } else {
-        await customersAPI.create(formData);
+        await customersAPI.create(payload);
         toast.success('Customer added');
       }
 
@@ -134,6 +143,18 @@ const Customers = () => {
     { header: 'Email', accessor: 'email' },
     { header: 'Total Spent', accessor: 'total_spent', render: (row) => formatCurrency(row.total_spent) },
     { header: 'Loyalty Points', accessor: 'loyalty_points' },
+    {
+      header: 'Credit',
+      accessor: 'credit_balance',
+      render: (row) =>
+        row.credit_enabled ? (
+          <span title={`Limit: ${formatCurrency(row.credit_limit || 0)}`}>
+            {formatCurrency(row.credit_balance || 0)}
+          </span>
+        ) : (
+          '—'
+        ),
+    },
     { header: 'Visits', accessor: 'visit_count' },
     {
       header: 'Last Visit',
@@ -241,6 +262,34 @@ const Customers = () => {
               rows={4}
             />
           </div>
+
+          {hasRole('admin', 'manager') && (
+            <div className="rounded-lg border border-violet-200 bg-violet-50 p-4 space-y-3">
+              <h3 className="text-sm font-semibold text-violet-900">Credit account (pay later)</h3>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  name="credit_enabled"
+                  checked={Boolean(formData.credit_enabled)}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, credit_enabled: e.target.checked }))
+                  }
+                  className="rounded border-gray-300"
+                />
+                Enable credit sales for this customer
+              </label>
+              {formData.credit_enabled && (
+                <Input
+                  label="Credit limit (UGX, 0 = no limit)"
+                  name="credit_limit"
+                  type="number"
+                  min={0}
+                  value={formData.credit_limit}
+                  onChange={handleInputChange}
+                />
+              )}
+            </div>
+          )}
 
           <div className="flex justify-end space-x-4">
             <Button

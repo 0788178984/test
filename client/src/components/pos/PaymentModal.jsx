@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, CreditCard, Smartphone, DollarSign } from 'lucide-react';
-import { customersAPI, paymentsAPI, formatCurrency, formatPhoneNumber, handleApiError } from '../../api/client';
+import { X, CreditCard, Smartphone, DollarSign, BookOpen } from 'lucide-react';
+import { customersAPI, paymentsAPI, formatCurrency, formatPhoneNumber, handleApiError, getStoreToday } from '../../api/client';
 import Currency from '../ui/Currency';
 import { toast } from 'react-hot-toast';
 import Button from '../ui/Button';
@@ -9,24 +9,36 @@ const ALL_METHODS = [
   { id: 'cash', name: 'Cash', icon: DollarSign, color: 'green' },
   { id: 'mtn_momo', name: 'MTN MoMo', icon: Smartphone, color: 'yellow' },
   { id: 'airtel_money', name: 'Airtel Money', icon: CreditCard, color: 'blue' },
+  { id: 'credit', name: 'On Credit', icon: BookOpen, color: 'purple' },
 ];
+
+function addDaysISO(days) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
 
 /**
  * Payment UI — render inside parent <Modal>; do not nest another Modal here.
  * @param {object} [paymentMethods] — from auth: { cash, mtn_momo, airtel_money }
+ * @param {boolean} [canUseCredit] — admin/manager with credit-enabled customer
  */
-const PaymentModal = ({ totalAmount, customer, paymentMethods, onPayment, onCancel }) => {
+const PaymentModal = ({ totalAmount, customer, paymentMethods, canUseCredit, onPayment, onCancel }) => {
   const methods = useMemo(
     () =>
-      ALL_METHODS.filter(
-        (m) => m.id === 'cash' || (paymentMethods && paymentMethods[m.id] === true)
-      ),
-    [paymentMethods]
+      ALL_METHODS.filter((m) => {
+        if (m.id === 'credit') return canUseCredit && customer?.credit_enabled;
+        if (m.id === 'cash') return true;
+        return paymentMethods && paymentMethods[m.id] === true;
+      }),
+    [paymentMethods, canUseCredit, customer]
   );
 
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [cashTendered, setCashTendered] = useState(totalAmount);
+  const [creditPaidNow, setCreditPaidNow] = useState(0);
+  const [creditDueDate, setCreditDueDate] = useState(() => addDaysISO(30));
   const [reference, setReference] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -42,6 +54,9 @@ const PaymentModal = ({ totalAmount, customer, paymentMethods, onPayment, onCanc
   useEffect(() => {
     if (paymentMethod === 'cash') {
       setCashTendered(Math.round(Number(totalAmount) || 0));
+    }
+    if (paymentMethod === 'credit') {
+      setCreditPaidNow(0);
     }
   }, [totalAmount, paymentMethod]);
 
@@ -85,9 +100,35 @@ const PaymentModal = ({ totalAmount, customer, paymentMethods, onPayment, onCanc
     });
   };
 
+  const submitCredit = () => {
+    const due = Math.round(Number(totalAmount) || 0);
+    const paidNow = Math.round(Number(creditPaidNow) || 0);
+    if (paidNow > due) {
+      toast.error('Amount paid now cannot exceed total.');
+      return;
+    }
+    if (!creditDueDate) {
+      toast.error('Set a due date for the credit balance.');
+      return;
+    }
+    onPayment({
+      method: 'credit',
+      amountPaid: paidNow,
+      changeGiven: 0,
+      reference: '',
+      creditDueDate,
+      balanceDue: due - paidNow,
+    });
+  };
+
   const handlePayClick = async () => {
     if (paymentMethod === 'cash') {
       submitCash();
+      return;
+    }
+
+    if (paymentMethod === 'credit') {
+      submitCredit();
       return;
     }
 
@@ -129,8 +170,12 @@ const PaymentModal = ({ totalAmount, customer, paymentMethods, onPayment, onCanc
   };
 
   const tenderOk =
-    paymentMethod !== 'cash' ||
-    (Number(cashTendered) || 0) + 0.001 >= (Number(totalAmount) || 0);
+    paymentMethod === 'credit'
+      ? true
+      : paymentMethod !== 'cash' ||
+        (Number(cashTendered) || 0) + 0.001 >= (Number(totalAmount) || 0);
+
+  const creditBalanceDue = Math.max(0, (Number(totalAmount) || 0) - (Number(creditPaidNow) || 0));
 
   return (
     <div className="space-y-6">
@@ -165,12 +210,26 @@ const PaymentModal = ({ totalAmount, customer, paymentMethods, onPayment, onCanc
           <p className="text-sm">
             <span className="font-medium">Loyalty:</span> {customer.loyalty_points} pts
           </p>
+          {customer.credit_enabled ? (
+            <>
+              <p className="text-sm">
+                <span className="font-medium">Credit balance:</span>{' '}
+                {formatCurrency(customer.credit_balance || 0)}
+              </p>
+              {customer.credit_limit > 0 && (
+                <p className="text-sm">
+                  <span className="font-medium">Credit limit:</span>{' '}
+                  {formatCurrency(customer.credit_limit)}
+                </p>
+              )}
+            </>
+          ) : null}
         </div>
       )}
 
       <div>
         <h3 className="mb-3 text-lg font-semibold text-gray-900">Payment method</h3>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {methods.map((method) => {
             const Icon = method.icon;
             const active = paymentMethod === method.id;
@@ -192,6 +251,40 @@ const PaymentModal = ({ totalAmount, customer, paymentMethods, onPayment, onCanc
           })}
         </div>
       </div>
+
+      {paymentMethod === 'credit' && (
+        <div className="space-y-4 rounded-lg border border-violet-200 bg-violet-50 p-4">
+          <p className="text-sm text-violet-900">
+            Record a credit sale. Stock is reduced now; customer pays the balance later.
+          </p>
+          <div>
+            <label className="form-label">Amount paid now (UGX, optional)</label>
+            <input
+              type="number"
+              min={0}
+              max={totalAmount}
+              step="1"
+              value={creditPaidNow}
+              onChange={(e) => setCreditPaidNow(e.target.value === '' ? '' : parseFloat(e.target.value))}
+              className="form-input"
+            />
+          </div>
+          <div>
+            <label className="form-label">Balance due</label>
+            <p className="text-lg font-bold text-violet-800">{formatCurrency(creditBalanceDue)}</p>
+          </div>
+          <div>
+            <label className="form-label">Payment due date</label>
+            <input
+              type="date"
+              min={getStoreToday()}
+              value={creditDueDate}
+              onChange={(e) => setCreditDueDate(e.target.value)}
+              className="form-input"
+            />
+          </div>
+        </div>
+      )}
 
       {paymentMethod === 'cash' && (
         <div className="space-y-4 rounded-lg border border-gray-200 p-4">
@@ -240,7 +333,7 @@ const PaymentModal = ({ totalAmount, customer, paymentMethods, onPayment, onCanc
         </div>
       )}
 
-      {paymentMethod !== 'cash' && (
+      {paymentMethod !== 'cash' && paymentMethod !== 'credit' && (
         <div className="space-y-4">
           <div>
             <label className="form-label">Payer phone (MoMo)</label>
@@ -321,7 +414,11 @@ const PaymentModal = ({ totalAmount, customer, paymentMethods, onPayment, onCanc
           disabled={isProcessing || !tenderOk}
           className="flex-1"
         >
-          {paymentMethod === 'cash' ? 'Confirm cash sale' : `Confirm ${getPaymentMethodName(paymentMethod)}`}
+          {paymentMethod === 'cash'
+            ? 'Confirm cash sale'
+            : paymentMethod === 'credit'
+              ? `Confirm credit sale (${formatCurrency(creditBalanceDue)} due)`
+              : `Confirm ${getPaymentMethodName(paymentMethod)}`}
         </Button>
       </div>
     </div>
