@@ -157,7 +157,7 @@ if (process.env.NODE_ENV !== 'production') {
 // Developer licence dashboard (explicit mount so it is never shadowed by router internals)
 app.get('/api/developer/license-alerts', authenticate, authorize('developer'), async (req, res) => {
   try {
-    const { out_of_licence, expiring_soon, expiring_this_month } = classifyLicenseStates();
+    const { out_of_licence, expiring_soon, expiring_this_month } = await classifyLicenseStates();
     res.json({
       out_of_licence,
       expiring_soon,

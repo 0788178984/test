@@ -20,6 +20,32 @@ import { useNotificationStore } from '../store/notificationStore';
 import { toast } from 'react-hot-toast';
 import { BUSINESS_TYPES, businessTypeLabel } from '../constants/businessTypes';
 
+function storeTodayIso() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Kampala',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
+function isStoreLicenceBlocked(b) {
+  const status = (b.subscription_status || 'trial').toLowerCase();
+  if (status === 'suspended' || status === 'expired') return true;
+  if (!b.subscription_expires_at) return false;
+  const expiryDay = String(b.subscription_expires_at).includes('T')
+    ? String(b.subscription_expires_at).slice(0, 10)
+    : String(b.subscription_expires_at).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(expiryDay)) return false;
+  return storeTodayIso() > expiryDay;
+}
+
+function formatExpiryInput(expiresAt) {
+  if (!expiresAt) return '';
+  const s = String(expiresAt);
+  return s.includes('T') ? s.slice(0, 10) : s.trim();
+}
+
 export default function DeveloperConsole() {
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
@@ -846,12 +872,20 @@ export default function DeveloperConsole() {
                 </thead>
                 <tbody>
                   {businesses.map((b) => (
-                    <tr key={b.id} className="border-b border-gray-100">
+                    <tr
+                      key={b.id}
+                      className={`border-b border-gray-100 ${isStoreLicenceBlocked(b) ? 'bg-red-50' : ''}`}
+                    >
                       <td className="py-2 pr-4 font-mono text-xs">{b.id}</td>
                       <td className="py-2 pr-4 font-mono">{b.business_code}</td>
                       <td className="py-2 pr-4 text-xs">{businessTypeLabel(b.business_type)}</td>
                       <td className="py-2 pr-4">{b.name}</td>
-                      <td className="py-2 pr-4 capitalize">{b.subscription_status}</td>
+                      <td className="py-2 pr-4 capitalize">
+                        {b.subscription_status}
+                        {isStoreLicenceBlocked(b) ? (
+                          <span className="ml-1 text-xs font-semibold text-red-700">(blocked)</span>
+                        ) : null}
+                      </td>
                       <td className="py-2 pr-4">{b.subscription_expires_at || '—'}</td>
                       <td className="py-2">{b.user_count}</td>
                     </tr>
@@ -864,13 +898,25 @@ export default function DeveloperConsole() {
 
         <section className="bg-white rounded-xl shadow p-6 space-y-4">
           <h2 className="text-md font-semibold text-gray-800">Update subscription</h2>
+          <p className="text-sm text-gray-600">
+            Set status to <strong>active</strong> and choose a <strong>future expiry date</strong>, or leave expiry
+            empty for no end date. Changing status alone does not renew a store whose expiry date has passed.
+          </p>
           <form onSubmit={saveLicense} className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className="form-label">Store</label>
               <select
                 className="form-input"
                 value={patch.id}
-                onChange={(e) => setPatch((p) => ({ ...p, id: e.target.value }))}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  const biz = businesses.find((b) => b.id === id);
+                  setPatch({
+                    id,
+                    status: biz?.subscription_status || 'active',
+                    expires: formatExpiryInput(biz?.subscription_expires_at),
+                  });
+                }}
               >
                 <option value="">Select…</option>
                 {businesses.map((b) => (
@@ -894,10 +940,10 @@ export default function DeveloperConsole() {
               </select>
             </div>
             <Input
-              label="Expires at (ISO date or empty)"
+              label="Expires at (YYYY-MM-DD, or empty = no end date)"
               value={patch.expires}
               onChange={(e) => setPatch((p) => ({ ...p, expires: e.target.value }))}
-              placeholder="2026-12-31"
+              placeholder="2027-06-22"
             />
             <div className="flex items-end">
               <Button type="submit" variant="primary">

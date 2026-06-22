@@ -1,4 +1,6 @@
 const db = require('../db/connection');
+const { getStoreToday } = require('../utils/storeTime');
+const { isSubscriptionExpired, expiryDateInStoreTz } = require('../utils/subscription');
 
 async function getDeveloperUserId() {
   const row = await db
@@ -8,48 +10,46 @@ async function getDeveloperUserId() {
 }
 
 /**
+ * Days from store-today until expiry calendar day (negative if past).
+ */
+function daysUntilExpiry(expiresAt) {
+  const expiryDay = expiryDateInStoreTz(expiresAt);
+  if (!expiryDay) return null;
+  const today = getStoreToday();
+  const [ey, em, ed] = expiryDay.split('-').map(Number);
+  const [ty, tm, td] = today.split('-').map(Number);
+  const expMs = Date.UTC(ey, em - 1, ed);
+  const todayMs = Date.UTC(ty, tm - 1, td);
+  return Math.round((expMs - todayMs) / 86400000);
+}
+
+/**
  * Classify businesses for dashboards and scheduled reminders.
  * @returns {{ out_of_licence: object[], expiring_soon: object[], expiring_this_month: object[] }}
  */
 async function classifyLicenseStates() {
   const businesses = await db.prepare(`SELECT * FROM businesses ORDER BY name`).all();
-  const now = new Date();
   const out_of_licence = [];
   const expiring_soon = [];
   const expiring_this_month = [];
 
   for (const b of businesses) {
-    const sub = (b.subscription_status || 'trial').toLowerCase();
-    const exp = b.subscription_expires_at ? new Date(b.subscription_expires_at) : null;
-    const expValid = exp && !Number.isNaN(exp.getTime());
-    const past = expValid && exp < now;
-    const blocked =
-      sub === 'suspended' || sub === 'expired' || past;
-
-    let days_until_expiry = null;
-    if (expValid && !past) {
-      days_until_expiry = Math.ceil((exp - now) / 86400000);
-    } else if (expValid && past) {
-      days_until_expiry = Math.ceil((exp - now) / 86400000);
-    }
+    const blocked = isSubscriptionExpired(b.subscription_status, b.subscription_expires_at);
+    const days_until_expiry = b.subscription_expires_at ? daysUntilExpiry(b.subscription_expires_at) : null;
+    const expValid = days_until_expiry !== null;
 
     const row = {
       ...b,
       days_until_expiry,
-      is_past_expiry: !!past,
+      is_past_expiry: blocked && expValid && days_until_expiry < 0,
       is_blocked: blocked,
     };
 
     if (blocked) {
       out_of_licence.push(row);
-    } else if (expValid && days_until_expiry !== null && days_until_expiry >= 0 && days_until_expiry <= 14) {
+    } else if (expValid && days_until_expiry >= 0 && days_until_expiry <= 14) {
       expiring_soon.push(row);
-    } else if (
-      expValid &&
-      days_until_expiry !== null &&
-      days_until_expiry > 14 &&
-      days_until_expiry <= 30
-    ) {
+    } else if (expValid && days_until_expiry > 14 && days_until_expiry <= 30) {
       expiring_this_month.push(row);
     }
   }

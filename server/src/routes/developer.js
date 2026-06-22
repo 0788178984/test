@@ -9,19 +9,11 @@ const {
   mergePaymentConfig,
 } = require('../services/paymentConfigService');
 const { normalizeBusinessType } = require('../db/businessTypes');
+const { parseSubscriptionExpiresAt } = require('../utils/subscription');
 
 const router = express.Router();
 
 const VALID_SUBSCRIPTION_STATUSES = ['active', 'trial', 'suspended', 'expired'];
-
-function parseSubscriptionExpiresAt(raw) {
-  if (raw === undefined || raw === null) return null;
-  const s = String(raw).trim();
-  if (!s) return null;
-  const d = new Date(s.includes('T') ? s : `${s}T12:00:00`);
-  if (Number.isNaN(d.getTime())) return { error: 'Expires at must be a valid date (e.g. 2026-12-31).' };
-  return d.toISOString();
-}
 
 function isUniqueViolation(err) {
   return err?.code === '23505' || err?.code === 'SQLITE_CONSTRAINT_UNIQUE';
@@ -139,12 +131,20 @@ router.patch('/businesses/:id', async (req, res) => {
       vals.push(normalizeBusinessType(business_type));
     }
     if (subscription_status !== undefined) {
+      const subStatus = String(subscription_status).toLowerCase();
+      if (!VALID_SUBSCRIPTION_STATUSES.includes(subStatus)) {
+        return res.status(400).json({ error: `Invalid subscription_status. Use: ${VALID_SUBSCRIPTION_STATUSES.join(', ')}.` });
+      }
       fields.push('subscription_status = ?');
-      vals.push(subscription_status);
+      vals.push(subStatus);
     }
     if (subscription_expires_at !== undefined) {
+      const expiresParsed = parseSubscriptionExpiresAt(subscription_expires_at);
+      if (expiresParsed && expiresParsed.error) {
+        return res.status(400).json({ error: expiresParsed.error });
+      }
       fields.push('subscription_expires_at = ?');
-      vals.push(subscription_expires_at);
+      vals.push(expiresParsed);
     }
     if (notes !== undefined) {
       fields.push('notes = ?');

@@ -2,16 +2,13 @@ const jwt = require('jsonwebtoken');
 const db = require('../db/connection');
 const { paymentMethodsAvailability } = require('../services/paymentConfigService');
 const { normalizeBusinessType } = require('../db/businessTypes');
+const { isSubscriptionExpired } = require('../utils/subscription');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
 function subscriptionBlocks(user) {
   if (user.role === 'developer' || !user.business_id) return false;
-  const sub = user.subscription_status || 'trial';
-  if (sub === 'suspended' || sub === 'expired') return true;
-  const expires = user.subscription_expires_at ? new Date(user.subscription_expires_at) : null;
-  if (!expires || Number.isNaN(expires.getTime())) return false;
-  return expires < new Date();
+  return isSubscriptionExpired(user.subscription_status, user.subscription_expires_at);
 }
 
 function isSuspendedExemptPath(urlPath) {
