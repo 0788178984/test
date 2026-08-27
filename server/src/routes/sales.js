@@ -1,0 +1,712 @@
+const express = require('express');
+const { authenticate } = require('../middleware/auth');
+const { restrictToBusinessStaff } = require('../middleware/tenantContext');
+const { checkPermission } = require('../middleware/roleCheck');
+const db = require('../db/connection');
+const { newId } = require('../db/ids');
+const { getStoreToday, saleLocalDate, STORE_TZ } = require('../utils/storeTime');
+const { roundUgx, computeSaleTotals, calcWholesaleUnitPrice } = require('../utils/money');
+const { dispatchToSupervisors } = require('./notifications');
+const router = express.Router();
+
+router.use(authenticate, restrictToBusinessStaff);
+
+// Generate unique sale number (per business, per day)
+async function generateSaleNumber(businessId) {
+  const today = getStoreToday().replace(/-/g, '');
+  const localDate = saleLocalDate('created_at');
+  const count = (
+    await db.prepare(`
+    SELECT COUNT(*) as count FROM sales
+    WHERE ${localDate} = ? AND business_id = ? AND deleted_at IS NULL
+  `).get(getStoreToday(), businessId)
+  ).count;
+
+  return `INV-${today}-${String(Number(count) + 1).padStart(6, '0')}`;
+}
+
+function defaultCreditDueDate() {
+  const d = new Date();
+  d.setDate(d.getDate() + 30);
+  return d.toISOString().slice(0, 10);
+}
+
+// Create sale
+router.post('/', checkPermission('make_sale'), async (req, res) => {
+  try {
+    const {
+      items,
+      customer_id,
+      discount_amount = 0,
+      discount_reason,
+      payment_method,
+      payment_reference,
+      notes,
+      amount_paid,
+      change_given,
+      credit_due_date,
+    } = req.body;
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Items are required.' });
+    }
+
+    if (!payment_method) {
+      return res.status(400).json({ error: 'Payment method is required.' });
+    }
+
+    if (customer_id) {
+      const cust = await db
+        .prepare(`SELECT id, credit_enabled, credit_limit, credit_balance, name FROM customers WHERE id = ? AND business_id = ? AND deleted_at IS NULL`)
+        .get(customer_id, req.user.business_id);
+      if (!cust) {
+        return res.status(400).json({ error: 'Invalid customer for this store.' });
+      }
+    }
+
+    const isCreditSale = payment_method === 'credit';
+    if (isCreditSale) {
+      if (!customer_id) {
+        return res.status(400).json({ error: 'A customer must be attached for credit sales.' });
+      }
+      if (req.user.role === 'cashier') {
+        return res.status(403).json({ error: 'Only admin or manager can complete credit sales.' });
+      }
+    }
+
+    // Validate items and calculate totals
+    let subtotal = 0;
+    const validatedItems = [];
+
+    for (const item of items) {
+      const product = await db.prepare(`
+        SELECT id, name, current_stock, buying_price, selling_price, wholesale_price, is_active
+        FROM products WHERE id = ? AND business_id = ? AND deleted_at IS NULL
+      `).get(item.product_id, req.user.business_id);
+
+      if (!product || !product.is_active) {
+        return res.status(400).json({ error: `Product ${item.product_id} not found or inactive.` });
+      }
+
+      if (product.current_stock < item.quantity) {
+        return res.status(400).json({ error: `Insufficient stock for ${product.name}. Available: ${product.current_stock}, Requested: ${item.quantity}` });
+      }
+
+      const presetWholesale =
+        product.wholesale_price != null && Number(product.wholesale_price) > 0
+          ? roundUgx(product.wholesale_price)
+          : null;
+      const isWholesaleLine = Boolean(item.is_wholesale);
+      let unitPrice = roundUgx(product.selling_price);
+
+      if (isWholesaleLine) {
+        if (req.user.role === 'cashier') {
+          return res.status(403).json({ error: 'Only admin or manager can complete wholesale sales.' });
+        }
+
+        if (presetWholesale != null) {
+          const clientUnit = roundUgx(item.unit_price);
+          if (Math.abs(clientUnit - presetWholesale) > 1) {
+            return res.status(400).json({
+              error: `Wholesale price mismatch for ${product.name} (expected UGX ${presetWholesale}).`,
+            });
+          }
+          if (clientUnit < roundUgx(product.buying_price)) {
+            return res.status(400).json({
+              error: `Wholesale price for ${product.name} cannot be below buying price.`,
+            });
+          }
+          unitPrice = clientUnit;
+        } else if (item.wholesale_markup_percent != null) {
+          const markup = Math.min(500, Math.max(0, Number(item.wholesale_markup_percent) || 0));
+          if (markup <= 0) {
+            return res.status(400).json({ error: `Wholesale markup is required for ${product.name}.` });
+          }
+          const expectedUnit = calcWholesaleUnitPrice(product.buying_price, markup);
+          const clientUnit = roundUgx(item.unit_price);
+          if (Math.abs(clientUnit - expectedUnit) > 1) {
+            return res.status(400).json({
+              error: `Wholesale price mismatch for ${product.name} (expected UGX ${expectedUnit}).`,
+            });
+          }
+          if (clientUnit < roundUgx(product.buying_price)) {
+            return res.status(400).json({
+              error: `Wholesale price for ${product.name} cannot be below buying price.`,
+            });
+          }
+          unitPrice = clientUnit;
+        } else {
+          return res.status(400).json({
+            error: `Wholesale price is not set for ${product.name}. Set it on the product or use markup.`,
+          });
+        }
+      } else if (item.unit_price != null && Math.abs(roundUgx(item.unit_price) - roundUgx(product.selling_price)) > 1) {
+        return res.status(400).json({ error: `Invalid unit price for ${product.name}.` });
+      }
+
+      const lineTotal = roundUgx(item.quantity * unitPrice);
+      subtotal += lineTotal;
+
+      validatedItems.push({
+        ...item,
+        product_name: product.name,
+        unit_price: unitPrice,
+        buying_price: product.buying_price,
+        line_total: lineTotal,
+        is_wholesale: isWholesaleLine,
+        wholesale_markup_percent:
+          isWholesaleLine && presetWholesale == null ? Number(item.wholesale_markup_percent) : 0,
+      });
+    }
+
+    subtotal = roundUgx(subtotal);
+    const discount_amount_r = roundUgx(discount_amount);
+
+    // Apply discount limits for cashiers
+    if (req.user.role === 'cashier' && discount_amount_r > 0) {
+      const maxDiscount = roundUgx(subtotal * 0.05); // 5% max for cashiers
+      if (discount_amount_r > maxDiscount) {
+        return res.status(400).json({ error: 'Cashiers can only apply discounts up to 5%.' });
+      }
+    }
+
+    const { taxAmount, totalAmount } = computeSaleTotals(subtotal, discount_amount_r);
+
+    let paid = amount_paid !== undefined && amount_paid !== null ? roundUgx(amount_paid) : totalAmount;
+    let change = change_given !== undefined && change_given !== null ? roundUgx(change_given) : 0;
+    if (Number.isNaN(paid)) paid = totalAmount;
+    if (Number.isNaN(change)) change = 0;
+
+    let balanceDue = 0;
+    let paymentStatus = 'paid';
+    let dueDate = null;
+
+    if (isCreditSale) {
+      paid = Math.min(paid, totalAmount);
+      if (paid < 0) paid = 0;
+      balanceDue = roundUgx(totalAmount - paid);
+      change = 0;
+
+      if (balanceDue <= 0) {
+        paymentStatus = 'paid';
+        balanceDue = 0;
+      } else {
+        paymentStatus = paid > 0 ? 'partial' : 'credit';
+        dueDate = credit_due_date || defaultCreditDueDate();
+
+        const customer = await db.prepare(`
+          SELECT credit_enabled, credit_limit, credit_balance, name FROM customers
+          WHERE id = ? AND business_id = ? AND deleted_at IS NULL
+        `).get(customer_id, req.user.business_id);
+
+        if (!customer?.credit_enabled) {
+          return res.status(400).json({ error: 'Credit is not enabled for this customer. Enable it in Customers.' });
+        }
+
+        const limit = Number(customer.credit_limit) || 0;
+        if (limit > 0) {
+          const projected = (Number(customer.credit_balance) || 0) + balanceDue;
+          if (projected > limit + 0.01) {
+            return res.status(400).json({
+              error: `Credit limit exceeded. Limit UGX ${roundUgx(limit).toLocaleString()}, current balance UGX ${roundUgx(customer.credit_balance).toLocaleString()}, this sale adds UGX ${balanceDue.toLocaleString()}.`,
+            });
+          }
+        }
+      }
+    } else if (payment_method === 'cash') {
+      if (paid + 0.001 < totalAmount) {
+        return res.status(400).json({ error: 'Amount paid must be at least the total due.' });
+      }
+      change = Math.max(0, paid - totalAmount);
+    } else {
+      paid = totalAmount;
+      change = 0;
+    }
+
+    const saleType = validatedItems.some((i) => i.is_wholesale) ? 'wholesale' : 'retail';
+
+    // Generate sale number
+    const saleNumber = await generateSaleNumber(req.user.business_id);
+    const saleId = newId('sale');
+
+    await db.transaction(async (tx) => {
+      // Create sale record
+      await tx.prepare(`
+        INSERT INTO sales (
+          id, sale_number, cashier_id, customer_id, subtotal, discount_amount,
+          discount_reason, tax_amount, total_amount, amount_paid, change_given,
+          payment_method, payment_reference, notes, sale_type, payment_status,
+          balance_due, credit_due_date, business_id, created_at, updated_at, sync_status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 'pending')
+      `).run(
+        saleId, saleNumber, req.user.id, customer_id || null, subtotal, discount_amount_r,
+        discount_reason, taxAmount, totalAmount, paid, change,
+        payment_method, payment_reference || null, notes || null,
+        saleType, paymentStatus, balanceDue, dueDate, req.user.business_id
+      );
+
+      // Insert sale items and update stock
+      for (const item of validatedItems) {
+        // Insert sale item
+        await tx.prepare(`
+          INSERT INTO sale_items (
+            id, sale_id, product_id, product_name, quantity, unit_price,
+            buying_price, line_total, is_wholesale, created_at, sync_status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), 'pending')
+        `).run(
+          newId('si'), saleId, item.product_id, item.product_name, item.quantity,
+          item.unit_price, item.buying_price, item.line_total, item.is_wholesale ? 1 : 0
+        );
+
+        // Update product stock
+        await tx.prepare(`
+          UPDATE products SET 
+            current_stock = current_stock - ?,
+            updated_at = datetime('now'),
+            sync_status = 'pending'
+          WHERE id = ? AND business_id = ?
+        `).run(item.quantity, item.product_id, req.user.business_id);
+      }
+
+      // Add loyalty points if customer exists
+      if (customer_id) {
+        const loyaltyRate = parseFloat(await tx.prepare(`
+          SELECT value FROM settings WHERE key = 'loyalty_rate'
+        `).get()?.value || '0.01');
+        
+        const pointsEarned = Math.round(totalAmount * loyaltyRate);
+        
+        if (pointsEarned > 0) {
+          // Add loyalty transaction
+          await tx.prepare(`
+            INSERT INTO loyalty_transactions (
+              id, customer_id, sale_id, points_change, reason, business_id, created_at, sync_status
+            ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), 'pending')
+          `).run(newId('loy'), customer_id, saleId, pointsEarned, `Purchase of UGX ${totalAmount.toLocaleString()}`, req.user.business_id);
+
+          // Update customer points and stats
+          await tx.prepare(`
+            UPDATE customers SET
+              loyalty_points = loyalty_points + ?,
+              total_spent = total_spent + ?,
+              visit_count = visit_count + 1,
+              last_visit = datetime('now'),
+              updated_at = datetime('now'),
+              sync_status = 'pending'
+            WHERE id = ? AND business_id = ?
+          `).run(pointsEarned, totalAmount, customer_id, req.user.business_id);
+        }
+      }
+
+      if (balanceDue > 0 && customer_id) {
+        await tx.prepare(`
+          UPDATE customers SET
+            credit_balance = credit_balance + ?,
+            updated_at = datetime('now'),
+            sync_status = 'pending'
+          WHERE id = ? AND business_id = ?
+        `).run(balanceDue, customer_id, req.user.business_id);
+      }
+
+    });
+
+    if (discount_amount_r > 0) {
+      dispatchToSupervisors(
+        'DISCOUNT_APPROVAL',
+        {
+          cashier_name: req.user.name,
+          discount: subtotal > 0 ? Math.round((discount_amount_r / subtotal) * 100) : 0,
+          discount_amount: discount_amount_r,
+          sale_number: saleNumber,
+        },
+        { business_id: req.user.business_id }
+      );
+    }
+
+    if (balanceDue > 0) {
+      const custName = customer_id
+        ? (await db.prepare(`SELECT name FROM customers WHERE id = ?`).get(customer_id))?.name
+        : null;
+      dispatchToSupervisors(
+        'CREDIT_SALE',
+        {
+          sale_number: saleNumber,
+          customer_name: custName || 'Customer',
+          total: totalAmount,
+          amount_paid: paid,
+          balance_due: balanceDue,
+          due_date: dueDate,
+          sale_type: saleType,
+          cashier_name: req.user.name,
+        },
+        { business_id: req.user.business_id }
+      );
+    }
+
+    res.status(201).json({
+      message: balanceDue > 0 ? 'Credit sale recorded. Balance due on account.' : 'Sale completed successfully.',
+      saleId,
+      saleNumber,
+      subtotal,
+      discountAmount: discount_amount_r,
+      taxAmount,
+      totalAmount,
+      amountPaid: paid,
+      changeGiven: change,
+      balanceDue,
+      paymentStatus,
+      saleType,
+      creditDueDate: dueDate,
+    });
+  } catch (error) {
+    console.error('Create sale error:', error);
+    res.status(500).json({ error: 'Failed to complete sale.' });
+  }
+});
+
+// Get sales with filters
+router.get('/', async (req, res) => {
+  try {
+    const { from, to, cashier_id, status, page = 1, limit = 50 } = req.query;
+    // Date-filtered lists: completed only unless status is explicit; use status=all for returns screen
+    const effectiveStatus =
+      status === 'all' ? undefined : status || (from || to ? 'completed' : undefined);
+    const offset = (page - 1) * limit;
+
+    let query = `
+      SELECT s.*, u.name as cashier_name, c.name as customer_name, c.phone as customer_phone
+      FROM sales s
+      LEFT JOIN users u ON s.cashier_id = u.id
+      LEFT JOIN customers c ON s.customer_id = c.id
+      WHERE s.deleted_at IS NULL AND s.business_id = ?
+    `;
+    const params = [req.user.business_id];
+    const localDate = saleLocalDate('s.created_at');
+
+    if (req.user.role === 'cashier') {
+      const today = getStoreToday();
+      if ((from && from !== today) || (to && to !== today)) {
+        return res.status(403).json({ error: 'Cashiers can only view today\'s sales.' });
+      }
+      query += ` AND ${localDate} = ? AND s.cashier_id = ?`;
+      params.push(today, req.user.id);
+    } else {
+      if (from) {
+        query += ` AND ${localDate} >= ?`;
+        params.push(from);
+      }
+      if (to) {
+        query += ` AND ${localDate} <= ?`;
+        params.push(to);
+      }
+      if (cashier_id) {
+        query += ` AND s.cashier_id = ?`;
+        params.push(cashier_id);
+      }
+    }
+
+    if (effectiveStatus) {
+      query += ` AND s.status = ?`;
+      params.push(effectiveStatus);
+    }
+
+    query += ` ORDER BY s.created_at DESC LIMIT ? OFFSET ?`;
+    params.push(parseInt(limit), offset);
+
+    const sales = await db.prepare(query).all(...params);
+
+    // Get total count
+    let countQuery = `
+      SELECT COUNT(*) as total FROM sales s WHERE s.deleted_at IS NULL AND s.business_id = ?
+    `;
+    const countParams = [req.user.business_id];
+
+    if (req.user.role === 'cashier') {
+      const today = getStoreToday();
+      countQuery += ` AND ${localDate} = ? AND s.cashier_id = ?`;
+      countParams.push(today, req.user.id);
+    } else {
+      if (from) {
+        countQuery += ` AND ${localDate} >= ?`;
+        countParams.push(from);
+      }
+      if (to) {
+        countQuery += ` AND ${localDate} <= ?`;
+        countParams.push(to);
+      }
+      if (cashier_id) {
+        countQuery += ` AND s.cashier_id = ?`;
+        countParams.push(cashier_id);
+      }
+    }
+
+    if (effectiveStatus) {
+      countQuery += ` AND s.status = ?`;
+      countParams.push(effectiveStatus);
+    }
+
+    const { total } = await db.prepare(countQuery).get(...countParams);
+
+    res.json({
+      sales,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Get sales error:', error);
+    res.status(500).json({ error: 'Failed to fetch sales.' });
+  }
+});
+
+// Must be registered before /:id — otherwise "today-summary" is captured as an id
+router.get('/today-summary', async (req, res) => {
+  try {
+    const today = getStoreToday();
+    const localDate = saleLocalDate('s.created_at');
+
+    let query = `
+      SELECT
+        COUNT(*) as sales_count,
+        SUM(total_amount) as revenue,
+        SUM(total_amount - (SELECT SUM(si.quantity * si.buying_price)
+                           FROM sale_items si WHERE si.sale_id = s.id)) as profit
+      FROM sales s
+      WHERE ${localDate} = ? AND s.status = 'completed' AND s.deleted_at IS NULL
+      AND s.business_id = ?
+    `;
+
+    const params = [today, req.user.business_id];
+
+    if (req.user.role === 'cashier') {
+      query += ` AND s.cashier_id = ?`;
+      params.push(req.user.id);
+    }
+
+    const summary = await db.prepare(query).get(...params);
+
+    let topProductQuery = `
+      SELECT p.name, SUM(si.quantity) as quantity_sold, SUM(si.line_total) as revenue
+      FROM sale_items si
+      JOIN products p ON p.id = si.product_id
+      JOIN sales s ON s.id = si.sale_id
+      WHERE ${localDate} = ? AND s.status = 'completed' AND s.deleted_at IS NULL
+      AND s.business_id = ?
+    `;
+
+    const topProductParams = [today, req.user.business_id];
+
+    if (req.user.role === 'cashier') {
+      topProductQuery += ` AND s.cashier_id = ?`;
+      topProductParams.push(req.user.id);
+    }
+
+    topProductQuery += ` GROUP BY si.product_id, p.name ORDER BY quantity_sold DESC LIMIT 1`;
+
+    const topProduct = await db.prepare(topProductQuery).get(...topProductParams);
+
+    res.json({
+      date: today,
+      timezone: STORE_TZ,
+      sales_count: summary.sales_count || 0,
+      revenue: summary.revenue || 0,
+      profit: summary.profit || 0,
+      top_product: topProduct || null
+    });
+  } catch (error) {
+    console.error('Get today summary error:', error);
+    res.status(500).json({ error: 'Failed to fetch today summary.' });
+  }
+});
+
+// Get single sale with items
+router.get('/:id', async (req, res) => {
+  try {
+    const sale = await db.prepare(`
+      SELECT s.*, u.name as cashier_name, c.name as customer_name, c.phone as customer_phone
+      FROM sales s
+      LEFT JOIN users u ON s.cashier_id = u.id
+      LEFT JOIN customers c ON s.customer_id = c.id
+      WHERE s.id = ? AND s.deleted_at IS NULL AND s.business_id = ?
+    `).get(req.params.id, req.user.business_id);
+
+    if (!sale) {
+      return res.status(404).json({ error: 'Sale not found.' });
+    }
+
+    if (req.user.role === 'cashier') {
+      if (sale.cashier_id !== req.user.id) {
+        return res.status(403).json({ error: 'Access denied.' });
+      }
+      const today = getStoreToday();
+      const onToday = await db
+        .prepare(`SELECT 1 as ok FROM sales s WHERE s.id = ? AND ${saleLocalDate('s.created_at')} = ?`)
+        .get(sale.id, today);
+      if (!onToday) {
+        return res.status(403).json({ error: 'Cashiers can only view today\'s sales.' });
+      }
+    }
+
+    // Get sale items
+    const items = await db.prepare(`
+      SELECT * FROM sale_items WHERE sale_id = ?
+    `).all(sale.id);
+
+    res.json({ sale, items });
+  } catch (error) {
+    console.error('Get sale error:', error);
+    res.status(500).json({ error: 'Failed to fetch sale.' });
+  }
+});
+
+// Void sale (full return — reverses stock, reports, and loyalty)
+router.post('/:id/void', checkPermission('void_sale'), async (req, res) => {
+  try {
+    const reason = String(req.body.reason || '').trim();
+    if (!reason) {
+      return res.status(400).json({ error: 'A return reason is required to void a sale.' });
+    }
+
+    const businessId = req.user.business_id;
+    const sale = await db.prepare(`
+      SELECT id, sale_number, status, cashier_id, total_amount, balance_due, customer_id, payment_status
+      FROM sales
+      WHERE id = ? AND deleted_at IS NULL AND business_id = ?
+    `).get(req.params.id, businessId);
+
+    if (!sale) {
+      return res.status(404).json({ error: 'Sale not found.' });
+    }
+
+    if (sale.status !== 'completed') {
+      return res.status(400).json({ error: 'Only completed sales can be voided.' });
+    }
+
+    const items = await db.prepare(`
+      SELECT product_id, quantity FROM sale_items WHERE sale_id = ?
+    `).all(sale.id);
+
+    const voidNote = `Voided/return: ${reason} (by ${req.user.name || req.user.role})`;
+
+    await db.transaction(async (tx) => {
+      await tx.prepare(`
+        UPDATE sales SET 
+          status = 'voided',
+          notes = COALESCE(notes, '') || ' | ' || ?,
+          updated_at = datetime('now'),
+          sync_status = 'pending'
+        WHERE id = ? AND business_id = ?
+      `).run(voidNote, sale.id, businessId);
+
+      for (const item of items) {
+        const product = await tx
+          .prepare(`SELECT current_stock FROM products WHERE id = ? AND business_id = ? AND deleted_at IS NULL`)
+          .get(item.product_id, businessId);
+        if (!product) continue;
+
+        const quantityBefore = Number(product.current_stock) || 0;
+        const qty = Number(item.quantity) || 0;
+        const quantityAfter = quantityBefore + qty;
+
+        await tx.prepare(`
+          UPDATE products SET 
+            current_stock = ?,
+            updated_at = datetime('now'),
+            sync_status = 'pending'
+          WHERE id = ? AND business_id = ?
+        `).run(quantityAfter, item.product_id, businessId);
+
+        await tx.prepare(`
+          INSERT INTO stock_adjustments (
+            id, product_id, user_id, adjustment_type, quantity_before, quantity_change,
+            quantity_after, reason, business_id, created_at, sync_status
+          ) VALUES (?, ?, ?, 'return', ?, ?, ?, ?, ?, datetime('now'), 'pending')
+        `).run(
+          newId('adj'),
+          item.product_id,
+          req.user.id,
+          quantityBefore,
+          qty,
+          quantityAfter,
+          `${sale.sale_number}: ${reason}`,
+          businessId
+        );
+      }
+
+      // Reverse loyalty points if customer exists
+      const customerInfo = await tx.prepare(`
+        SELECT customer_id, total_amount FROM sales WHERE id = ? AND business_id = ?
+      `).get(sale.id, businessId);
+
+      if (customerInfo.customer_id) {
+        const loyaltyRate = parseFloat(await tx.prepare(`
+          SELECT value FROM settings WHERE key = 'loyalty_rate'
+        `).get()?.value || '0.01');
+        
+        const pointsToReverse = Math.round(customerInfo.total_amount * loyaltyRate);
+        
+        if (pointsToReverse > 0) {
+          // Add negative loyalty transaction
+          await tx.prepare(`
+            INSERT INTO loyalty_transactions (
+              id, customer_id, sale_id, points_change, reason, business_id, created_at, sync_status
+            ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), 'pending')
+          `).run(
+            newId('loy'),
+            customerInfo.customer_id,
+            sale.id,
+            -pointsToReverse,
+            `Sale voided: ${sale.sale_number}`,
+            businessId
+          );
+
+          await tx.prepare(`
+            UPDATE customers SET
+              loyalty_points = loyalty_points - ?,
+              total_spent = total_spent - ?,
+              visit_count = CASE WHEN visit_count > 0 THEN visit_count - 1 ELSE 0 END,
+              updated_at = datetime('now'),
+              sync_status = 'pending'
+            WHERE id = ? AND business_id = ?
+          `).run(pointsToReverse, customerInfo.total_amount, customerInfo.customer_id, businessId);
+        }
+
+        if (Number(sale.balance_due) > 0 && customerInfo.customer_id) {
+          await tx.prepare(`
+            UPDATE customers SET
+              credit_balance = GREATEST(0, credit_balance - ?),
+              updated_at = datetime('now'),
+              sync_status = 'pending'
+            WHERE id = ? AND business_id = ?
+          `).run(Number(sale.balance_due), customerInfo.customer_id, businessId);
+        }
+      }
+    });
+
+    dispatchToSupervisors(
+      'VOID_SALE',
+      {
+        sale_number: sale.sale_number,
+        total: sale.total_amount,
+        cashier_name: req.user.name,
+        reason,
+      },
+      { business_id: businessId, sender_user_id: req.user.id }
+    );
+
+    res.json({
+      message: 'Sale voided successfully. Stock restored and reports updated.',
+      saleId: sale.id,
+      saleNumber: sale.sale_number,
+      status: 'voided',
+    });
+  } catch (error) {
+    console.error('Void sale error:', error);
+    res.status(500).json({ error: 'Failed to void sale.' });
+  }
+});
+
+module.exports = router;

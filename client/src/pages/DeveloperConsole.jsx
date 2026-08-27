@@ -1,0 +1,1165 @@
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  Building2,
+  Bell,
+  LifeBuoy,
+  RefreshCw,
+  PlusCircle,
+  UserPlus,
+  AlertTriangle,
+  CreditCard,
+  KeyRound,
+} from 'lucide-react';
+import { developerAPI } from '../api/client';
+import Button from '../components/ui/Button';
+import Input from '../components/ui/Input';
+import NotificationBell from '../components/notifications/NotificationBell';
+import { useAuthStore } from '../store/authStore';
+import { useNotificationStore } from '../store/notificationStore';
+import { toast } from 'react-hot-toast';
+import { BUSINESS_TYPES, businessTypeLabel } from '../constants/businessTypes';
+
+function storeTodayIso() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Kampala',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
+function isStoreLicenceBlocked(b) {
+  const status = (b.subscription_status || 'trial').toLowerCase();
+  if (status === 'suspended' || status === 'expired') return true;
+  if (!b.subscription_expires_at) return false;
+  const expiryDay = String(b.subscription_expires_at).includes('T')
+    ? String(b.subscription_expires_at).slice(0, 10)
+    : String(b.subscription_expires_at).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(expiryDay)) return false;
+  return storeTodayIso() > expiryDay;
+}
+
+function formatExpiryInput(expiresAt) {
+  if (!expiresAt) return '';
+  const s = String(expiresAt);
+  return s.includes('T') ? s.slice(0, 10) : s.trim();
+}
+
+export default function DeveloperConsole() {
+  const navigate = useNavigate();
+  const logout = useAuthStore((s) => s.logout);
+  const connectEventStream = useNotificationStore((s) => s.connectEventStream);
+  const disconnectEventStream = useNotificationStore((s) => s.disconnectEventStream);
+  const fetchNotifications = useNotificationStore((s) => s.fetchNotifications);
+
+  const [businesses, setBusinesses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [notify, setNotify] = useState({ id: '', title: '', message: '' });
+  const [patch, setPatch] = useState({ id: '', status: 'active', expires: '', name: '', business_code: '' });
+
+  const [supportRequests, setSupportRequests] = useState([]);
+  const [supportLoading, setSupportLoading] = useState(true);
+  const [selectedTicketId, setSelectedTicketId] = useState('');
+  const [ticketStatus, setTicketStatus] = useState('open');
+  const [ticketNotes, setTicketNotes] = useState('');
+  const [ticketSaving, setTicketSaving] = useState(false);
+
+  const [newStore, setNewStore] = useState({
+    name: '',
+    business_code: '',
+    business_type: BUSINESS_TYPES.SUPERMARKET,
+    subscription_status: 'trial',
+    expires: '',
+    notes: '',
+  });
+  const [creatingStore, setCreatingStore] = useState(false);
+
+  const [bootstrap, setBootstrap] = useState({
+    businessId: '',
+    name: '',
+    email: '',
+    password: '',
+    pin: '',
+  });
+  const [bootstrapSaving, setBootstrapSaving] = useState(false);
+
+  const [recoveryBizId, setRecoveryBizId] = useState('');
+  const [recoveryStaff, setRecoveryStaff] = useState([]);
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
+  const [recoveryUserId, setRecoveryUserId] = useState('');
+  const [recoveryPassword, setRecoveryPassword] = useState('');
+  const [recoveryPin, setRecoveryPin] = useState('');
+  const [recoverySaving, setRecoverySaving] = useState(false);
+
+  const [payBizId, setPayBizId] = useState('');
+  const [payReload, setPayReload] = useState(0);
+  const [payLoading, setPayLoading] = useState(false);
+  const [paySaving, setPaySaving] = useState(false);
+  const [payForm, setPayForm] = useState({
+    mtn_enabled: false,
+    mtn_baseUrl: '',
+    mtn_targetEnvironment: 'sandbox',
+    mtn_primaryKey: '',
+    mtn_secondaryKey: '',
+    mtn_apiUser: '',
+    mtn_apiSecret: '',
+    airtel_enabled: false,
+    airtel_baseUrl: '',
+    airtel_clientId: '',
+    airtel_clientSecret: '',
+    pesapal_enabled: false,
+    pesapal_environment: 'production',
+    pesapal_currency: 'UGX',
+    pesapal_consumerKey: '',
+    pesapal_consumerSecret: '',
+  });
+
+  const [licenseAlerts, setLicenseAlerts] = useState({
+    out_of_licence: [],
+    expiring_soon: [],
+    expiring_this_month: [],
+  });
+  const [alertsLoading, setAlertsLoading] = useState(true);
+
+  const loadLicenseAlerts = async () => {
+    setAlertsLoading(true);
+    try {
+      const { data } = await developerAPI.licenseAlerts();
+      setLicenseAlerts({
+        out_of_licence: data.out_of_licence || [],
+        expiring_soon: data.expiring_soon || [],
+        expiring_this_month: data.expiring_this_month || [],
+      });
+    } catch {
+      toast.error('Could not load licence alerts');
+    } finally {
+      setAlertsLoading(false);
+    }
+  };
+
+  const loadBusinesses = async () => {
+    setLoading(true);
+    try {
+      const { data } = await developerAPI.listBusinesses();
+      setBusinesses(data.businesses || []);
+    } catch {
+      toast.error('Could not load businesses');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadSupport = async () => {
+    setSupportLoading(true);
+    try {
+      const { data } = await developerAPI.listSupportAll();
+      setSupportRequests(data.requests || []);
+    } catch {
+      toast.error('Could not load support tickets');
+    } finally {
+      setSupportLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadBusinesses();
+    loadSupport();
+    loadLicenseAlerts();
+  }, []);
+
+  useEffect(() => {
+    fetchNotifications({ limit: 20 });
+    connectEventStream();
+    return () => disconnectEventStream();
+  }, [connectEventStream, disconnectEventStream, fetchNotifications]);
+
+  useEffect(() => {
+    const t = supportRequests.find((r) => r.id === selectedTicketId);
+    if (t) {
+      setTicketStatus(t.status || 'open');
+      setTicketNotes(t.developer_notes || '');
+    } else {
+      setTicketStatus('open');
+      setTicketNotes('');
+    }
+  }, [selectedTicketId, supportRequests]);
+
+  useEffect(() => {
+    if (!payBizId) return;
+    let cancelled = false;
+    (async () => {
+      setPayLoading(true);
+      try {
+        const { data } = await developerAPI.getPaymentConfig(payBizId);
+        if (cancelled) return;
+        const c = data.config || {};
+        setPayForm({
+          mtn_enabled: !!c.mtn?.enabled,
+          mtn_baseUrl: c.mtn?.baseUrl || '',
+          mtn_targetEnvironment: c.mtn?.targetEnvironment || 'sandbox',
+          mtn_primaryKey: '',
+          mtn_secondaryKey: '',
+          mtn_apiUser: c.mtn?.apiUser || '',
+          mtn_apiSecret: '',
+          airtel_enabled: !!c.airtel?.enabled,
+          airtel_baseUrl: c.airtel?.baseUrl || '',
+          airtel_clientId: c.airtel?.clientId || '',
+          airtel_clientSecret: '',
+          pesapal_enabled: !!c.pesapal?.enabled,
+          pesapal_environment: c.pesapal?.environment || 'production',
+          pesapal_currency: c.pesapal?.currency || 'UGX',
+          pesapal_consumerKey: '',
+          pesapal_consumerSecret: '',
+        });
+      } catch {
+        if (!cancelled) toast.error('Could not load payment settings');
+      } finally {
+        if (!cancelled) setPayLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [payBizId, payReload]);
+
+  const sendNotify = async (e) => {
+    e.preventDefault();
+    if (!notify.id || !notify.title || !notify.message) {
+      toast.error('Pick a store and enter title + message');
+      return;
+    }
+    try {
+      const { data } = await developerAPI.notifyStaff(notify.id, { title: notify.title, message: notify.message });
+      toast.success(data?.message || 'Notification sent to store admins/managers');
+      setNotify((n) => ({ ...n, title: '', message: '' }));
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to notify');
+    }
+  };
+
+  const saveLicense = async (e) => {
+    e.preventDefault();
+    if (!patch.id) {
+      toast.error('Select a store');
+      return;
+    }
+    try {
+      await developerAPI.updateBusiness(patch.id, {
+        name: patch.name.trim() || undefined,
+        business_code: patch.business_code.trim().toUpperCase() || undefined,
+        subscription_status: patch.status,
+        subscription_expires_at: patch.expires || null,
+      });
+      toast.success('Store updated');
+      loadBusinesses();
+      loadLicenseAlerts();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Update failed');
+    }
+  };
+
+  const saveTicket = async (e) => {
+    e.preventDefault();
+    if (!selectedTicketId) {
+      toast.error('Select a ticket in the table');
+      return;
+    }
+    setTicketSaving(true);
+    try {
+      await developerAPI.updateSupport(selectedTicketId, {
+        status: ticketStatus,
+        developer_notes: ticketNotes,
+      });
+      toast.success('Ticket updated');
+      await loadSupport();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Update failed');
+    } finally {
+      setTicketSaving(false);
+    }
+  };
+
+  const selectedTicket = supportRequests.find((r) => r.id === selectedTicketId);
+
+  const createStore = async (e) => {
+    e.preventDefault();
+    const name = newStore.name.trim();
+    const code = newStore.business_code.trim().toUpperCase();
+    if (!name || !code) {
+      toast.error('Store name and business code are required.');
+      return;
+    }
+    setCreatingStore(true);
+    try {
+      const { data } = await developerAPI.createBusiness({
+        name,
+        business_code: code,
+        business_type: newStore.business_type,
+        subscription_status: newStore.subscription_status,
+        subscription_expires_at: newStore.expires.trim() || null,
+        notes: newStore.notes.trim() || null,
+      });
+      const typeLabel = businessTypeLabel(data.business_type || newStore.business_type);
+      toast.success(`${typeLabel} created. Staff sign in with store code: ${code}`);
+      setNewStore({
+        name: '',
+        business_code: '',
+        business_type: BUSINESS_TYPES.SUPERMARKET,
+        subscription_status: 'trial',
+        expires: '',
+        notes: '',
+      });
+      await loadBusinesses();
+      await loadLicenseAlerts();
+    } catch (err) {
+      const msg = err.response?.data?.error || 'Could not create store';
+      const detail = err.response?.data?.detail;
+      toast.error(detail ? `${msg}: ${detail}` : msg);
+    } finally {
+      setCreatingStore(false);
+    }
+  };
+
+  const bootstrapAdmin = async (e) => {
+    e.preventDefault();
+    if (!bootstrap.businessId || !bootstrap.name.trim() || !bootstrap.email.trim() || !bootstrap.password) {
+      toast.error('Select a store and fill name, email, and password.');
+      return;
+    }
+    if (bootstrap.password.length < 8) {
+      toast.error('Password must be at least 8 characters.');
+      return;
+    }
+    if (bootstrap.pin && !/^\d{4}$/.test(bootstrap.pin)) {
+      toast.error('PIN must be exactly 4 digits, or leave empty.');
+      return;
+    }
+    setBootstrapSaving(true);
+    try {
+      await developerAPI.bootstrapAdmin(bootstrap.businessId, {
+        name: bootstrap.name.trim(),
+        email: bootstrap.email.trim().toLowerCase(),
+        password: bootstrap.password,
+        ...(bootstrap.pin ? { pin: bootstrap.pin } : {}),
+      });
+      toast.success('Admin created. They can use Web login or PIN (if set).');
+      setBootstrap((b) => ({ ...b, name: '', email: '', password: '', pin: '' }));
+      await loadBusinesses();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Could not create admin');
+    } finally {
+      setBootstrapSaving(false);
+    }
+  };
+
+  const loadStaffForRecovery = async () => {
+    if (!recoveryBizId) {
+      toast.error('Select a store first.');
+      return;
+    }
+    setRecoveryLoading(true);
+    try {
+      const { data } = await developerAPI.listStaff(recoveryBizId);
+      setRecoveryStaff(data.staff || []);
+      setRecoveryUserId('');
+      const n = (data.staff || []).length;
+      if (n === 0) {
+        toast('No staff in this store yet — use “Create first admin” above.');
+      } else {
+        toast.success(`Loaded ${n} staff member(s).`);
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Could not load staff');
+      setRecoveryStaff([]);
+    } finally {
+      setRecoveryLoading(false);
+    }
+  };
+
+  const resetStaffCredentials = async (e) => {
+    e.preventDefault();
+    if (!recoveryBizId || !recoveryUserId) {
+      toast.error('Select a store and a staff member.');
+      return;
+    }
+    const pwd = recoveryPassword.trim();
+    const pinDigits = recoveryPin.replace(/\D/g, '').slice(0, 4);
+    if (!pwd && pinDigits.length !== 4) {
+      toast.error('Enter a new web password (8+ chars) and/or a 4-digit PIN.');
+      return;
+    }
+    if (pwd && pwd.length < 8) {
+      toast.error('Password must be at least 8 characters.');
+      return;
+    }
+    setRecoverySaving(true);
+    try {
+      await developerAPI.resetStaffCredentials(recoveryBizId, recoveryUserId, {
+        ...(pwd ? { password: pwd } : {}),
+        ...(pinDigits.length === 4 ? { pin: pinDigits } : {}),
+      });
+      toast.success('Credentials updated. Tell the store only over phone or another trusted channel.');
+      setRecoveryPassword('');
+      setRecoveryPin('');
+      await loadBusinesses();
+      await loadStaffForRecovery();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Could not update credentials');
+    } finally {
+      setRecoverySaving(false);
+    }
+  };
+
+  const savePayConfig = async (e) => {
+    e.preventDefault();
+    if (!payBizId) return;
+    setPaySaving(true);
+    try {
+      const body = {
+        mtn: {
+          enabled: payForm.mtn_enabled,
+          baseUrl: payForm.mtn_baseUrl.trim() || undefined,
+          targetEnvironment: payForm.mtn_targetEnvironment,
+          apiUser: payForm.mtn_apiUser.trim() || undefined,
+        },
+        airtel: {
+          enabled: payForm.airtel_enabled,
+          baseUrl: payForm.airtel_baseUrl.trim() || undefined,
+          clientId: payForm.airtel_clientId.trim() || undefined,
+        },
+      };
+      if (payForm.mtn_primaryKey.trim()) body.mtn.primaryKey = payForm.mtn_primaryKey.trim();
+      if (payForm.mtn_secondaryKey.trim()) body.mtn.secondaryKey = payForm.mtn_secondaryKey.trim();
+      if (payForm.mtn_apiSecret.trim()) body.mtn.apiSecret = payForm.mtn_apiSecret.trim();
+      if (payForm.airtel_clientSecret.trim()) body.airtel.clientSecret = payForm.airtel_clientSecret.trim();
+      body.pesapal = {
+        enabled: payForm.pesapal_enabled,
+        environment: payForm.pesapal_environment,
+        currency: payForm.pesapal_currency,
+      };
+      if (payForm.pesapal_consumerKey.trim()) body.pesapal.consumerKey = payForm.pesapal_consumerKey.trim();
+      if (payForm.pesapal_consumerSecret.trim()) body.pesapal.consumerSecret = payForm.pesapal_consumerSecret.trim();
+
+      await developerAPI.patchPaymentConfig(payBizId, body);
+      toast.success('Payment settings saved for this store.');
+      setPayReload((k) => k + 1);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Save failed');
+    } finally {
+      setPaySaving(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <header className="border-b border-gray-200 bg-white px-6 py-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Building2 className="h-6 w-6 text-primary-600" />
+          <h1 className="text-lg font-semibold text-gray-900">Developer console</h1>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <NotificationBell />
+          <Button
+            variant="secondary"
+            type="button"
+            onClick={async () => {
+              await logout();
+              navigate('/login', { replace: true });
+            }}
+          >
+            Back to login
+          </Button>
+          <Button
+            variant="primary"
+            type="button"
+            onClick={async () => {
+              await logout();
+              navigate('/login', { replace: true });
+            }}
+          >
+            Log out
+          </Button>
+        </div>
+      </header>
+
+      <div className="max-w-5xl mx-auto p-6 space-y-8">
+        <section className="rounded-xl border border-amber-200 bg-amber-50/80 p-6 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <h2 className="text-md font-semibold text-gray-900 flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
+              Licence status
+            </h2>
+            <Button type="button" variant="secondary" onClick={loadLicenseAlerts} disabled={alertsLoading}>
+              {alertsLoading ? 'Refreshing…' : 'Refresh'}
+            </Button>
+          </div>
+          {alertsLoading ? (
+            <p className="text-sm text-gray-500">Loading alerts…</p>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-lg border border-red-200 bg-white p-4">
+                <p className="text-xs font-semibold uppercase text-red-700">Out of licence</p>
+                <p className="text-2xl font-bold text-red-800 mt-1">{licenseAlerts.out_of_licence.length}</p>
+                <ul className="mt-2 max-h-40 overflow-y-auto text-sm text-gray-700 space-y-1">
+                  {licenseAlerts.out_of_licence.map((b) => (
+                    <li key={b.id}>
+                      <span className="font-mono text-xs">{b.business_code}</span> — {b.name}{' '}
+                      <span className="text-gray-500">({b.subscription_status})</span>
+                    </li>
+                  ))}
+                  {licenseAlerts.out_of_licence.length === 0 && (
+                    <li className="text-gray-500">None — all stores licensed.</li>
+                  )}
+                </ul>
+              </div>
+              <div className="rounded-lg border border-orange-200 bg-white p-4">
+                <p className="text-xs font-semibold uppercase text-orange-800">Ending within 14 days</p>
+                <p className="text-2xl font-bold text-orange-900 mt-1">{licenseAlerts.expiring_soon.length}</p>
+                <ul className="mt-2 max-h-40 overflow-y-auto text-sm text-gray-700 space-y-1">
+                  {licenseAlerts.expiring_soon.map((b) => (
+                    <li key={b.id}>
+                      <span className="font-mono text-xs">{b.business_code}</span> — {b.name}{' '}
+                      <span className="text-gray-500">({b.days_until_expiry}d)</span>
+                    </li>
+                  ))}
+                  {licenseAlerts.expiring_soon.length === 0 && (
+                    <li className="text-gray-500">No stores in this window.</li>
+                  )}
+                </ul>
+              </div>
+              <div className="rounded-lg border border-amber-300 bg-white p-4">
+                <p className="text-xs font-semibold uppercase text-amber-900">15–30 days left</p>
+                <p className="text-2xl font-bold text-amber-950 mt-1">{licenseAlerts.expiring_this_month.length}</p>
+                <ul className="mt-2 max-h-40 overflow-y-auto text-sm text-gray-700 space-y-1">
+                  {licenseAlerts.expiring_this_month.map((b) => (
+                    <li key={b.id}>
+                      <span className="font-mono text-xs">{b.business_code}</span> — {b.name}{' '}
+                      <span className="text-gray-500">({b.days_until_expiry}d)</span>
+                    </li>
+                  ))}
+                  {licenseAlerts.expiring_this_month.length === 0 && (
+                    <li className="text-gray-500">No stores in this window.</li>
+                  )}
+                </ul>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="bg-white rounded-xl shadow p-6 space-y-4">
+          <h2 className="text-md font-semibold text-gray-800 flex items-center gap-2">
+            <PlusCircle className="h-4 w-4 text-primary-600" /> Add new store
+          </h2>
+          <form onSubmit={createStore} className="grid gap-3 sm:grid-cols-2">
+            <Input
+              label="Store name"
+              value={newStore.name}
+              onChange={(e) => setNewStore((s) => ({ ...s, name: e.target.value }))}
+              placeholder="e.g. Ntinda Branch"
+              required
+            />
+            <Input
+              label="Business code"
+              value={newStore.business_code}
+              onChange={(e) => setNewStore((s) => ({ ...s, business_code: e.target.value.toUpperCase() }))}
+              placeholder="e.g. KAMPALA1"
+              required
+            />
+            <div>
+              <label className="form-label">Store type</label>
+              <select
+                className="form-input"
+                value={newStore.business_type}
+                onChange={(e) => setNewStore((s) => ({ ...s, business_type: e.target.value }))}
+              >
+                <option value={BUSINESS_TYPES.SUPERMARKET}>Supermarket</option>
+                <option value={BUSINESS_TYPES.CLINIC}>Clinic / drug shop</option>
+              </select>
+            </div>
+            <div>
+              <label className="form-label">Initial subscription</label>
+              <select
+                className="form-input"
+                value={newStore.subscription_status}
+                onChange={(e) => setNewStore((s) => ({ ...s, subscription_status: e.target.value }))}
+              >
+                <option value="trial">trial</option>
+                <option value="active">active</option>
+                <option value="suspended">suspended</option>
+                <option value="expired">expired</option>
+              </select>
+            </div>
+            <Input
+              label="Expires at (optional)"
+              value={newStore.expires}
+              onChange={(e) => setNewStore((s) => ({ ...s, expires: e.target.value }))}
+              placeholder="2026-12-31"
+            />
+            <div className="sm:col-span-2">
+              <label className="form-label">Internal notes (optional)</label>
+              <textarea
+                className="form-input min-h-[72px]"
+                value={newStore.notes}
+                onChange={(e) => setNewStore((s) => ({ ...s, notes: e.target.value }))}
+                placeholder="Contract ref, contact person…"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <Button type="submit" variant="primary" loading={creatingStore}>
+                Create store
+              </Button>
+            </div>
+          </form>
+        </section>
+
+        <section className="bg-white rounded-xl shadow p-6 space-y-4">
+          <h2 className="text-md font-semibold text-gray-800 flex items-center gap-2">
+            <CreditCard className="h-4 w-4 text-primary-600" /> Store payment integrations (MTN / Airtel / Pesapal)
+          </h2>
+          <p className="text-sm text-gray-600">
+            Each store has its own payment credentials. Enter Pesapal Consumer Key and Secret from the merchant email
+            Pesapal sends — never share these publicly.
+          </p>
+          <div className="max-w-xl">
+            <label className="form-label">Select store</label>
+            <select
+              className="form-input"
+              value={payBizId}
+              onChange={(e) => setPayBizId(e.target.value)}
+            >
+              <option value="">Choose…</option>
+              {businesses.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.business_code} — {b.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          {payBizId && (
+            <form onSubmit={savePayConfig} className="space-y-6 border-t border-gray-100 pt-4">
+              {payLoading ? (
+                <p className="text-sm text-gray-500">Loading settings…</p>
+              ) : (
+                <>
+                  <div className="rounded-lg border border-yellow-200 bg-yellow-50/60 p-4 space-y-3">
+                    <label className="flex items-center gap-2 text-sm font-medium text-gray-900">
+                      <input
+                        type="checkbox"
+                        checked={payForm.mtn_enabled}
+                        onChange={(e) => setPayForm((f) => ({ ...f, mtn_enabled: e.target.checked }))}
+                      />
+                      Enable MTN MoMo (collection)
+                    </label>
+                    <Input
+                      label="MTN API base URL (optional)"
+                      placeholder="https://sandbox.momodeveloper.mtn.com"
+                      value={payForm.mtn_baseUrl}
+                      onChange={(e) => setPayForm((f) => ({ ...f, mtn_baseUrl: e.target.value }))}
+                    />
+                    <div>
+                      <label className="form-label">Target environment</label>
+                      <select
+                        className="form-input"
+                        value={payForm.mtn_targetEnvironment}
+                        onChange={(e) => setPayForm((f) => ({ ...f, mtn_targetEnvironment: e.target.value }))}
+                      >
+                        <option value="sandbox">sandbox</option>
+                        <option value="mtnuganda">mtnuganda (production)</option>
+                      </select>
+                    </div>
+                    <Input
+                      label="Subscription (primary) key"
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder="Leave blank to keep existing"
+                      value={payForm.mtn_primaryKey}
+                      onChange={(e) => setPayForm((f) => ({ ...f, mtn_primaryKey: e.target.value }))}
+                    />
+                    <Input
+                      label="Subscription secondary key (optional)"
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder="Leave blank to keep existing"
+                      value={payForm.mtn_secondaryKey}
+                      onChange={(e) => setPayForm((f) => ({ ...f, mtn_secondaryKey: e.target.value }))}
+                    />
+                    <Input
+                      label="API user / reference id (MoMo user id)"
+                      value={payForm.mtn_apiUser}
+                      onChange={(e) => setPayForm((f) => ({ ...f, mtn_apiUser: e.target.value }))}
+                    />
+                    <Input
+                      label="API key (secret)"
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder="Leave blank to keep existing"
+                      value={payForm.mtn_apiSecret}
+                      onChange={(e) => setPayForm((f) => ({ ...f, mtn_apiSecret: e.target.value }))}
+                    />
+                  </div>
+                  <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-4 space-y-3">
+                    <label className="flex items-center gap-2 text-sm font-medium text-gray-900">
+                      <input
+                        type="checkbox"
+                        checked={payForm.airtel_enabled}
+                        onChange={(e) => setPayForm((f) => ({ ...f, airtel_enabled: e.target.checked }))}
+                      />
+                      Enable Airtel Money
+                    </label>
+                    <Input
+                      label="Airtel Open API base URL (optional)"
+                      placeholder="https://openapi.airtel.africa"
+                      value={payForm.airtel_baseUrl}
+                      onChange={(e) => setPayForm((f) => ({ ...f, airtel_baseUrl: e.target.value }))}
+                    />
+                    <Input
+                      label="Client id"
+                      value={payForm.airtel_clientId}
+                      onChange={(e) => setPayForm((f) => ({ ...f, airtel_clientId: e.target.value }))}
+                    />
+                    <Input
+                      label="Client secret"
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder="Leave blank to keep existing"
+                      value={payForm.airtel_clientSecret}
+                      onChange={(e) => setPayForm((f) => ({ ...f, airtel_clientSecret: e.target.value }))}
+                    />
+                  </div>
+                  <div className="rounded-lg border border-teal-200 bg-teal-50/60 p-4 space-y-3">
+                    <label className="flex items-center gap-2 text-sm font-medium text-gray-900">
+                      <input
+                        type="checkbox"
+                        checked={payForm.pesapal_enabled}
+                        onChange={(e) => setPayForm((f) => ({ ...f, pesapal_enabled: e.target.checked }))}
+                      />
+                      Enable Pesapal (card, MoMo, bank via Pesapal)
+                    </label>
+                    <div>
+                      <label className="form-label">Environment</label>
+                      <select
+                        className="form-input"
+                        value={payForm.pesapal_environment}
+                        onChange={(e) => setPayForm((f) => ({ ...f, pesapal_environment: e.target.value }))}
+                      >
+                        <option value="sandbox">sandbox (testing)</option>
+                        <option value="production">production (live)</option>
+                      </select>
+                    </div>
+                    <Input
+                      label="Currency"
+                      value={payForm.pesapal_currency}
+                      onChange={(e) => setPayForm((f) => ({ ...f, pesapal_currency: e.target.value.toUpperCase() }))}
+                      placeholder="UGX"
+                    />
+                    <Input
+                      label="Consumer key"
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder="Leave blank to keep existing"
+                      value={payForm.pesapal_consumerKey}
+                      onChange={(e) => setPayForm((f) => ({ ...f, pesapal_consumerKey: e.target.value }))}
+                    />
+                    <Input
+                      label="Consumer secret"
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder="Leave blank to keep existing"
+                      value={payForm.pesapal_consumerSecret}
+                      onChange={(e) => setPayForm((f) => ({ ...f, pesapal_consumerSecret: e.target.value }))}
+                    />
+                  </div>
+                  <Button type="submit" variant="primary" loading={paySaving}>
+                    Save payment settings
+                  </Button>
+                </>
+              )}
+            </form>
+          )}
+        </section>
+
+        <section className="bg-white rounded-xl shadow p-6 space-y-4">
+          <h2 className="text-md font-semibold text-gray-800 flex items-center gap-2">
+            <UserPlus className="h-4 w-4 text-primary-600" /> Create first admin for a store
+          </h2>
+          <p className="text-sm text-gray-600">
+            New stores have no users until you add at least one admin. They sign in with <strong>Web login</strong> using this email and password.{' '}
+            <strong>PIN login</strong> uses the 4-digit PIN you enter here; if you leave PIN blank, a default is applied — the store should change it after first login.
+          </p>
+          <form onSubmit={bootstrapAdmin} className="grid gap-3 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label className="form-label">Store</label>
+              <select
+                className="form-input"
+                value={bootstrap.businessId}
+                onChange={(e) => setBootstrap((b) => ({ ...b, businessId: e.target.value }))}
+                required
+              >
+                <option value="">Select…</option>
+                {businesses.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.business_code} — {b.name} ({b.user_count} users)
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Input
+              label="Admin full name"
+              value={bootstrap.name}
+              onChange={(e) => setBootstrap((b) => ({ ...b, name: e.target.value }))}
+              required
+            />
+            <Input
+              type="email"
+              label="Admin email"
+              value={bootstrap.email}
+              onChange={(e) => setBootstrap((b) => ({ ...b, email: e.target.value }))}
+              required
+            />
+            <Input
+              type="password"
+              label="Web password (min 8 chars)"
+              value={bootstrap.password}
+              onChange={(e) => setBootstrap((b) => ({ ...b, password: e.target.value }))}
+              required
+            />
+            <Input
+              label="4-digit PIN (optional)"
+              value={bootstrap.pin}
+              onChange={(e) => setBootstrap((b) => ({ ...b, pin: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
+              placeholder="1234"
+              maxLength={4}
+            />
+            <div className="sm:col-span-2">
+              <Button type="submit" variant="primary" loading={bootstrapSaving}>
+                Create admin
+              </Button>
+            </div>
+          </form>
+        </section>
+
+        <section className="bg-white rounded-xl shadow p-6 space-y-4">
+          <h2 className="text-md font-semibold text-gray-800 flex items-center gap-2">
+            <KeyRound className="h-4 w-4 text-primary-600" />
+            Recover store login (admin / manager / cashier)
+          </h2>
+          <p className="text-sm text-gray-600">
+            When someone forgets their <strong>web password</strong> or <strong>PIN</strong>, you can set new ones here.
+            This only updates that user&apos;s credentials — <strong>no products, sales, or other data are changed</strong>.
+            Confirm the person&apos;s identity out of band (phone, visit, ticket) before resetting.
+          </p>
+          <div className="flex flex-wrap gap-2 items-end">
+            <div className="min-w-[200px] flex-1">
+              <label className="form-label">Store</label>
+              <select
+                className="form-input"
+                value={recoveryBizId}
+                onChange={(e) => {
+                  setRecoveryBizId(e.target.value);
+                  setRecoveryStaff([]);
+                  setRecoveryUserId('');
+                }}
+              >
+                <option value="">Select…</option>
+                {businesses.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.business_code} — {b.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Button type="button" variant="secondary" loading={recoveryLoading} onClick={loadStaffForRecovery}>
+              Load staff
+            </Button>
+          </div>
+
+          {recoveryStaff.length > 0 && (
+            <form onSubmit={resetStaffCredentials} className="space-y-4 border-t border-gray-100 pt-4">
+              <div>
+                <label className="form-label">Staff member</label>
+                <select
+                  className="form-input"
+                  value={recoveryUserId}
+                  onChange={(e) => setRecoveryUserId(e.target.value)}
+                  required
+                >
+                  <option value="">Select…</option>
+                  {recoveryStaff.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.role}){u.email ? ` — ${u.email}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Input
+                  type="password"
+                  autoComplete="new-password"
+                  label="New web password (optional)"
+                  value={recoveryPassword}
+                  onChange={(e) => setRecoveryPassword(e.target.value)}
+                  placeholder="Min 8 characters if set"
+                />
+                <Input
+                  label="New 4-digit PIN (optional)"
+                  value={recoveryPin}
+                  onChange={(e) => setRecoveryPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                  placeholder="POS / PIN login"
+                  maxLength={4}
+                />
+              </div>
+              <Button type="submit" variant="primary" loading={recoverySaving}>
+                Save new credentials
+              </Button>
+            </form>
+          )}
+        </section>
+
+        <section className="bg-white rounded-xl shadow p-6">
+          <h2 className="text-md font-semibold text-gray-800 mb-4 flex items-center gap-2">
+            <Bell className="h-4 w-4" /> Licensed stores
+          </h2>
+          {loading ? (
+            <p className="text-gray-500">Loading…</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-500 border-b">
+                    <th className="py-2 pr-4">Id</th>
+                    <th className="py-2 pr-4">Code</th>
+                    <th className="py-2 pr-4">Type</th>
+                    <th className="py-2 pr-4">Name</th>
+                    <th className="py-2 pr-4">Status</th>
+                    <th className="py-2 pr-4">Expires</th>
+                    <th className="py-2">Users</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {businesses.map((b) => (
+                    <tr
+                      key={b.id}
+                      className={`border-b border-gray-100 ${isStoreLicenceBlocked(b) ? 'bg-red-50' : ''}`}
+                    >
+                      <td className="py-2 pr-4 font-mono text-xs">{b.id}</td>
+                      <td className="py-2 pr-4 font-mono">{b.business_code}</td>
+                      <td className="py-2 pr-4 text-xs">{businessTypeLabel(b.business_type)}</td>
+                      <td className="py-2 pr-4">{b.name}</td>
+                      <td className="py-2 pr-4 capitalize">
+                        {b.subscription_status}
+                        {isStoreLicenceBlocked(b) ? (
+                          <span className="ml-1 text-xs font-semibold text-red-700">(blocked)</span>
+                        ) : null}
+                      </td>
+                      <td className="py-2 pr-4">{b.subscription_expires_at || '—'}</td>
+                      <td className="py-2">{b.user_count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className="bg-white rounded-xl shadow p-6 space-y-4">
+          <h2 className="text-md font-semibold text-gray-800">Update store & subscription</h2>
+          <p className="text-sm text-gray-600">
+            Change the store name or login code, and set subscription status. Staff sign in with the{' '}
+            <strong>store code</strong> shown here.
+          </p>
+          <form onSubmit={saveLicense} className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="form-label">Store</label>
+              <select
+                className="form-input"
+                value={patch.id}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  const biz = businesses.find((b) => b.id === id);
+                  setPatch({
+                    id,
+                    status: biz?.subscription_status || 'active',
+                    expires: formatExpiryInput(biz?.subscription_expires_at),
+                    name: biz?.name || '',
+                    business_code: biz?.business_code || '',
+                  });
+                }}
+              >
+                <option value="">Select…</option>
+                {businesses.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.business_code} — {b.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Input
+              label="Store name"
+              value={patch.name}
+              onChange={(e) => setPatch((p) => ({ ...p, name: e.target.value }))}
+              placeholder="e.g. SureSuperMKT"
+            />
+            <Input
+              label="Store code (login)"
+              value={patch.business_code}
+              onChange={(e) => setPatch((p) => ({ ...p, business_code: e.target.value.toUpperCase() }))}
+              placeholder="e.g. SURESUPER"
+            />
+            <div>
+              <label className="form-label">Status</label>
+              <select
+                className="form-input"
+                value={patch.status}
+                onChange={(e) => setPatch((p) => ({ ...p, status: e.target.value }))}
+              >
+                <option value="active">active</option>
+                <option value="trial">trial</option>
+                <option value="suspended">suspended</option>
+                <option value="expired">expired</option>
+              </select>
+            </div>
+            <Input
+              label="Expires at (YYYY-MM-DD, or empty = no end date)"
+              value={patch.expires}
+              onChange={(e) => setPatch((p) => ({ ...p, expires: e.target.value }))}
+              placeholder="2027-06-22"
+            />
+            <div className="flex items-end">
+              <Button type="submit" variant="primary">
+                Save
+              </Button>
+            </div>
+          </form>
+        </section>
+
+        <section className="bg-white rounded-xl shadow p-6 space-y-4">
+          <h2 className="text-md font-semibold text-gray-800 flex items-center gap-2">
+            <LifeBuoy className="h-4 w-4" /> Message store admins / managers
+          </h2>
+          <p className="text-sm text-gray-600">
+            Sends an in-app notification to admins and managers at the selected store. They cannot reply here; they use{' '}
+            <strong>Help &amp; support</strong> to open a ticket.
+          </p>
+          <form onSubmit={sendNotify} className="space-y-3">
+            <div>
+              <label className="form-label">Store</label>
+              <select
+                className="form-input"
+                value={notify.id}
+                onChange={(e) => setNotify((n) => ({ ...n, id: e.target.value }))}
+              >
+                <option value="">Select…</option>
+                {businesses.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.business_code} — {b.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Input
+              label="Title"
+              value={notify.title}
+              onChange={(e) => setNotify((n) => ({ ...n, title: e.target.value }))}
+            />
+            <div>
+              <label className="form-label">Message</label>
+              <textarea
+                className="form-input min-h-[100px]"
+                value={notify.message}
+                onChange={(e) => setNotify((n) => ({ ...n, message: e.target.value }))}
+              />
+            </div>
+            <Button type="submit" variant="primary">
+              Send notification
+            </Button>
+          </form>
+        </section>
+
+        <section className="bg-white rounded-xl shadow p-6 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-md font-semibold text-gray-800 flex items-center gap-2">
+              <LifeBuoy className="h-4 w-4" /> Support inbox
+            </h2>
+            <Button type="button" variant="secondary" onClick={loadSupport}>
+              <span className="inline-flex items-center gap-1">
+                <RefreshCw className="h-4 w-4" />
+                Refresh
+              </span>
+            </Button>
+          </div>
+          <p className="text-sm text-gray-600">
+            Help requests from stores appear here and as bell notifications. Update status and add internal notes (visible
+            to store admins/managers when you resolve or close).
+          </p>
+
+          {supportLoading ? (
+            <p className="text-gray-500 text-sm">Loading…</p>
+          ) : (
+            <div className="overflow-x-auto border border-gray-100 rounded-lg">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-500 border-b bg-gray-50">
+                    <th className="py-2 px-2">Store</th>
+                    <th className="py-2 pr-2">Subject</th>
+                    <th className="py-2 pr-2">From</th>
+                    <th className="py-2 pr-2">Status</th>
+                    <th className="py-2 pr-2">Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {supportRequests.map((r) => (
+                    <tr
+                      key={r.id}
+                      onClick={() => setSelectedTicketId(r.id)}
+                      className={`border-b border-gray-100 cursor-pointer hover:bg-gray-50 ${
+                        selectedTicketId === r.id ? 'bg-primary-50' : ''
+                      }`}
+                    >
+                      <td className="py-2 px-2 text-xs">
+                        <span className="font-mono">{r.business_code}</span>
+                        <div className="text-gray-600 truncate max-w-[8rem]">{r.business_name}</div>
+                      </td>
+                      <td className="py-2 pr-2 max-w-[12rem] truncate">{r.subject}</td>
+                      <td className="py-2 pr-2">{r.from_name}</td>
+                      <td className="py-2 pr-2 capitalize">{r.status}</td>
+                      <td className="py-2 pr-2 text-xs text-gray-500">{r.created_at}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {selectedTicket && (
+            <form onSubmit={saveTicket} className="space-y-3 border-t border-gray-100 pt-4">
+              <p className="text-sm font-medium text-gray-800">{selectedTicket.subject}</p>
+              <p className="text-sm text-gray-600 whitespace-pre-wrap">{selectedTicket.body}</p>
+              <div>
+                <label className="form-label">Status</label>
+                <select className="form-input" value={ticketStatus} onChange={(e) => setTicketStatus(e.target.value)}>
+                  <option value="open">open</option>
+                  <option value="in_progress">in_progress</option>
+                  <option value="resolved">resolved</option>
+                  <option value="closed">closed</option>
+                </select>
+              </div>
+              <div>
+                <label className="form-label">Notes to store (optional)</label>
+                <textarea
+                  className="form-input min-h-[80px]"
+                  value={ticketNotes}
+                  onChange={(e) => setTicketNotes(e.target.value)}
+                  placeholder="Visible to admins/managers when ticket is updated…"
+                />
+              </div>
+              <Button type="submit" variant="primary" loading={ticketSaving}>
+                Save ticket
+              </Button>
+            </form>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}

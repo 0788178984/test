@@ -1,0 +1,614 @@
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Link } from 'react-router-dom';
+import { Smartphone, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
+import { toast } from 'react-hot-toast';
+import { agentFloatAPI, formatCurrency, formatDate, getStoreToday, addStoreDays, handleApiError, usersAPI } from '../../api/client';
+import Currency from '../ui/Currency';
+import { useAuthStore } from '../../store/authStore';
+import Button from '../ui/Button';
+import Input from '../ui/Input';
+import Modal from '../ui/Modal';
+
+const TX_TYPES = [
+  { id: 'withdrawal', label: 'Withdrawal', hint: 'Float ↓ · Cash ↑' },
+  { id: 'deposit', label: 'Deposit', hint: 'Float ↑ · Cash ↓' },
+  { id: 'airtime', label: 'Airtime', hint: 'Float ↓ · Cash ↑' },
+  { id: 'bill_payment', label: 'Bill payment', hint: 'Float ↓ · Cash ↑' },
+  { id: 'send_money', label: 'Send money', hint: 'Float ↓ · Cash ↑' },
+];
+
+const MOMO_FLOAT_CASHIER_STORAGE_KEY = 'momo-agent-float-cashier-id';
+
+const defaultTxForm = () => ({
+  transaction_type: 'withdrawal',
+  network: 'mtn',
+  amount: '',
+  commission: '',
+  customer_name: '',
+  customer_phone: '',
+  reference: '',
+  notes: '',
+});
+
+/**
+ * @param {{ embedded?: boolean, defaultExpanded?: boolean }} props
+ * embedded — compact collapsible panel on POS (does not stretch over checkout).
+ */
+const MoMoAgentSection = ({ embedded = false, defaultExpanded = true }) => {
+  const [expanded, setExpanded] = useState(embedded ? defaultExpanded : true);
+  const user = useAuthStore((s) => s.user);
+  const hasRole = useAuthStore((s) => s.hasRole);
+  const isSupervisor = user && ['admin', 'manager'].includes(user.role);
+  const canViewSection = hasRole('admin', 'manager', 'cashier');
+  const canManageSession = hasRole('admin', 'manager');
+  const canRecordTx = hasRole('admin', 'manager', 'cashier');
+
+  const [loading, setLoading] = useState(false);
+  const [session, setSession] = useState(null);
+  const [balances, setBalances] = useState(null);
+  const [transactions, setTransactions] = useState([]);
+  const [cashiers, setCashiers] = useState([]);
+  const [selectedCashierId, setSelectedCashierId] = useState(null);
+  const [sessionDate, setSessionDate] = useState(() => getStoreToday());
+  const [openModal, setOpenModal] = useState(false);
+  const [closeModal, setCloseModal] = useState(false);
+  const [openForm, setOpenForm] = useState({ opening_cash: '', opening_float: '' });
+  const [txForm, setTxForm] = useState(defaultTxForm);
+  const [closeForm, setCloseForm] = useState({ closing_cash_actual: '', closing_float_actual: '', notes: '' });
+
+  const cashiersRef = useRef(cashiers);
+  cashiersRef.current = cashiers;
+  const viewingToday = sessionDate === getStoreToday();
+
+  const persistCashierChoice = (id) => {
+    setSelectedCashierId(id);
+    try {
+      localStorage.setItem(MOMO_FLOAT_CASHIER_STORAGE_KEY, id);
+    } catch (_) {
+      /* ignore */
+    }
+  };
+
+  const load = useCallback(async () => {
+    if (!canViewSection) return;
+    setLoading(true);
+    try {
+      if (isSupervisor) {
+        let list = cashiersRef.current;
+        if (list.length === 0) {
+          const { data } = await usersAPI.getDirectory();
+          list = (data.users || []).filter((u) => u.role === 'cashier');
+          setCashiers(list);
+          cashiersRef.current = list;
+        }
+
+        let pick =
+          selectedCashierId && list.some((u) => u.id === selectedCashierId) ? selectedCashierId : null;
+        if (!pick) {
+          try {
+            const saved = localStorage.getItem(MOMO_FLOAT_CASHIER_STORAGE_KEY);
+            if (saved && list.some((u) => u.id === saved)) pick = saved;
+          } catch (_) {
+            /* ignore */
+          }
+        }
+        if (!pick && list[0]) pick = list[0].id;
+
+        if (pick && pick !== selectedCashierId) {
+          setSelectedCashierId(pick);
+        }
+
+        if (!pick) {
+          setSession(null);
+          setBalances(null);
+          setTransactions([]);
+          return;
+        }
+
+        const cid = String(pick).trim();
+        const { data } = await agentFloatAPI.getTodaySession({ cashier_id: cid, date: sessionDate });
+        setSession(data.session);
+        setBalances(data.balances);
+        setTransactions(data.transactions || []);
+        return;
+      }
+
+      const { data } = await agentFloatAPI.getTodaySession({ date: sessionDate });
+      setSession(data.session);
+      setBalances(data.balances);
+      setTransactions(data.transactions || []);
+    } catch (error) {
+      const { message } = handleApiError(error);
+      toast.error(message);
+    } finally {
+      setLoading(false);
+    }
+  }, [canViewSection, isSupervisor, selectedCashierId, sessionDate]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const handleOpenSession = async (e) => {
+    e.preventDefault();
+    if (!selectedCashierId) {
+      toast.error('Select which cashier is receiving this float.');
+      return;
+    }
+    try {
+      await agentFloatAPI.openSession({
+        opening_cash: Number(openForm.opening_cash),
+        opening_float: Number(openForm.opening_float),
+        cashier_id: String(selectedCashierId).trim(),
+      });
+      toast.success('Float opened for today');
+      setOpenModal(false);
+      setOpenForm({ opening_cash: '', opening_float: '' });
+      load();
+    } catch (error) {
+      const { message } = handleApiError(error);
+      toast.error(message);
+    }
+  };
+
+  const handleRecordTx = async (e) => {
+    e.preventDefault();
+    if (!session || session.status !== 'open') {
+      toast.error('Supervisor must open today’s float for this counter first.');
+      return;
+    }
+    if (isSupervisor && !selectedCashierId) {
+      toast.error('Select a cashier.');
+      return;
+    }
+    try {
+      const { data } = await agentFloatAPI.recordTransaction({
+        ...txForm,
+        amount: Number(txForm.amount),
+        commission: canManageSession ? Number(txForm.commission) || 0 : 0,
+        ...(isSupervisor ? { cashier_id: String(selectedCashierId).trim() } : {}),
+      });
+      setBalances(data.balances);
+      setTxForm(defaultTxForm());
+      toast.success('Transaction recorded');
+      load();
+    } catch (error) {
+      const { message } = handleApiError(error);
+      toast.error(message);
+    }
+  };
+
+  const handleClose = async (e) => {
+    e.preventDefault();
+    if (!selectedCashierId) {
+      toast.error('Select which cashier’s session you are closing.');
+      return;
+    }
+    try {
+      await agentFloatAPI.closeSession({
+        closing_cash_actual: Number(closeForm.closing_cash_actual),
+        closing_float_actual: Number(closeForm.closing_float_actual),
+        notes: closeForm.notes,
+        cashier_id: String(selectedCashierId).trim(),
+      });
+      toast.success('Day reconciled');
+      setCloseModal(false);
+      load();
+    } catch (error) {
+      const { message } = handleApiError(error);
+      toast.error(message);
+    }
+  };
+
+  if (!canViewSection) return null;
+
+  const isOpen = session?.status === 'open';
+  const canEditSession = viewingToday;
+
+  const sectionCls = embedded
+    ? 'relative z-0 isolate rounded-xl border border-amber-200 bg-gradient-to-b from-amber-50/80 to-white shadow-sm'
+    : 'rounded-xl border-2 border-amber-200 bg-gradient-to-b from-amber-50/80 to-white p-4 shadow-sm';
+
+  return (
+    <section className={sectionCls}>
+      <div
+        className={`flex flex-wrap items-center justify-between gap-3 ${embedded ? 'border-b border-amber-100 px-4 py-3' : 'mb-4'}`}
+      >
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <h2 className="flex items-center gap-2 text-base font-bold text-gray-900 sm:text-lg">
+            <Smartphone className="h-5 w-5 shrink-0 text-amber-600" />
+            Mobile money agent
+          </h2>
+          {embedded && !expanded && session?.status === 'open' ? (
+            <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+              Float open
+            </span>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {embedded ? (
+            <>
+              <Link
+                to="/mobile-money"
+                className="text-xs font-medium text-amber-800 underline-offset-2 hover:underline"
+              >
+                Full screen
+              </Link>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-800 hover:bg-amber-50"
+                onClick={() => setExpanded((v) => !v)}
+                aria-expanded={expanded}
+              >
+                {expanded ? (
+                  <>
+                    <ChevronUp className="h-4 w-4" aria-hidden />
+                    Collapse
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="h-4 w-4" aria-hidden />
+                    Expand
+                  </>
+                )}
+              </button>
+            </>
+          ) : null}
+          {(expanded || !embedded) && (
+          <Button type="button" variant="secondary" size="sm" onClick={load} disabled={loading}>
+            <RefreshCw className={`mr-1 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          )}
+          {(expanded || !embedded) && isSupervisor ? (
+            <div className="flex items-center gap-1 rounded-lg border border-amber-200 bg-white p-1">
+              <button
+                type="button"
+                className={`rounded px-2 py-1 text-xs font-medium ${viewingToday ? 'bg-amber-100 text-amber-900' : 'text-gray-600'}`}
+                onClick={() => setSessionDate(getStoreToday())}
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                className={`rounded px-2 py-1 text-xs font-medium ${
+                  sessionDate === addStoreDays(getStoreToday(), -1) ? 'bg-amber-100 text-amber-900' : 'text-gray-600'
+                }`}
+                onClick={() => setSessionDate(addStoreDays(getStoreToday(), -1))}
+              >
+                Yesterday
+              </button>
+              <Input
+                type="date"
+                value={sessionDate}
+                onChange={(e) => setSessionDate(e.target.value)}
+                className="form-input h-8 min-w-[9rem] py-1 text-xs"
+              />
+            </div>
+          ) : null}
+          {(expanded || !embedded) && !session && canManageSession && canEditSession && (
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              disabled={isSupervisor && (!selectedCashierId || cashiers.length === 0)}
+              title={
+                isSupervisor && !cashiers.length
+                  ? 'Add an active cashier under Users first'
+                  : undefined
+              }
+              onClick={() => setOpenModal(true)}
+            >
+              Open today&apos;s float
+            </Button>
+          )}
+          {(expanded || !embedded) && isOpen && canManageSession && canEditSession && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={isSupervisor && !selectedCashierId}
+              onClick={() => {
+                setCloseForm({
+                  closing_cash_actual: String(balances?.current_cash ?? ''),
+                  closing_float_actual: String(balances?.current_float ?? ''),
+                  notes: '',
+                });
+                setCloseModal(true);
+              }}
+            >
+              End-of-day reconcile
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {embedded && !expanded ? (
+        <p className="px-4 py-2 text-xs text-gray-600">
+          Collapsed — expand to record agent float, or use{' '}
+          <Link to="/mobile-money" className="font-medium text-amber-800 underline-offset-2 hover:underline">
+            Mobile money
+          </Link>{' '}
+          in the menu.
+        </p>
+      ) : null}
+
+      {(expanded || !embedded) && (
+      <div className={embedded ? 'max-h-[min(50vh,28rem)] overflow-y-auto p-4 pt-3' : undefined}>
+      {isSupervisor && (
+        <div className="mb-4 max-w-xl rounded-lg border border-amber-100 bg-white/80 p-3">
+          <label className="block text-sm font-medium text-gray-800">Which cashier is this float for?</label>
+          <select
+            className="form-input mt-1 w-full"
+            value={selectedCashierId || ''}
+            onChange={(e) => persistCashierChoice(e.target.value)}
+          >
+            {cashiers.length === 0 ? (
+              <option value="">No active cashiers — add staff in Users</option>
+            ) : (
+              cashiers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))
+            )}
+          </select>
+        </div>
+      )}
+
+      {!session ? (
+        <p className="text-sm text-gray-600">No float open for today.</p>
+      ) : (
+        <>
+          <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <BalanceCard label="Cash at hand" value={balances?.current_cash} />
+            <BalanceCard label="MoMo float" value={balances?.current_float} />
+            <BalanceCard label="Withdrawals" value={balances?.total_withdrawals} muted />
+            <BalanceCard label="Deposits" value={balances?.total_deposits} muted />
+          </div>
+          <p className="mb-3 text-xs text-gray-500">
+            Cashier:{' '}
+            <span className="font-medium text-gray-800">{session.cashier_name || '—'}</span>
+            {' · '}
+            Opening: cash {formatCurrency(balances?.opening_cash)} · float{' '}
+            {formatCurrency(balances?.opening_float)}
+            {canManageSession && (
+              <>
+                {' · '}
+                Commission {formatCurrency(balances?.total_commission)}
+              </>
+            )}
+            {' · '}
+            Session <span className="font-medium capitalize">{session.status}</span>
+          </p>
+
+          {!viewingToday ? (
+            <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              Viewing {formatDate(sessionDate)} — read-only history. Switch to Today to record new transactions.
+            </p>
+          ) : null}
+
+          {isOpen && canRecordTx && canEditSession && (
+            <form onSubmit={handleRecordTx} className="mb-4 rounded-lg border border-gray-200 bg-white p-4">
+              <h3 className="mb-3 text-sm font-semibold text-gray-900">Record transaction</h3>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <label className="block text-sm">
+                  <span className="text-gray-600">Type</span>
+                  <select
+                    className="form-input mt-1 w-full"
+                    value={txForm.transaction_type}
+                    onChange={(e) => setTxForm((f) => ({ ...f, transaction_type: e.target.value }))}
+                  >
+                    {TX_TYPES.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.label} — {t.hint}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block text-sm">
+                  <span className="text-gray-600">Network</span>
+                  <select
+                    className="form-input mt-1 w-full"
+                    value={txForm.network}
+                    onChange={(e) => setTxForm((f) => ({ ...f, network: e.target.value }))}
+                  >
+                    <option value="mtn">MTN</option>
+                    <option value="airtel">Airtel</option>
+                  </select>
+                </label>
+                <Input
+                  label="Amount (UGX)"
+                  name="amount"
+                  type="number"
+                  min="1"
+                  value={txForm.amount}
+                  onChange={(e) => setTxForm((f) => ({ ...f, amount: e.target.value }))}
+                  required
+                />
+                {canManageSession && (
+                  <Input
+                    label="Commission earned (UGX)"
+                    name="commission"
+                    type="number"
+                    min="0"
+                    value={txForm.commission}
+                    onChange={(e) => setTxForm((f) => ({ ...f, commission: e.target.value }))}
+                  />
+                )}
+                <Input
+                  label="Customer name"
+                  name="customer_name"
+                  value={txForm.customer_name}
+                  onChange={(e) => setTxForm((f) => ({ ...f, customer_name: e.target.value }))}
+                />
+                <Input
+                  label="Phone"
+                  name="customer_phone"
+                  value={txForm.customer_phone}
+                  onChange={(e) => setTxForm((f) => ({ ...f, customer_phone: e.target.value }))}
+                />
+                <Input
+                  label="Reference / Txn ID"
+                  name="reference"
+                  value={txForm.reference}
+                  onChange={(e) => setTxForm((f) => ({ ...f, reference: e.target.value }))}
+                />
+                <Input
+                  label="Notes"
+                  name="notes"
+                  value={txForm.notes}
+                  onChange={(e) => setTxForm((f) => ({ ...f, notes: e.target.value }))}
+                />
+              </div>
+              <div className="mt-3 flex justify-end">
+                <Button type="submit" variant="primary">
+                  Save transaction
+                </Button>
+              </div>
+            </form>
+          )}
+
+          <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+            <table className="min-w-full text-sm">
+              <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
+                <tr>
+                  <th className="px-3 py-2">Time</th>
+                  <th className="px-3 py-2">Type</th>
+                  <th className="px-3 py-2">Network</th>
+                  <th className="px-3 py-2">Amount</th>
+                  <th className="px-3 py-2">Cash Δ</th>
+                  <th className="px-3 py-2">Float Δ</th>
+                  <th className="px-3 py-2">Ref</th>
+                </tr>
+              </thead>
+              <tbody>
+                {transactions.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-3 py-6 text-center text-gray-500">
+                      {viewingToday ? 'No transactions yet today' : `No transactions for ${formatDate(sessionDate)}`}
+                    </td>
+                  </tr>
+                ) : (
+                  transactions.map((t) => (
+                    <tr key={t.id} className="border-t border-gray-100">
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {formatDate(t.created_at, { hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                      <td className="px-3 py-2 capitalize">{t.transaction_type.replace(/_/g, ' ')}</td>
+                      <td className="px-3 py-2 uppercase">{t.network}</td>
+                      <td className="px-3 py-2 font-medium">{formatCurrency(t.amount)}</td>
+                      <td className="px-3 py-2 text-green-700">
+                        {t.cash_delta > 0 ? '+' : ''}
+                        {formatCurrency(t.cash_delta)}
+                      </td>
+                      <td className="px-3 py-2 text-blue-700">
+                        {t.float_delta > 0 ? '+' : ''}
+                        {formatCurrency(t.float_delta)}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-xs">{t.reference || '—'}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      </div>
+      )}
+
+      <Modal isOpen={openModal} onClose={() => setOpenModal(false)} title="Open float — today" size="md">
+        <form onSubmit={handleOpenSession} className="space-y-4">
+          {isSupervisor && (
+            <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-gray-800">
+              Opening for:{' '}
+              <span className="font-semibold">
+                {cashiers.find((c) => c.id === selectedCashierId)?.name || '—'}
+              </span>
+            </p>
+          )}
+          <Input
+            label="Cash float given (UGX)"
+            name="opening_cash"
+            type="number"
+            min="0"
+            value={openForm.opening_cash}
+            onChange={(e) => setOpenForm((f) => ({ ...f, opening_cash: e.target.value }))}
+            required
+          />
+          <Input
+            label="Mobile money float given (UGX)"
+            name="opening_float"
+            type="number"
+            min="0"
+            value={openForm.opening_float}
+            onChange={(e) => setOpenForm((f) => ({ ...f, opening_float: e.target.value }))}
+            required
+          />
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setOpenModal(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary">
+              Open session
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal isOpen={closeModal} onClose={() => setCloseModal(false)} title="End-of-day reconciliation" size="md">
+        <form onSubmit={handleClose} className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Expected: cash {formatCurrency(balances?.expected_closing_cash)} · float{' '}
+            {formatCurrency(balances?.expected_closing_float)}
+          </p>
+          <Input
+            label="Actual cash counted (UGX)"
+            name="closing_cash_actual"
+            type="number"
+            value={closeForm.closing_cash_actual}
+            onChange={(e) => setCloseForm((f) => ({ ...f, closing_cash_actual: e.target.value }))}
+            required
+          />
+          <Input
+            label="Actual MoMo float (UGX)"
+            name="closing_float_actual"
+            type="number"
+            value={closeForm.closing_float_actual}
+            onChange={(e) => setCloseForm((f) => ({ ...f, closing_float_actual: e.target.value }))}
+            required
+          />
+          <Input
+            label="Notes"
+            name="notes"
+            value={closeForm.notes}
+            onChange={(e) => setCloseForm((f) => ({ ...f, notes: e.target.value }))}
+            multiline
+            rows={2}
+          />
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setCloseModal(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary">
+              Close & reconcile
+            </Button>
+          </div>
+        </form>
+      </Modal>
+    </section>
+  );
+};
+
+function BalanceCard({ label, value, muted }) {
+  return (
+    <div className={`min-w-0 overflow-hidden rounded-lg border p-3 ${muted ? 'border-gray-200 bg-gray-50' : 'border-amber-200 bg-white'}`}>
+      <p className="text-xs text-gray-500">{label}</p>
+      <Currency amount={value ?? 0} className="stat-value-currency mt-0.5 text-gray-900" />
+    </div>
+  );
+}
+
+export default MoMoAgentSection;
