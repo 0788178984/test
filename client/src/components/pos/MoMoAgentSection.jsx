@@ -10,9 +10,9 @@ import Input from '../ui/Input';
 import Modal from '../ui/Modal';
 
 const TX_TYPES = [
-  { id: 'withdrawal', label: 'Withdrawal', hint: 'Float ↓ · Cash ↑' },
-  { id: 'deposit', label: 'Deposit', hint: 'Float ↑ · Cash ↓' },
-  { id: 'airtime', label: 'Airtime', hint: 'Float ↓ · Cash ↑' },
+  { id: 'withdrawal', label: 'Withdrawal', hint: 'Float ↑ · Cash ↓' },
+  { id: 'deposit', label: 'Deposit', hint: 'Float ↓ · Cash ↑' },
+  { id: 'airtime', label: 'Airtime', hint: 'Airtime ↓ · Cash ↑' },
   { id: 'bill_payment', label: 'Bill payment', hint: 'Float ↓ · Cash ↑' },
   { id: 'send_money', label: 'Send money', hint: 'Float ↓ · Cash ↑' },
 ];
@@ -52,9 +52,14 @@ const MoMoAgentSection = ({ embedded = false, defaultExpanded = true }) => {
   const [sessionDate, setSessionDate] = useState(() => getStoreToday());
   const [openModal, setOpenModal] = useState(false);
   const [closeModal, setCloseModal] = useState(false);
-  const [openForm, setOpenForm] = useState({ opening_cash: '', opening_float: '' });
+  const [openForm, setOpenForm] = useState({ opening_cash: '', opening_float: '', opening_airtime: '' });
   const [txForm, setTxForm] = useState(defaultTxForm);
-  const [closeForm, setCloseForm] = useState({ closing_cash_actual: '', closing_float_actual: '', notes: '' });
+  const [closeForm, setCloseForm] = useState({
+    closing_cash_actual: '',
+    closing_float_actual: '',
+    closing_airtime_actual: '',
+    notes: '',
+  });
 
   const cashiersRef = useRef(cashiers);
   cashiersRef.current = cashiers;
@@ -139,11 +144,12 @@ const MoMoAgentSection = ({ embedded = false, defaultExpanded = true }) => {
       await agentFloatAPI.openSession({
         opening_cash: Number(openForm.opening_cash),
         opening_float: Number(openForm.opening_float),
+        opening_airtime: Number(openForm.opening_airtime) || 0,
         cashier_id: String(selectedCashierId).trim(),
       });
       toast.success('Float opened for today');
       setOpenModal(false);
-      setOpenForm({ opening_cash: '', opening_float: '' });
+      setOpenForm({ opening_cash: '', opening_float: '', opening_airtime: '' });
       load();
     } catch (error) {
       const { message } = handleApiError(error);
@@ -188,6 +194,7 @@ const MoMoAgentSection = ({ embedded = false, defaultExpanded = true }) => {
       await agentFloatAPI.closeSession({
         closing_cash_actual: Number(closeForm.closing_cash_actual),
         closing_float_actual: Number(closeForm.closing_float_actual),
+        closing_airtime_actual: Number(closeForm.closing_airtime_actual),
         notes: closeForm.notes,
         cashier_id: String(selectedCashierId).trim(),
       });
@@ -312,6 +319,7 @@ const MoMoAgentSection = ({ embedded = false, defaultExpanded = true }) => {
                 setCloseForm({
                   closing_cash_actual: String(balances?.current_cash ?? ''),
                   closing_float_actual: String(balances?.current_float ?? ''),
+                  closing_airtime_actual: String(balances?.current_airtime ?? ''),
                   notes: '',
                 });
                 setCloseModal(true);
@@ -360,9 +368,10 @@ const MoMoAgentSection = ({ embedded = false, defaultExpanded = true }) => {
         <p className="text-sm text-gray-600">No float open for today.</p>
       ) : (
         <>
-          <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             <BalanceCard label="Cash at hand" value={balances?.current_cash} />
             <BalanceCard label="MoMo float" value={balances?.current_float} />
+            <BalanceCard label="Airtime float" value={balances?.current_airtime} />
             <BalanceCard label="Withdrawals" value={balances?.total_withdrawals} muted />
             <BalanceCard label="Deposits" value={balances?.total_deposits} muted />
           </div>
@@ -370,8 +379,9 @@ const MoMoAgentSection = ({ embedded = false, defaultExpanded = true }) => {
             Cashier:{' '}
             <span className="font-medium text-gray-800">{session.cashier_name || '—'}</span>
             {' · '}
-            Opening: cash {formatCurrency(balances?.opening_cash)} · float{' '}
-            {formatCurrency(balances?.opening_float)}
+            Opening: cash {formatCurrency(balances?.opening_cash)} · MoMo float{' '}
+            {formatCurrency(balances?.opening_float)} · airtime{' '}
+            {formatCurrency(balances?.opening_airtime)}
             {canManageSession && (
               <>
                 {' · '}
@@ -479,13 +489,14 @@ const MoMoAgentSection = ({ embedded = false, defaultExpanded = true }) => {
                   <th className="px-3 py-2">Amount</th>
                   <th className="px-3 py-2">Cash Δ</th>
                   <th className="px-3 py-2">Float Δ</th>
+                  <th className="px-3 py-2">Airtime Δ</th>
                   <th className="px-3 py-2">Ref</th>
                 </tr>
               </thead>
               <tbody>
                 {transactions.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-3 py-6 text-center text-gray-500">
+                    <td colSpan={8} className="px-3 py-6 text-center text-gray-500">
                       {viewingToday ? 'No transactions yet today' : `No transactions for ${formatDate(sessionDate)}`}
                     </td>
                   </tr>
@@ -505,6 +516,10 @@ const MoMoAgentSection = ({ embedded = false, defaultExpanded = true }) => {
                       <td className="px-3 py-2 text-blue-700">
                         {t.float_delta > 0 ? '+' : ''}
                         {formatCurrency(t.float_delta)}
+                      </td>
+                      <td className="px-3 py-2 text-amber-800">
+                        {Number(t.airtime_delta) > 0 ? '+' : ''}
+                        {formatCurrency(t.airtime_delta || 0)}
                       </td>
                       <td className="px-3 py-2 font-mono text-xs">{t.reference || '—'}</td>
                     </tr>
@@ -547,6 +562,18 @@ const MoMoAgentSection = ({ embedded = false, defaultExpanded = true }) => {
             onChange={(e) => setOpenForm((f) => ({ ...f, opening_float: e.target.value }))}
             required
           />
+          <Input
+            label="Airtime float given (UGX)"
+            name="opening_airtime"
+            type="number"
+            min="0"
+            value={openForm.opening_airtime}
+            onChange={(e) => setOpenForm((f) => ({ ...f, opening_airtime: e.target.value }))}
+            placeholder="0 if none"
+          />
+          <p className="text-xs text-gray-500">
+            Airtime is a separate float. Leave it blank or 0 when no airtime stock is given. Saved sessions are not changed.
+          </p>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setOpenModal(false)}>
               Cancel
@@ -561,8 +588,9 @@ const MoMoAgentSection = ({ embedded = false, defaultExpanded = true }) => {
       <Modal isOpen={closeModal} onClose={() => setCloseModal(false)} title="End-of-day reconciliation" size="md">
         <form onSubmit={handleClose} className="space-y-4">
           <p className="text-sm text-gray-600">
-            Expected: cash {formatCurrency(balances?.expected_closing_cash)} · float{' '}
-            {formatCurrency(balances?.expected_closing_float)}
+            Expected: cash {formatCurrency(balances?.expected_closing_cash)} · MoMo float{' '}
+            {formatCurrency(balances?.expected_closing_float)} · airtime{' '}
+            {formatCurrency(balances?.expected_closing_airtime)}
           </p>
           <Input
             label="Actual cash counted (UGX)"
@@ -578,6 +606,15 @@ const MoMoAgentSection = ({ embedded = false, defaultExpanded = true }) => {
             type="number"
             value={closeForm.closing_float_actual}
             onChange={(e) => setCloseForm((f) => ({ ...f, closing_float_actual: e.target.value }))}
+            required
+          />
+          <Input
+            label="Actual airtime float (UGX)"
+            name="closing_airtime_actual"
+            type="number"
+            min="0"
+            value={closeForm.closing_airtime_actual}
+            onChange={(e) => setCloseForm((f) => ({ ...f, closing_airtime_actual: e.target.value }))}
             required
           />
           <Input

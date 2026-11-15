@@ -6,19 +6,30 @@ const { getStoreToday } = require('../utils/storeTime');
 const TX_TYPES = ['withdrawal', 'deposit', 'airtime', 'bill_payment', 'send_money'];
 const NETWORKS = ['mtn', 'airtel'];
 
+/**
+ * Movements for a newly recorded transaction.
+ * Already-saved rows keep the cash_delta / float_delta written at the time.
+ * Do not recompute or rewrite those historical amounts.
+ *
+ * Withdrawal: customer takes cash, e-money lands on MoMo float.
+ * Deposit and send money: customer gives cash, e-money leaves MoMo float.
+ * Airtime: cash in, airtime float out (MoMo float unchanged).
+ * Bill payment: cash in, MoMo float out.
+ */
 function deltasForType(transactionType, amount) {
   const a = roundUgx(amount);
   if (a <= 0) throw new Error('Amount must be greater than zero.');
 
   switch (transactionType) {
     case 'withdrawal':
-      return { cash_delta: a, float_delta: -a };
+      return { cash_delta: -a, float_delta: a, airtime_delta: 0 };
     case 'deposit':
-      return { cash_delta: -a, float_delta: a };
-    case 'airtime':
-    case 'bill_payment':
     case 'send_money':
-      return { cash_delta: a, float_delta: -a };
+      return { cash_delta: a, float_delta: -a, airtime_delta: 0 };
+    case 'airtime':
+      return { cash_delta: a, float_delta: 0, airtime_delta: -a };
+    case 'bill_payment':
+      return { cash_delta: a, float_delta: -a, airtime_delta: 0 };
     default:
       throw new Error('Invalid transaction type.');
   }
@@ -52,6 +63,7 @@ async function sumTransactions(sessionId) {
       `SELECT
         COALESCE(SUM(cash_delta), 0) as cash_movement,
         COALESCE(SUM(float_delta), 0) as float_movement,
+        COALESCE(SUM(airtime_delta), 0) as airtime_movement,
         COALESCE(SUM(commission), 0) as total_commission,
         COALESCE(SUM(CASE WHEN transaction_type = 'withdrawal' THEN amount ELSE 0 END), 0) as withdrawals,
         COALESCE(SUM(CASE WHEN transaction_type = 'deposit' THEN amount ELSE 0 END), 0) as deposits
@@ -63,6 +75,7 @@ async function sumTransactions(sessionId) {
   return {
     cash_movement: roundUgx(row?.cash_movement),
     float_movement: roundUgx(row?.float_movement),
+    airtime_movement: roundUgx(row?.airtime_movement),
     total_commission: roundUgx(row?.total_commission),
     withdrawals: roundUgx(row?.withdrawals),
     deposits: roundUgx(row?.deposits),
@@ -73,17 +86,22 @@ async function buildSessionBalances(session) {
   const sums = await sumTransactions(session.id);
   const opening_cash = roundUgx(session.opening_cash);
   const opening_float = roundUgx(session.opening_float);
+  const opening_airtime = roundUgx(session.opening_airtime);
   const current_cash = opening_cash + sums.cash_movement;
   const current_float = opening_float + sums.float_movement;
+  const current_airtime = opening_airtime + sums.airtime_movement;
 
   return {
     session,
     opening_cash,
     opening_float,
+    opening_airtime,
     current_cash,
     current_float,
+    current_airtime,
     expected_closing_cash: current_cash,
     expected_closing_float: current_float,
+    expected_closing_airtime: current_airtime,
     total_withdrawals: sums.withdrawals,
     total_deposits: sums.deposits,
     total_commission: sums.total_commission,
@@ -91,7 +109,14 @@ async function buildSessionBalances(session) {
   };
 }
 
-async function openSession(businessId, cashierId, { opening_cash, opening_float, session_date }) {
+async function openSession(businessId, cashierId, { opening_cash, opening_float, opening_airtime, session_date }) {
+  const cash = roundUgx(opening_cash);
+  const floatAmt = roundUgx(opening_float);
+  const airtime = roundUgx(opening_airtime);
+  if (cash < 0 || floatAmt < 0 || airtime < 0) {
+    throw new Error('Opening cash, mobile money float, and airtime float cannot be negative.');
+  }
+
   const date = session_date || getStoreToday();
   const existing = await getOpenSession(businessId, cashierId, date);
   if (existing) {
@@ -103,10 +128,18 @@ async function openSession(businessId, cashierId, { opening_cash, opening_float,
     .prepare(
       `INSERT INTO agent_float_sessions (
         id, business_id, cashier_id, session_date,
-        opening_cash, opening_float, status, opened_at, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, 'open', datetime('now'), datetime('now'), datetime('now'))`
+        opening_cash, opening_float, opening_airtime, status, opened_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', datetime('now'), datetime('now'), datetime('now'))`
     )
-    .run(id, businessId, cashierId, date, roundUgx(opening_cash), roundUgx(opening_float));
+    .run(
+      id,
+      businessId,
+      cashierId,
+      date,
+      cash,
+      floatAmt,
+      airtime
+    );
 
   return getSessionById(id, businessId);
 }
@@ -123,16 +156,16 @@ async function recordTransaction(session, userId, payload) {
 
   const amount = roundUgx(payload.amount);
   const commission = roundUgx(payload.commission || 0);
-  const { cash_delta, float_delta } = deltasForType(type, amount);
+  const { cash_delta, float_delta, airtime_delta } = deltasForType(type, amount);
 
   const id = newId('atx');
   await db
     .prepare(
       `INSERT INTO agent_transactions (
         id, session_id, business_id, cashier_id, transaction_type, network,
-        amount, commission, cash_delta, float_delta,
+        amount, commission, cash_delta, float_delta, airtime_delta,
         customer_name, customer_phone, reference, notes, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
     )
     .run(
       id,
@@ -145,6 +178,7 @@ async function recordTransaction(session, userId, payload) {
       commission,
       cash_delta,
       float_delta,
+      airtime_delta,
       payload.customer_name || null,
       payload.customer_phone || null,
       payload.reference || null,
@@ -174,12 +208,17 @@ async function listTransactions(sessionId, { limit = 100 } = {}) {
     .all(sessionId, parseInt(limit, 10));
 }
 
-async function closeSession(session, userId, { closing_cash_actual, closing_float_actual, notes }) {
+async function closeSession(session, userId, { closing_cash_actual, closing_float_actual, closing_airtime_actual, notes }) {
   const balances = await buildSessionBalances(session);
   const actualCash = roundUgx(closing_cash_actual);
   const actualFloat = roundUgx(closing_float_actual);
+  const actualAirtime =
+    closing_airtime_actual === undefined || closing_airtime_actual === null || closing_airtime_actual === ''
+      ? balances.expected_closing_airtime
+      : roundUgx(closing_airtime_actual);
   const cash_variance = actualCash - balances.expected_closing_cash;
   const float_variance = actualFloat - balances.expected_closing_float;
+  const airtime_variance = actualAirtime - balances.expected_closing_airtime;
 
   await db
     .prepare(
@@ -187,21 +226,35 @@ async function closeSession(session, userId, { closing_cash_actual, closing_floa
         status = 'closed',
         closing_cash_actual = ?,
         closing_float_actual = ?,
+        closing_airtime_actual = ?,
         cash_variance = ?,
         float_variance = ?,
+        airtime_variance = ?,
         notes = COALESCE(?, notes),
         closed_at = datetime('now'),
         updated_at = datetime('now')
        WHERE id = ? AND business_id = ?`
     )
-    .run(actualCash, actualFloat, cash_variance, float_variance, notes || null, session.id, session.business_id);
+    .run(
+      actualCash,
+      actualFloat,
+      actualAirtime,
+      cash_variance,
+      float_variance,
+      airtime_variance,
+      notes || null,
+      session.id,
+      session.business_id
+    );
 
   return {
     ...(await buildSessionBalances(await getSessionById(session.id, session.business_id))),
     closing_cash_actual: actualCash,
     closing_float_actual: actualFloat,
+    closing_airtime_actual: actualAirtime,
     cash_variance,
     float_variance,
+    airtime_variance,
   };
 }
 

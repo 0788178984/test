@@ -64,7 +64,7 @@ router.get('/session/today', checkPermission('view_agent_float'), async (req, re
 
 router.post('/session/open', checkPermission('manage_agent_float'), async (req, res) => {
   try {
-    const { opening_cash, opening_float, session_date, cashier_id } = req.body;
+    const { opening_cash, opening_float, opening_airtime, session_date, cashier_id } = req.body;
     if (opening_cash === undefined || opening_float === undefined) {
       return res.status(400).json({ error: 'Opening cash and mobile money float are required.' });
     }
@@ -84,6 +84,7 @@ router.post('/session/open', checkPermission('manage_agent_float'), async (req, 
     const session = await agentFloat.openSession(bid(req), targetCashier, {
       opening_cash,
       opening_float,
+      opening_airtime,
       session_date,
     });
     const balances = await agentFloat.buildSessionBalances(session);
@@ -95,6 +96,7 @@ router.post('/session/open', checkPermission('manage_agent_float'), async (req, 
         cashier_name: session.cashier_name,
         opening_cash: session.opening_cash,
         opening_float: session.opening_float,
+        opening_airtime: session.opening_airtime,
       },
       { business_id: bid(req), sender_user_id: req.user.id }
     );
@@ -158,7 +160,7 @@ router.post('/transactions', checkPermission('record_agent_float'), async (req, 
 
 router.post('/session/close', checkPermission('manage_agent_float'), async (req, res) => {
   try {
-    const { closing_cash_actual, closing_float_actual, notes, session_date, cashier_id } = req.body;
+    const { closing_cash_actual, closing_float_actual, closing_airtime_actual, notes, session_date, cashier_id } = req.body;
     const closeFor =
       cashier_id == null || cashier_id === '' ? '' : String(cashier_id).trim();
     if (!closeFor) {
@@ -186,6 +188,7 @@ router.post('/session/close', checkPermission('manage_agent_float'), async (req,
     const result = await agentFloat.closeSession(session, req.user.id, {
       closing_cash_actual,
       closing_float_actual,
+      closing_airtime_actual,
       notes,
     });
 
@@ -196,6 +199,7 @@ router.post('/session/close', checkPermission('manage_agent_float'), async (req,
         cashier_name: session.cashier_name,
         cash_variance: result.cash_variance,
         float_variance: result.float_variance,
+        airtime_variance: result.airtime_variance,
       },
       { business_id: bid(req), sender_user_id: req.user.id }
     );

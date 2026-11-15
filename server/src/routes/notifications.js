@@ -640,7 +640,7 @@ const NOTIFICATION_EVENTS = {
     channels: ['in_app'],
     template: (meta) => ({
       title: 'Cash Float Opened',
-      message: `${meta.actor_name} opened float for ${meta.cashier_name}: cash UGX ${Number(meta.opening_cash || 0).toLocaleString()}, MoMo float UGX ${Number(meta.opening_float || 0).toLocaleString()}.`,
+      message: `${meta.actor_name} opened float for ${meta.cashier_name}: cash UGX ${Number(meta.opening_cash || 0).toLocaleString()}, MoMo float UGX ${Number(meta.opening_float || 0).toLocaleString()}, airtime UGX ${Number(meta.opening_airtime || 0).toLocaleString()}.`,
     }),
   },
 
@@ -651,7 +651,7 @@ const NOTIFICATION_EVENTS = {
     channels: ['in_app'],
     template: (meta) => ({
       title: 'Cash Float Closed',
-      message: `${meta.actor_name} closed ${meta.cashier_name}'s float. Cash variance UGX ${Number(meta.cash_variance || 0).toLocaleString()}, MoMo variance UGX ${Number(meta.float_variance || 0).toLocaleString()}.`,
+      message: `${meta.actor_name} closed ${meta.cashier_name}'s float. Cash variance UGX ${Number(meta.cash_variance || 0).toLocaleString()}, MoMo variance UGX ${Number(meta.float_variance || 0).toLocaleString()}, airtime variance UGX ${Number(meta.airtime_variance || 0).toLocaleString()}.`,
     }),
   },
 

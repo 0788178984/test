@@ -236,12 +236,37 @@ async function applyExpensesEnhancementPatch(pool) {
   }
 }
 
+/**
+ * Airtime is a third drawer beside cash and MoMo float.
+ * Additive columns only — existing session and transaction rows keep their
+ * stored cash_delta / float_delta. New columns default to 0.
+ */
+async function applyAgentAirtimeFloatPatch(pool) {
+  if (!pool) return;
+
+  const columnSteps = [
+    `ALTER TABLE agent_float_sessions ADD COLUMN IF NOT EXISTS opening_airtime DOUBLE PRECISION NOT NULL DEFAULT 0`,
+    `ALTER TABLE agent_float_sessions ADD COLUMN IF NOT EXISTS closing_airtime_actual DOUBLE PRECISION`,
+    `ALTER TABLE agent_float_sessions ADD COLUMN IF NOT EXISTS airtime_variance DOUBLE PRECISION DEFAULT 0`,
+    `ALTER TABLE agent_transactions ADD COLUMN IF NOT EXISTS airtime_delta DOUBLE PRECISION NOT NULL DEFAULT 0`,
+  ];
+
+  for (const sql of columnSteps) {
+    try {
+      await pool.query(sql);
+    } catch (e) {
+      if (e.code !== '42701') console.warn('[schema] agent airtime float column:', e.message);
+    }
+  }
+}
+
 async function applyAllSchemaPatches(pool) {
   await applyBusinessTypePatch(pool);
   await applyCreditSalesPatch(pool);
   await applyTenantIsolationPatch(pool);
   await applyWholesalePricePatch(pool);
   await applyExpensesEnhancementPatch(pool);
+  await applyAgentAirtimeFloatPatch(pool);
 }
 
 module.exports = {
@@ -250,5 +275,6 @@ module.exports = {
   applyTenantIsolationPatch,
   applyWholesalePricePatch,
   applyExpensesEnhancementPatch,
+  applyAgentAirtimeFloatPatch,
   applyAllSchemaPatches,
 };
