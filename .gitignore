@@ -32,3 +32,5 @@ Thumbs.db
 
 # Cursor / tooling
 .cursor/
+test/
+test_repo/
