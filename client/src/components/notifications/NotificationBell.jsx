@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Bell, BellRing, X } from 'lucide-react';
 import { useNotificationStore, isUnread } from '../../store/notificationStore';
@@ -21,6 +22,7 @@ const NotificationBell = () => {
   } = useNotificationStore();
   
   const dropdownRef = useRef(null);
+  const panelRef = useRef(null);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -42,9 +44,9 @@ const NotificationBell = () => {
   useEffect(() => {
     // Close dropdown when clicking outside
     const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsOpen(false);
-      }
+      const target = event.target;
+      if (dropdownRef.current?.contains(target) || panelRef.current?.contains(target)) return;
+      setIsOpen(false);
     };
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -111,11 +113,13 @@ const NotificationBell = () => {
   const recentNotifications = getRecentNotifications(5);
 
   return (
-    <div className="relative">
-      {/* Bell button */}
+    <div className="relative" ref={dropdownRef}>
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors"
+        className="relative rounded-lg p-2 transition-colors hover:bg-gray-100"
+        aria-expanded={isOpen}
+        aria-label="Notifications"
       >
         {unreadCount > 0 ? (
           <BellRing className="w-5 h-5 text-gray-600" />
@@ -132,34 +136,42 @@ const NotificationBell = () => {
       </button>
 
       {/* Dropdown */}
-      {isOpen && (
+      {isOpen && createPortal(
+        <>
+        <button
+          type="button"
+          className="fixed inset-0 z-[70] bg-black/40 sm:bg-transparent"
+          aria-label="Close notifications"
+          onClick={() => setIsOpen(false)}
+        />
         <div
-          ref={dropdownRef}
-          className="absolute right-0 mt-2 w-96 bg-white rounded-xl shadow-xl border border-gray-200 z-50 max-h-96 overflow-hidden"
+          ref={panelRef}
+          className="fixed inset-x-3 top-28 z-[80] flex max-h-[min(32rem,calc(100dvh-8rem))] w-auto flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl sm:inset-x-auto sm:right-4 sm:top-16 sm:w-96 sm:max-h-[min(32rem,calc(100dvh-5rem))]"
         >
-          {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-200">
+          <div className="flex items-center justify-between gap-2 border-b border-gray-200 p-3">
             <h3 className="font-semibold text-gray-900">Notifications</h3>
-            <div className="flex items-center space-x-2">
+            <div className="flex shrink-0 items-center gap-2">
               {unreadCount > 0 && (
                 <button
+                  type="button"
                   onClick={handleMarkAllAsRead}
-                  className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                  className="text-xs font-medium text-primary-600 hover:text-primary-700 sm:text-sm"
                 >
-                  Mark all as read
+                  Mark all read
                 </button>
               )}
               <button
+                type="button"
                 onClick={() => setIsOpen(false)}
-                className="p-1 rounded-lg hover:bg-gray-100"
+                className="rounded-lg p-1 hover:bg-gray-100"
+                aria-label="Close notifications"
               >
                 <X className="w-4 h-4 text-gray-500" />
               </button>
             </div>
           </div>
 
-          {/* Notifications list */}
-          <div className="max-h-80 overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-y-auto">
             {recentNotifications.length === 0 ? (
               <div className="p-8 text-center text-gray-500">
                 <Bell className="w-12 h-12 mx-auto mb-4 text-gray-300" />
@@ -169,26 +181,26 @@ const NotificationBell = () => {
               recentNotifications.map((notification) => (
                 <div
                   key={notification.id}
-                  className={`notification-item ${isUnread(notification.is_read) ? 'unread' : ''}`}
+                  className={`cursor-pointer border-b border-gray-100 px-3 py-3 ${
+                    isUnread(notification.is_read) ? 'border-l-4 border-l-primary-500 bg-primary-50' : 'bg-white'
+                  }`}
                   onClick={() => handleMarkAsRead(notification.id)}
                 >
-                  <div className="flex items-start space-x-3">
-                    {/* Icon */}
-                    <div className={`p-2 rounded-full ${getSeverityColor(notification.severity)}`}>
+                  <div className="flex items-start gap-3">
+                    <div className={`shrink-0 rounded-full p-2 ${getSeverityColor(notification.severity)}`}>
                       <span className="text-sm">{getSeverityIcon(notification.severity)}</span>
                     </div>
 
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <h4 className="font-medium text-gray-900 truncate">
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1 flex items-start justify-between gap-2">
+                        <h4 className="min-w-0 font-medium text-gray-900">
                           {notification.title}
                         </h4>
-                        <span className="text-xs text-gray-500">
+                        <span className="shrink-0 whitespace-nowrap text-xs text-gray-500">
                           {formatTime(notification.created_at)}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-600 line-clamp-2">
+                      <p className="line-clamp-2 text-sm text-gray-600">
                         {notification.message}
                       </p>
                     </div>
@@ -200,20 +212,22 @@ const NotificationBell = () => {
 
           {/* Footer */}
           {recentNotifications.length > 0 && (
-            <div className="p-4 border-t border-gray-200">
+            <div className="border-t border-gray-200 p-3">
               <button
                 type="button"
                 onClick={() => {
                   setIsOpen(false);
                   navigate('/notifications');
                 }}
-                className="w-full text-center text-sm text-primary-600 hover:text-primary-700 font-medium"
+                className="w-full text-center text-sm font-medium text-primary-600 hover:text-primary-700"
               >
                 View all notifications
               </button>
             </div>
           )}
         </div>
+        </>,
+        document.body
       )}
     </div>
   );

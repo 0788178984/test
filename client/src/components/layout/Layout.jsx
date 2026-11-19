@@ -296,7 +296,7 @@ const Layout = () => {
     'nav-icon-btn focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500';
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
+    <div className="flex h-[100dvh] max-h-[100dvh] overflow-hidden bg-gray-50">
       <Modal
         isOpen={helpOpen}
         onClose={() => {
@@ -427,7 +427,7 @@ const Layout = () => {
       {/* Sidebar: overlay drawer on small screens; column in layout on lg+ */}
       <aside
         className={[
-          'flex h-screen max-h-screen w-64 min-w-[16rem] flex-col border-r border-gray-200 bg-white shadow-lg transition-[transform,width,opacity] duration-300 ease-in-out',
+          'flex h-[100dvh] max-h-[100dvh] w-64 min-w-[16rem] flex-col border-r border-gray-200 bg-white shadow-lg transition-[transform,width,opacity] duration-300 ease-in-out',
           'fixed inset-y-0 left-0 z-50 lg:relative lg:z-auto lg:translate-x-0 lg:shadow-none',
           sidebarOpen
             ? 'translate-x-0'
@@ -474,7 +474,7 @@ const Layout = () => {
           })}
         </nav>
 
-        <div className="shrink-0 border-t border-gray-200 p-4">
+        <div className="shrink-0 border-t border-gray-200 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <div className="mb-4 flex items-center space-x-3">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-600 font-semibold text-white">
               {user?.name?.charAt(0)?.toUpperCase()}
@@ -497,9 +497,9 @@ const Layout = () => {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="shrink-0 border-b border-gray-200 bg-white px-4 py-3 shadow-sm sm:px-6">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2">
+        <header className="shrink-0 border-b border-gray-200 bg-white px-3 py-3 shadow-sm sm:px-6">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
               <button
                 type="button"
                 onClick={() => setSidebarOpen((o) => !o)}
@@ -520,7 +520,7 @@ const Layout = () => {
               </div>
             </div>
 
-            <div className="flex shrink-0 items-center gap-4 sm:gap-6">
+            <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-1.5 sm:gap-4">
               {showHeaderSync && (
               <div className="hidden text-right sm:block">
                 <div className="flex items-center justify-end gap-2">
@@ -547,7 +547,17 @@ const Layout = () => {
                 <span className="hidden sm:inline">Help</span>
               </button>
 
-              <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="flex shrink-0 items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-sm font-medium text-red-700 transition-colors duration-200 hover:bg-red-100 active:bg-red-200 lg:hidden"
+                aria-label="Logout"
+              >
+                <LogOut className="h-4 w-4 shrink-0" />
+                <span>Logout</span>
+              </button>
+
+              <div className="hidden items-center gap-2 min-[400px]:flex">
                 <div className={`h-2 w-2 shrink-0 rounded-full ${isOnline ? 'bg-green-500' : 'bg-red-500'}`} />
                 <span className="hidden text-sm text-gray-600 sm:inline">
                   {isOnline ? 'Online' : 'Offline'}
