@@ -3,7 +3,7 @@ import { Search, Tag, ClipboardList, RotateCcw, User, ShoppingCart, CreditCard, 
 import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
-import { productsAPI, salesAPI, customersAPI } from '../api/client';
+import { productsAPI, salesAPI, customersAPI, drawsAPI } from '../api/client';
 import { formatCurrency, handleApiError } from '../api/client';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
@@ -41,6 +41,7 @@ const POS = () => {
   const [lastSale, setLastSale] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [customerPhoneInput, setCustomerPhoneInput] = useState('');
+  const [drawCampaign, setDrawCampaign] = useState(null);
   const barcodeInputRef = useRef(null);
 
   const focusScan = useCallback(() => {
@@ -50,6 +51,21 @@ const POS = () => {
   useEffect(() => {
     focusScan();
   }, [focusScan]);
+
+  useEffect(() => {
+    let cancelled = false;
+    drawsAPI
+      .status()
+      .then((res) => {
+        if (!cancelled) setDrawCampaign(res.data);
+      })
+      .catch(() => {
+        if (!cancelled) setDrawCampaign(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const searchByBarcode = async (barcode) => {
     try {
@@ -138,11 +154,17 @@ const POS = () => {
     }
   };
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     const validation = validateCart();
     if (!validation.isValid) {
       toast.error(validation.errors.join(' · '));
       return;
+    }
+    try {
+      const res = await drawsAPI.status();
+      setDrawCampaign(res.data);
+    } catch {
+      /* Keep the last known draw state. A status failure must not block the till. */
     }
     setShowPaymentModal(true);
   };
@@ -172,6 +194,8 @@ const POS = () => {
         amount_paid: paymentData.amountPaid ?? getTotal(),
         change_given: paymentData.changeGiven ?? 0,
         credit_due_date: paymentData.creditDueDate || null,
+        draw_customer_name: paymentData.draw_customer_name || null,
+        draw_customer_token: paymentData.draw_customer_token || null,
       };
 
       const response = await salesAPI.create(saleData);
@@ -215,7 +239,12 @@ const POS = () => {
       resetForNextSale();
       setShowPaymentModal(false);
       setShowReceiptModal(true);
-      toast.success(`Sale ${data.saleNumber} saved`);
+      if (data.drawWarning) {
+        toast.error(data.drawWarning);
+      }
+      toast.success(
+        data.drawEntered ? `Sale ${data.saleNumber} saved and entered in the gift draw` : `Sale ${data.saleNumber} saved`
+      );
       focusScan();
     } catch (error) {
       const { message } = handleApiError(error);
@@ -480,6 +509,7 @@ const POS = () => {
         <PaymentModal
           totalAmount={getTotal()}
           customer={customer}
+          drawCampaign={drawCampaign}
           canUseCredit={hasRole('admin', 'manager') && Boolean(customer?.credit_enabled)}
           paymentMethods={
             user?.payment_methods || { cash: true, mtn_momo: false, airtel_money: false }

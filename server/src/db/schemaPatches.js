@@ -260,6 +260,56 @@ async function applyAgentAirtimeFloatPatch(pool) {
   }
 }
 
+/**
+ * Gift draw is off until an admin/manager saves a campaign.
+ * New tables only — existing sales, stock, and customers are not rewritten.
+ */
+async function applyDrawCampaignPatch(pool) {
+  if (!pool) return;
+
+  const steps = [
+    `CREATE TABLE IF NOT EXISTS draw_campaigns (
+        id TEXT PRIMARY KEY,
+        business_id TEXT NOT NULL REFERENCES businesses(id),
+        enabled INTEGER NOT NULL DEFAULT 0,
+        title TEXT NOT NULL DEFAULT 'End of year gift draw',
+        reason TEXT NOT NULL DEFAULT '',
+        min_amount DOUBLE PRECISION NOT NULL DEFAULT 5000,
+        gifts TEXT NOT NULL DEFAULT '[]',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_draw_campaigns_business
+      ON draw_campaigns (business_id)`,
+    `CREATE TABLE IF NOT EXISTS draw_entries (
+        id TEXT PRIMARY KEY,
+        business_id TEXT NOT NULL REFERENCES businesses(id),
+        campaign_id TEXT NOT NULL REFERENCES draw_campaigns(id),
+        sale_id TEXT REFERENCES sales(id),
+        customer_name TEXT NOT NULL,
+        customer_token TEXT NOT NULL,
+        amount DOUBLE PRECISION NOT NULL,
+        recorded_by TEXT REFERENCES users(id),
+        voided INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`,
+    `CREATE INDEX IF NOT EXISTS idx_draw_entries_token
+      ON draw_entries (business_id, campaign_id, customer_token)
+      WHERE voided = 0`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_draw_entries_sale
+      ON draw_entries (sale_id)
+      WHERE sale_id IS NOT NULL`,
+  ];
+
+  for (const sql of steps) {
+    try {
+      await pool.query(sql);
+    } catch (e) {
+      console.warn('[schema] draw campaign:', e.message);
+    }
+  }
+}
+
 async function applyAllSchemaPatches(pool) {
   await applyBusinessTypePatch(pool);
   await applyCreditSalesPatch(pool);
@@ -267,6 +317,7 @@ async function applyAllSchemaPatches(pool) {
   await applyWholesalePricePatch(pool);
   await applyExpensesEnhancementPatch(pool);
   await applyAgentAirtimeFloatPatch(pool);
+  await applyDrawCampaignPatch(pool);
 }
 
 module.exports = {
@@ -276,5 +327,6 @@ module.exports = {
   applyWholesalePricePatch,
   applyExpensesEnhancementPatch,
   applyAgentAirtimeFloatPatch,
+  applyDrawCampaignPatch,
   applyAllSchemaPatches,
 };

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { X, CreditCard, Smartphone, BookOpen } from 'lucide-react';
-import { customersAPI, paymentsAPI, formatCurrency, formatPhoneNumber, handleApiError, getStoreToday } from '../../api/client';
+import { customersAPI, paymentsAPI, drawsAPI, formatCurrency, formatPhoneNumber, handleApiError, getStoreToday } from '../../api/client';
 import Currency from '../ui/Currency';
 import { toast } from 'react-hot-toast';
 import Button from '../ui/Button';
@@ -28,7 +28,7 @@ function addDaysISO(days) {
  * @param {object} [paymentMethods] — from auth: { cash, mtn_momo, airtel_money }
  * @param {boolean} [canUseCredit] — admin/manager with credit-enabled customer
  */
-const PaymentModal = ({ totalAmount, customer, paymentMethods, canUseCredit, onPayment, onCancel }) => {
+const PaymentModal = ({ totalAmount, customer, paymentMethods, canUseCredit, drawCampaign, onPayment, onCancel }) => {
   const methods = useMemo(
     () =>
       ALL_METHODS.filter((m) => {
@@ -49,6 +49,65 @@ const PaymentModal = ({ totalAmount, customer, paymentMethods, canUseCredit, onP
   const [isProcessing, setIsProcessing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+  const [drawName, setDrawName] = useState(customer?.name || '');
+  const [drawToken, setDrawToken] = useState('');
+  const [drawPreview, setDrawPreview] = useState(null);
+
+  const needsDraw =
+    Boolean(drawCampaign?.enabled) &&
+    Math.round(Number(totalAmount) || 0) + 0.001 >= Math.round(Number(drawCampaign?.min_amount) || 0);
+
+  useEffect(() => {
+    if (customer?.name) setDrawName(customer.name);
+  }, [customer]);
+
+  useEffect(() => {
+    if (!needsDraw) {
+      setDrawPreview(null);
+      return undefined;
+    }
+    const token = drawToken.trim();
+    if (token.length < 2) {
+      setDrawPreview(null);
+      return undefined;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      drawsAPI
+        .preview(token)
+        .then((res) => {
+          if (!cancelled) setDrawPreview(res.data);
+        })
+        .catch(() => {
+          if (!cancelled) setDrawPreview(null);
+        });
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [drawToken, needsDraw]);
+
+  const drawPayload = () => {
+    if (!needsDraw) return {};
+    return {
+      draw_customer_name: drawName.trim(),
+      draw_customer_token: drawToken.trim(),
+    };
+  };
+
+  const ensureDraw = () => {
+    if (!needsDraw) return true;
+    if (drawName.trim().length < 2) {
+      toast.error('Enter the customer name for the gift draw.');
+      return false;
+    }
+    if (drawToken.trim().replace(/[^a-zA-Z0-9]/g, '').length < 2) {
+      toast.error('Enter the customer ID or token for the gift draw.');
+      return false;
+    }
+    return true;
+  };
 
   useEffect(() => {
     const first = methods[0]?.id || 'cash';
@@ -98,11 +157,13 @@ const PaymentModal = ({ totalAmount, customer, paymentMethods, canUseCredit, onP
     if (tender < due) {
       return;
     }
+    if (!ensureDraw()) return;
     onPayment({
       method: 'cash',
       amountPaid: tender,
       changeGiven: tender - due,
       reference: '',
+      ...drawPayload(),
     });
   };
 
@@ -117,6 +178,7 @@ const PaymentModal = ({ totalAmount, customer, paymentMethods, canUseCredit, onP
       toast.error('Set a due date for the credit balance.');
       return;
     }
+    if (!ensureDraw()) return;
     onPayment({
       method: 'credit',
       amountPaid: paidNow,
@@ -124,10 +186,13 @@ const PaymentModal = ({ totalAmount, customer, paymentMethods, canUseCredit, onP
       reference: '',
       creditDueDate,
       balanceDue: due - paidNow,
+      ...drawPayload(),
     });
   };
 
   const handlePayClick = async () => {
+    if (!ensureDraw()) return;
+
     if (paymentMethod === 'cash') {
       submitCash();
       return;
@@ -171,6 +236,7 @@ const PaymentModal = ({ totalAmount, customer, paymentMethods, canUseCredit, onP
             changeGiven: 0,
             reference: ref,
             phone: phoneNumber,
+            ...drawPayload(),
           });
         };
 
@@ -234,6 +300,7 @@ const PaymentModal = ({ totalAmount, customer, paymentMethods, canUseCredit, onP
         changeGiven: 0,
         reference: ref,
         phone: phoneNumber,
+        ...drawPayload(),
       });
     } catch (error) {
       const { message } = handleApiError(error);
@@ -276,6 +343,47 @@ const PaymentModal = ({ totalAmount, customer, paymentMethods, canUseCredit, onP
           <Currency amount={totalAmount} className="stat-value-currency text-primary-600" amountClassName="text-primary-600" />
         </div>
       </div>
+
+      {needsDraw && (
+        <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <div>
+            <h3 className="text-sm font-semibold text-amber-900">{drawCampaign.title || 'Gift draw'}</h3>
+            <p className="mt-1 text-sm text-amber-800">
+              This sale is {formatCurrency(drawCampaign.min_amount)} or more. Enter the customer name and ID or token so they enter the draw.
+            </p>
+            {drawCampaign.reason ? <p className="mt-1 text-xs text-amber-700">{drawCampaign.reason}</p> : null}
+          </div>
+          <label className="block text-sm">
+            <span className="font-medium text-gray-800">Customer name</span>
+            <input
+              className="form-input mt-1"
+              value={drawName}
+              onChange={(e) => setDrawName(e.target.value)}
+              placeholder="Name on the draw"
+              maxLength={80}
+              autoComplete="off"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="font-medium text-gray-800">ID or token</span>
+            <input
+              className="form-input mt-1"
+              value={drawToken}
+              onChange={(e) => setDrawToken(e.target.value)}
+              placeholder="Same ID each visit so totals add up"
+              maxLength={40}
+              autoComplete="off"
+            />
+          </label>
+          {drawPreview?.found ? (
+            <p className="text-xs text-amber-900">
+              This ID is already in the draw: {drawPreview.visits} visit{drawPreview.visits === 1 ? '' : 's'},{' '}
+              {formatCurrency(drawPreview.total_amount)} so far
+              {drawPreview.customer_name ? ` (${drawPreview.customer_name})` : ''}. This sale will be added.
+            </p>
+          ) : null}
+        </div>
+      )}
 
       {customer && (
         <div className="rounded-lg bg-blue-50 p-4">

@@ -23,6 +23,7 @@ import {
   Smartphone,
   Undo2,
   BookOpen,
+  Gift,
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../../store/authStore';
@@ -176,6 +177,12 @@ const Layout = () => {
       title: 'Data analysis',
       icon: PieChart,
       path: '/data-analysis',
+      roles: ['admin', 'manager'],
+    },
+    {
+      title: 'Gift draw',
+      icon: Gift,
+      path: '/gift-draw',
       roles: ['admin', 'manager'],
     },
     {

@@ -7,6 +7,7 @@ const { newId } = require('../db/ids');
 const { getStoreToday, saleLocalDate, STORE_TZ } = require('../utils/storeTime');
 const { roundUgx, computeSaleTotals, calcWholesaleUnitPrice } = require('../utils/money');
 const { dispatchToSupervisors } = require('./notifications');
+const { getCampaign, qualifies, captureFromBody, insertEntry, runSavepoint, voidEntry } = require('../services/drawService');
 const router = express.Router();
 
 router.use(authenticate, restrictToBusinessStaff);
@@ -225,6 +226,22 @@ router.post('/', checkPermission('make_sale'), async (req, res) => {
 
     const saleType = validatedItems.some((i) => i.is_wholesale) ? 'wholesale' : 'retail';
 
+    let drawCampaign = null;
+    try {
+      drawCampaign = await getCampaign(req.user.business_id);
+    } catch (error) {
+      console.warn('[draw] lookup skipped, sale continues:', error.message);
+    }
+    let drawCapture = null;
+    let drawSaved = false;
+    if (qualifies(drawCampaign, totalAmount)) {
+      const captured = captureFromBody(req.body);
+      if (captured.error) {
+        return res.status(400).json({ error: captured.error, code: 'DRAW_REQUIRED' });
+      }
+      drawCapture = captured;
+    }
+
     // Generate sale number
     const saleNumber = await generateSaleNumber(req.user.business_id);
     const saleId = newId('sale');
@@ -308,6 +325,20 @@ router.post('/', checkPermission('make_sale'), async (req, res) => {
         `).run(balanceDue, customer_id, req.user.business_id);
       }
 
+      if (drawCapture) {
+        drawSaved = await runSavepoint(tx, 'draw_insert', () =>
+          insertEntry(tx, {
+            businessId: req.user.business_id,
+            campaignId: drawCampaign.id,
+            saleId,
+            name: drawCapture.name,
+            token: drawCapture.token,
+            amount: totalAmount,
+            userId: req.user.id,
+          })
+        );
+      }
+
     });
 
     if (discount_amount_r > 0) {
@@ -357,6 +388,10 @@ router.post('/', checkPermission('make_sale'), async (req, res) => {
       paymentStatus,
       saleType,
       creditDueDate: dueDate,
+      drawEntered: drawSaved,
+      drawWarning: drawCapture && !drawSaved
+        ? 'Sale saved, but the gift draw entry could not be stored. Tell a manager.'
+        : null,
     });
   } catch (error) {
     console.error('Create sale error:', error);
@@ -684,6 +719,8 @@ router.post('/:id/void', checkPermission('void_sale'), async (req, res) => {
           `).run(Number(sale.balance_due), customerInfo.customer_id, businessId);
         }
       }
+
+      await voidEntry(tx, sale.id, businessId);
     });
 
     dispatchToSupervisors(

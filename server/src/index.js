@@ -190,6 +190,7 @@ app.use('/api/docs', docsRoutes);
 app.use('/api/credit', creditRoutes);
 app.use('/api/cart-audit', cartAuditRoutes);
 app.use('/api/agent-float', require('./routes/agentFloat'));
+app.use('/api/draws', require('./routes/draws'));
 
 // Static files for client (in production)
 if (process.env.NODE_ENV === 'production') {

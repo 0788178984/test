@@ -126,6 +126,13 @@ export const creditAPI = {
   recordPayment: (data) => api.post('/api/credit/payments', data),
 };
 
+export const drawsAPI = {
+  status: () => api.get('/api/draws/status'),
+  preview: (token) => api.get('/api/draws/preview', { params: { token } }),
+  board: () => api.get('/api/draws/board'),
+  save: (data) => api.put('/api/draws/campaign', data),
+};
+
 export const cartAuditAPI = {
   log: (data) => api.post('/api/cart-audit', data),
 };

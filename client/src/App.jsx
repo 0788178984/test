@@ -25,6 +25,7 @@ import Subscription from './pages/Subscription';
 import MobileMoney from './pages/MobileMoney';
 import Returns from './pages/Returns';
 import CreditReceivables from './pages/CreditReceivables';
+import GiftDraw from './pages/GiftDraw';
 
 function App() {
   const checkAuth = useAuthStore((state) => state.checkAuth);
@@ -62,6 +63,7 @@ function App() {
                   <Route path="returns" element={<Returns />} />
                   <Route path="credit" element={<CreditReceivables />} />
                   <Route path="data-analysis" element={<DataAnalysis />} />
+                  <Route path="gift-draw" element={<GiftDraw />} />
                   <Route path="team-messages" element={<TeamMessages />} />
                 </Route>
 
