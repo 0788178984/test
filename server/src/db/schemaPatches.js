@@ -310,6 +310,31 @@ async function applyDrawCampaignPatch(pool) {
   }
 }
 
+/** First sign-in of the day for cashiers. No clock-out column. */
+async function applyCashierAttendancePatch(pool) {
+  if (!pool) return;
+
+  const steps = [
+    `CREATE TABLE IF NOT EXISTS cashier_attendance (
+        id TEXT PRIMARY KEY,
+        business_id TEXT NOT NULL REFERENCES businesses(id),
+        user_id TEXT NOT NULL REFERENCES users(id),
+        work_date TEXT NOT NULL,
+        reported_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_cashier_attendance_day
+      ON cashier_attendance (business_id, user_id, work_date)`,
+  ];
+
+  for (const sql of steps) {
+    try {
+      await pool.query(sql);
+    } catch (e) {
+      console.warn('[schema] cashier attendance:', e.message);
+    }
+  }
+}
+
 async function applyAllSchemaPatches(pool) {
   await applyBusinessTypePatch(pool);
   await applyCreditSalesPatch(pool);
@@ -318,6 +343,7 @@ async function applyAllSchemaPatches(pool) {
   await applyExpensesEnhancementPatch(pool);
   await applyAgentAirtimeFloatPatch(pool);
   await applyDrawCampaignPatch(pool);
+  await applyCashierAttendancePatch(pool);
 }
 
 module.exports = {
@@ -328,5 +354,6 @@ module.exports = {
   applyExpensesEnhancementPatch,
   applyAgentAirtimeFloatPatch,
   applyDrawCampaignPatch,
+  applyCashierAttendancePatch,
   applyAllSchemaPatches,
 };

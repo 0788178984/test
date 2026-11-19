@@ -32,6 +32,7 @@ const useAuthStore = create(
       isAuthenticated: false,
       isLoading: false,
       error: null,
+      attendanceWelcome: null,
 
       // Actions
       login: async (pin, role, business_code) => {
@@ -39,7 +40,7 @@ const useAuthStore = create(
 
         try {
           const response = await authAPI.login(pin, role, business_code);
-          const { token, user } = response.data;
+          const { token, user, attendance } = response.data;
           
           clearStoreSessionData();
           localStorage.setItem('auth_token', token);
@@ -50,7 +51,8 @@ const useAuthStore = create(
             user, 
             isAuthenticated: true, 
             isLoading: false, 
-            error: null 
+            error: null,
+            attendanceWelcome: attendance?.welcome ? attendance : null,
           });
           
           return { success: true };
@@ -69,7 +71,7 @@ const useAuthStore = create(
 
         try {
           const response = await authAPI.loginWeb(email, password, business_code);
-          const { token, user } = response.data;
+          const { token, user, attendance } = response.data;
           
           clearStoreSessionData();
           localStorage.setItem('auth_token', token);
@@ -80,7 +82,8 @@ const useAuthStore = create(
             user, 
             isAuthenticated: true, 
             isLoading: false, 
-            error: null 
+            error: null,
+            attendanceWelcome: attendance?.welcome ? attendance : null,
           });
           
           return { success: true };
@@ -115,8 +118,11 @@ const useAuthStore = create(
           user: null,
           isAuthenticated: false,
           error: null,
+          attendanceWelcome: null,
         });
       },
+
+      dismissAttendanceWelcome: () => set({ attendanceWelcome: null }),
 
       checkAuth: () => {
         const token = localStorage.getItem('auth_token');

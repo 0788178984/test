@@ -4,6 +4,7 @@ const { authenticate, generateToken } = require('../middleware/auth');
 const db = require('../db/connection');
 const { paymentMethodsAvailability } = require('../services/paymentConfigService');
 const { normalizeBusinessType } = require('../db/businessTypes');
+const { recordCashierReport } = require('../services/cashierAttendance');
 const router = express.Router();
 
 async function storeCount() {
@@ -114,9 +115,16 @@ router.post('/login', async (req, res) => {
     await db.prepare(`UPDATE users SET last_login = datetime('now') WHERE id = ?`).run(userData.id);
 
     const token = generateToken(userData.id);
+    const attendance = await recordCashierReport({
+      id: userData.id,
+      name: userData.name,
+      role: userData.role,
+      business_id: userData.business_id,
+    });
 
     res.json({
       token,
+      attendance,
       user: {
         id: userData.id,
         name: userData.name,
@@ -239,9 +247,16 @@ router.post('/login-web', async (req, res) => {
     await db.prepare(`UPDATE users SET last_login = datetime('now') WHERE id = ?`).run(user.id);
 
     const token = generateToken(user.id);
+    const attendance = await recordCashierReport({
+      id: user.id,
+      name: user.name,
+      role: user.role,
+      business_id: user.business_id,
+    });
 
     res.json({
       token,
+      attendance,
       user: {
         id: user.id,
         name: user.name,

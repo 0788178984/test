@@ -45,7 +45,7 @@ const Layout = () => {
   );
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout, hasRole, refreshProfile } = useAuthStore();
+  const { user, logout, hasRole, refreshProfile, attendanceWelcome, dismissAttendanceWelcome } = useAuthStore();
   const [helpOpen, setHelpOpen] = useState(false);
   const [helpTab, setHelpTab] = useState('guide');
   const [helpSubject, setHelpSubject] = useState('');
@@ -297,6 +297,24 @@ const Layout = () => {
 
   return (
     <div className="flex h-[100dvh] max-h-[100dvh] overflow-hidden bg-gray-50">
+      <Modal
+        isOpen={Boolean(attendanceWelcome?.welcome) && user?.role === 'cashier'}
+        onClose={dismissAttendanceWelcome}
+        title="Welcome"
+        size="sm"
+      >
+        <div className="space-y-3 text-center">
+          <p className="text-lg font-semibold text-gray-900">Welcome, {user?.name || 'cashier'}</p>
+          <p className="text-sm text-gray-600">You are signed in for today.</p>
+          <p className="text-2xl font-semibold text-primary-700">
+            {attendanceWelcome?.reported_at_label || 'Just now'}
+          </p>
+          <p className="text-sm text-gray-500">This is your reporting time for today.</p>
+          <Button type="button" className="w-full" onClick={dismissAttendanceWelcome}>
+            Start work
+          </Button>
+        </div>
+      </Modal>
       <Modal
         isOpen={helpOpen}
         onClose={() => {

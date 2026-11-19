@@ -666,6 +666,17 @@ const NOTIFICATION_EVENTS = {
     }),
   },
 
+  CASHIER_REPORTED: {
+    type: 'cashier_reported',
+    severity: 'info',
+    target_role: 'manager',
+    channels: ['in_app'],
+    template: (meta) => ({
+      title: 'Cashier reported for work',
+      message: `${meta.cashier_name} reported for work at ${meta.reported_at_label || 'this time'}.`,
+    }),
+  },
+
   CASH_TRANSACTION_VOIDED: {
     type: 'cash_transaction_voided',
     severity: 'warning',
